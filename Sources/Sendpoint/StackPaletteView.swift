@@ -192,7 +192,7 @@ struct StackPaletteView: View {
                                 .frame(maxWidth: .infinity, minHeight: rowHeight)
                         }
                     }
-                    .padding(6)
+                    .padding(8)
                 }
                 .onChange(of: model.state.stackState.highlight) {
                     guard let highlight = model.state.stackState.highlight else { return }
@@ -235,14 +235,6 @@ struct StackPaletteView: View {
             onActivate: { model.send(.perform(.switchToStack(session.id))) }
         ) {
             HStack(spacing: 10) {
-                // A single dot marks the current stack; everything else stays quiet.
-                Circle()
-                    .fill(Color.primary)
-                    .frame(width: 6, height: 6)
-                    .opacity(session.isCurrent ? 1 : 0)
-                    .frame(width: 10)
-                    .accessibilityHidden(true)
-
                 if isRenaming {
                     inlineNameField(field: .rename(session.id), placeholder: "Stack name")
                 } else {
@@ -267,6 +259,17 @@ struct StackPaletteView: View {
                     .frame(minWidth: 18, alignment: .trailing)
                     .accessibilityLabel(session.countLabel)
             }
+            // A single dot in the gutter marks the current stack, so the
+            // names line up with the notes beside them.
+            .overlay(alignment: .leading) {
+                if session.isCurrent {
+                    Circle()
+                        .fill(Color.primary)
+                        .frame(width: 5, height: 5)
+                        .padding(.leading, -11)
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .foregroundStyle(Color.primary)
         .frame(height: rowHeight)
@@ -282,7 +285,6 @@ struct StackPaletteView: View {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .bold))
-                    .frame(width: 10)
                     .foregroundStyle(.secondary)
                 (Text("Create ") + Text("“\(name)”").fontWeight(.semibold))
                     .font(.system(size: 14))
@@ -299,13 +301,12 @@ struct StackPaletteView: View {
         HStack(spacing: 10) {
             Image(systemName: "plus")
                 .font(.system(size: 11, weight: .bold))
-                .frame(width: 10)
                 .foregroundStyle(.secondary)
             inlineNameField(field: .create, placeholder: "New stack name")
             Spacer(minLength: 8)
             Keycap("↩")
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         .frame(height: rowHeight)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -344,29 +345,10 @@ struct StackPaletteView: View {
                 detail: "Press ↩ to make it and switch to it."
             )
         } else if let session = model.projection.shownSession {
-            VStack(spacing: 0) {
-                previewHeader(session)
-                noteCards(session: session, interactive: false)
-            }
+            noteCards(session: session, interactive: false)
         } else {
             placeholder(symbol: "square.stack.3d.up", title: "No stack selected", detail: nil)
         }
-    }
-
-    private func previewHeader(_ session: Session) -> some View {
-        let count = session.entries.count
-        return HStack(spacing: 8) {
-            Text(session.name)
-                .font(.system(size: 14, weight: .semibold))
-                .lineLimit(1)
-            Text("\(count) note\(count == 1 ? "" : "s")")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Spacer()
-            ShortcutHint(keys: "→", label: "Open")
-        }
-        .padding(.horizontal, 18)
-        .frame(height: 36)
     }
 
     // MARK: - Notes (drilled in)
@@ -425,7 +407,6 @@ struct StackPaletteView: View {
                                 isHighlighted: interactive && model.projection.highlightedNoteID == entry.id,
                                 isEditing: interactive && model.state.inlineEdit?.noteID == entry.id,
                                 interactive: interactive,
-                                isLast: index == listing.entries.count - 1,
                                 draft: Binding(
                                     get: {
                                         model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.note
@@ -440,8 +421,7 @@ struct StackPaletteView: View {
                             .id(entry.id)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(8)
                 }
                 .onChange(of: model.projection.highlightedNoteID) {
                     guard let id = model.projection.highlightedNoteID else { return }
@@ -734,7 +714,7 @@ private struct PaletteRow<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .background(
@@ -755,7 +735,6 @@ private struct NoteCard: View {
     let isHighlighted: Bool
     let isEditing: Bool
     let interactive: Bool
-    let isLast: Bool
     @Binding var draft: String
     var focus: FocusState<PaletteField?>.Binding
     let onSelect: () -> Void
@@ -856,10 +835,10 @@ private struct NoteCard: View {
                     .onTapGesture { if interactive { onEdit() } }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        // Notes sit on one continuous surface separated by hairlines; the
-        // highlighted one simply lifts to a soft grey.
+        .padding(.horizontal, 8)
+        .padding(.vertical, 14)
+        // Notes sit on one continuous surface; the highlighted one simply
+        // lifts to a soft grey.
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isHighlighted ? PaletteTint.noteSelection : hovering && interactive ? PaletteTint.hover : Color.clear)
@@ -869,13 +848,6 @@ private struct NoteCard: View {
                 .strokeBorder(PaletteTint.editing, lineWidth: 1)
                 .opacity(isEditing ? 1 : 0)
         )
-        .overlay(alignment: .bottom) {
-            if !isLast {
-                Divider()
-                    .padding(.horizontal, 18)
-                    .opacity(isHighlighted ? 0 : 1)
-            }
-        }
         .contentShape(Rectangle())
         .onTapGesture { if interactive { onSelect() } }
         .onHover { hovering = $0 }
@@ -891,8 +863,8 @@ private struct QuotedPassage: View {
 
     var body: some View {
         Text(text)
-            .font(.callout)
-            .lineSpacing(4)
+            .font(.body)
+            .lineSpacing(2)
             .lineLimit(6)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1021,7 +993,7 @@ private struct OverlayRow<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, minHeight: 40)
                 .contentShape(Rectangle())
