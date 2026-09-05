@@ -254,35 +254,39 @@
     .composer .text b { font-weight: 600; }
     .composer.flash { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 
-    /* voice capsule, matches the app's overlay */
+    /* voice capsule, matches the app's overlay: a low wordless pill whose
+       only moving part is a single ribbon of sound. A dim quote badge with
+       the word count appears beside it when the note is tied to a selection. */
     .capsule {
       position: absolute; left: 50%; bottom: 3.2em; z-index: 10;
       transform: translate(-50%, 1.2em) scale(0.92);
       opacity: 0;
-      display: flex; align-items: center; gap: 0.85em;
-      height: 3.85em; padding: 0 1.45em 0 1.15em;
+      display: flex; align-items: center; gap: 0.75em;
+      height: 2.6em; padding: 0 1.1em;
       border-radius: 3em;
-      background: rgba(28, 28, 34, 0.86);
-      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
-      box-shadow: 0 8px 18px rgba(0,0,0,0.38), inset 0 0 0 1px rgba(255,255,255,0.14);
+      background: rgba(15, 15, 15, 0.94);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.1);
       color: #fff;
       transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.2,.9,.3,1.2);
       pointer-events: none;
     }
     .capsule.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
-    .capsule .ind { width: 1.3em; height: 1.3em; position: relative; flex: none; }
-    .capsule .dot, .capsule .halo { position: absolute; inset: 0; margin: auto; border-radius: 50%; background: #ff453a; }
-    .capsule .dot { width: 0.65em; height: 0.65em; }
-    .capsule .halo { width: 1.3em; height: 1.3em; opacity: 0; animation: halo 1.9s ease-out infinite; }
-    @keyframes halo { 0% { transform: scale(0.5); opacity: 0.35; } 100% { transform: scale(1.15); opacity: 0; } }
-    .capsule .arc { position: absolute; inset: 0.1em; border-radius: 50%; border: 0.16em solid transparent; border-top-color: #fff; border-right-color: rgba(255,255,255,0.5); animation: spin 0.9s linear infinite; display: none; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .capsule.busy .dot, .capsule.busy .halo { display: none; }
-    .capsule.busy .arc { display: block; }
-    .capsule canvas { width: 9.2em; height: 1.9em; display: block; }
-    .capsule .txt { display: flex; flex-direction: column; line-height: 1.2; white-space: nowrap; }
-    .capsule .t { font-size: 0.93em; font-weight: 600; }
-    .capsule .s { font-size: 0.78em; color: rgba(255,255,255,0.55); }
+    .capsule .tether {
+      display: none; align-items: center; gap: 0.38em;
+      font-size: 0.8em; font-weight: 500; font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,0.55); white-space: nowrap;
+      animation: tether-in 0.32s cubic-bezier(.2,.9,.3,1.1);
+    }
+    .capsule .tether .q { font-size: 0.85em; font-weight: 700; color: rgba(255,255,255,0.35); }
+    .capsule .rule { display: none; width: 1px; height: 0.9em; background: rgba(255,255,255,0.12); flex: none; }
+    .capsule.tethered .tether { display: flex; }
+    .capsule.tethered .rule { display: block; }
+    @keyframes tether-in { from { opacity: 0; transform: translateX(0.4em); } }
+    .capsule canvas {
+      width: 8.4em; height: 1.65em; display: block;
+      -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+      mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+    }
 
     /* subtitles, what's being said */
     .subs {
@@ -433,9 +437,9 @@
         <div class="subs" id="subs"><span class="line" id="subline"></span></div>
 
         <div class="capsule" id="capsule">
-          <div class="ind"><span class="halo"></span><span class="dot"></span><span class="arc"></span></div>
+          <span class="tether"><span class="q">&#10077;</span><span id="ct"></span></span>
+          <span class="rule"></span>
           <canvas id="wave"></canvas>
-          <div class="txt"><span class="t" id="ct">Listening</span><span class="s" id="cs">Release to save</span></div>
         </div>
       </div>
     </section>
@@ -450,7 +454,7 @@
     const scene = $("scene"), badge = $("badge"), mbitem = $("mbitem"),
           msgs = $("msgs"), col = $("col"),
           subs = $("subs"), subline = $("subline"),
-          capsule = $("capsule"), ct = $("ct"), cs = $("cs"), wave = $("wave"),
+          capsule = $("capsule"), ct = $("ct"), wave = $("wave"),
           composer = $("composer"), ctext = $("ctext");
     const PH = '<span class="ph">Ask anything</span>';
     let added = [];
@@ -464,22 +468,31 @@
     const PREAMBLE = "These are my reading notes, captured in order while I read. Each entry is either a response to a quoted passage or a standalone thought. Read the notes as a whole and give me one coherent response that takes all of them into account.";
     const replyWords = "Good instincts, and your third note already answers your first. The environment doesn't grow forever because a closure keeps only the frames it was created inside, and a frame is dropped once nothing references it. On the second note, your last thought is the right way to hold it. The environment is data: it answers \"what does x mean here\". The continuation is control: it answers \"what happens next\". Both are chains, but only the continuation is the call stack.".split(" ");
 
-    /* ---------- waveform (same shapes as the app: live bars, travelling wave) ---------- */
+    /* ---------- ribbon (same shapes as the app: a mirrored envelope of loudness while
+       live, a breathing hairline while idle, a passing light while transcribing) ---------- */
     const wctx = wave.getContext("2d");
     let mode = "idle";          // idle | live | busy
     let energy = 0;             // target loudness while speaking
     const samples = new Array(48).fill(0);
     let lastPush = 0;
+    const hairline = (w, h, style, width) => {
+      wctx.strokeStyle = style; wctx.lineWidth = width; wctx.lineCap = "round";
+      wctx.beginPath(); wctx.moveTo(0, h / 2); wctx.lineTo(w, h / 2); wctx.stroke();
+    };
+    const smoothCurve = (pts) => {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const c = pts[i], n = pts[i + 1];
+        wctx.quadraticCurveTo(c.x, c.y, (c.x + n.x) / 2, (c.y + n.y) / 2);
+      }
+      wctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    };
     const draw = (now) => {
       const dpr = devicePixelRatio || 1;
       const w = wave.clientWidth, h = wave.clientHeight;
       if (wave.width !== w * dpr || wave.height !== h * dpr) { wave.width = w * dpr; wave.height = h * dpr; }
       wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       wctx.clearRect(0, 0, w, h);
-      const unit = h / 26;               // app draws in a 26pt-high strip
-      const bw = 3 * unit, gap = 2.5 * unit;
-      const count = Math.floor((w + gap) / (bw + gap));
-      const t = now / 1000;
+      const t = now / 1000, midY = h / 2;
 
       if (mode === "live" && now - lastPush > 33) {
         lastPush = now;
@@ -488,25 +501,34 @@
         samples.shift(); samples.push(level);
       }
 
-      for (let i = 0; i < count; i++) {
-        let f, alpha;
-        if (mode === "live") {
-          const s = samples[samples.length - count + i] ?? 0;
-          f = 0.12 + 0.88 * Math.pow(s, 1.15); alpha = 0.45 + 0.55 * f;
-        } else if (mode === "busy") {
-          const center = (count - 1) / 2, spread = count * 0.32;
-          const wv = (1 + Math.sin(t * 5.5 - i * 0.42)) / 2;
-          const d = (i - center) / spread;
-          f = 0.12 + 0.7 * wv * Math.exp(-(d * d)); alpha = 0.35 + 0.6 * f;
-        } else {
-          f = 0.12 + 0.05 * (1 + Math.sin(t * 2.4 + i * 0.45)) / 2; alpha = 0.35;
-        }
-        const bh = Math.max(3 * unit, h * f);
-        const x = i * (bw + gap), y = (h - bh) / 2;
-        wctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      if (mode === "live") {
+        const levels = samples.map((_, i) => {
+          const lo = Math.max(0, i - 1), hi = Math.min(samples.length - 1, i + 1);
+          let sum = 0; for (let j = lo; j <= hi; j++) sum += samples[j];
+          return sum / (hi - lo + 1);
+        });
+        const reach = h / 2 - 1, step = w / (levels.length - 1);
+        const amp = levels.map((l) => reach * (0.06 + 0.94 * Math.pow(Math.max(0, l), 1.3)));
+        const top = amp.map((a, i) => ({ x: i * step, y: midY - a }));
+        const bottom = amp.map((a, i) => ({ x: i * step, y: midY + a })).reverse();
         wctx.beginPath();
-        wctx.roundRect(x, y, bw, bh, bw / 2);
-        wctx.fill();
+        wctx.moveTo(top[0].x, top[0].y);
+        smoothCurve(top);
+        wctx.lineTo(bottom[0].x, bottom[0].y);
+        smoothCurve(bottom);
+        wctx.closePath();
+        wctx.fillStyle = "rgba(255,255,255,0.22)"; wctx.fill();
+        wctx.strokeStyle = "rgba(255,255,255,0.92)"; wctx.lineWidth = 1.1; wctx.lineJoin = "round"; wctx.stroke();
+      } else if (mode === "busy") {
+        hairline(w, h, "rgba(255,255,255,0.18)", 1.4);
+        const sweep = (t * 0.85) % 1;
+        const center = (-0.25 + 1.5 * sweep) * w;
+        const g = wctx.createLinearGradient(center - 34, midY, center + 34, midY);
+        g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        hairline(w, h, g, 1.6);
+      } else {
+        const breath = 0.5 + 0.5 * Math.sin(t * 2.2);
+        hairline(w, h, `rgba(255,255,255,${(0.22 + 0.12 * breath).toFixed(3)})`, 1.4);
       }
       requestAnimationFrame(draw);
     };
@@ -518,10 +540,11 @@
       badge.classList.toggle("on", n > 0);
       if (n > 0) { badge.classList.remove("bump"); void badge.offsetWidth; badge.classList.add("bump"); }
     };
-    const capsuleState = (m, title, sub) => {
-      mode = m;
-      capsule.classList.toggle("busy", m === "busy");
-      ct.textContent = title; cs.textContent = sub;
+    const capsuleState = (m) => { mode = m; };
+    const tether = (text) => {
+      const n = text ? text.split(/\s+/).filter(Boolean).length : 0;
+      capsule.classList.toggle("tethered", n > 0);
+      ct.textContent = n === 1 ? "1 word" : `${n} words`;
     };
 
     const speak = async (text) => {
@@ -621,14 +644,15 @@
       const sel = note.sel ? $(note.sel) : null;
       if (sel) { await scrollToSel(sel); await highlight(sel); await sleep(500); }
 
-      capsuleState("live", "Listening", "Release to save");
+      tether(sel ? sel.textContent : null);
+      capsuleState("live");
       capsule.classList.add("on");
       await sleep(450);
 
       await speak(note.said);
       await sleep(250);
 
-      capsuleState("busy", "Transcribing", "Saving to your stack");
+      capsuleState("busy");
       await sleep(350);
       subs.classList.remove("on");
       await sleep(650);
@@ -658,7 +682,7 @@
 
     const reset = () => {
       unhighlight(true);
-      capsule.classList.remove("on"); capsuleState("idle", "Listening", "Release to save");
+      capsule.classList.remove("on"); capsuleState("idle"); tether(null);
       subs.classList.remove("on"); subline.innerHTML = "";
       ctext.innerHTML = PH; composer.classList.remove("flash");
       for (const el of added) el.remove();
