@@ -204,30 +204,6 @@ struct QuickSwitchState: Equatable {
 
 @MainActor
 enum SessionDialogs {
-    static func requestNewSessionName(sessions: [Session]) -> String? {
-        requestName(
-            title: "New Stack",
-            prompt: "Name the new stack.",
-            initialValue: "",
-            sessions: sessions,
-            excluding: nil
-        )
-    }
-
-    static func requestRenamedSessionName(sessionID: UUID, sessions: [Session]) -> String? {
-        guard let session = sessions.first(where: { $0.id == sessionID }) else {
-            showMessage("That stack no longer exists.")
-            return nil
-        }
-        return requestName(
-            title: "Rename Stack",
-            prompt: "New name for “\(session.name)”.",
-            initialValue: session.name,
-            sessions: sessions,
-            excluding: sessionID
-        )
-    }
-
     static func confirmsDelete(
         sessionID: UUID,
         sessions: [Session],
@@ -268,42 +244,6 @@ enum SessionDialogs {
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
-    }
-
-    private static func requestName(
-        title: String,
-        prompt: String,
-        initialValue: String,
-        sessions: [Session],
-        excluding excludedSessionID: UUID?
-    ) -> String? {
-        var value = initialValue
-        var validationMessage: String?
-
-        while true {
-            let alert = NSAlert()
-            alert.messageText = title
-            alert.informativeText = validationMessage ?? prompt
-            alert.addButton(withTitle: title == "New Stack" ? "Create" : "Rename")
-            alert.addButton(withTitle: "Cancel")
-
-            let field = NSTextField(string: value)
-            field.placeholderString = "Stack name"
-            field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
-            alert.accessoryView = field
-            alert.window.initialFirstResponder = field
-
-            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-            value = field.stringValue
-            switch SessionNameDraft(text: value, excludedSessionID: excludedSessionID)
-                .validation(sessions: sessions)
-            {
-            case let .valid(name):
-                return name
-            case let .invalid(message):
-                validationMessage = message
-            }
-        }
     }
 }
 

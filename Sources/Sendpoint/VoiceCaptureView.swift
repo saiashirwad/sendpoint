@@ -5,8 +5,8 @@ import SwiftUI
 /// language: it swells with the voice while listening, settles into a hairline
 /// with a passing light while the transcript is made, and turns amber only
 /// when something actually went wrong. When the note is tied to a selection,
-/// a dim snippet of that text sits beside the ribbon so it is clear what the
-/// words will attach to.
+/// a dim quote badge with the word count sits beside the ribbon, so it is
+/// clear the words will attach to something without echoing it back.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
@@ -16,12 +16,17 @@ struct VoiceCaptureView: View {
     var body: some View {
         HStack(spacing: 12) {
             if let tether {
-                Text(tether)
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.42))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .transition(.opacity.combined(with: .offset(x: 6)))
+                HStack(spacing: 5) {
+                    Image(systemName: "quote.opening")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                    Text(tether)
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Color.white.opacity(0.55))
+                }
+                .lineLimit(1)
+                .fixedSize()
+                .transition(.opacity.combined(with: .offset(x: 6)))
                 Rectangle()
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 1, height: 12)
@@ -106,18 +111,11 @@ struct VoiceCaptureView: View {
 
 /// Pure text shaping for the overlay.
 enum VoiceOverlayCopy {
-    static let tetherLimit = 28
-
-    /// The first line of the selection, whitespace collapsed, cut to fit the
-    /// capsule. `nil` when there is nothing worth showing.
+    /// How much is selected, without repeating it. `nil` when nothing is.
     static func tether(for text: String) -> String? {
-        let firstLine = text
-            .split(whereSeparator: \.isNewline)
-            .map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
-            .first { !$0.isEmpty }
-        guard let firstLine else { return nil }
-        if firstLine.count <= tetherLimit { return firstLine }
-        return String(firstLine.prefix(tetherLimit - 1)).trimmingCharacters(in: .whitespaces) + "…"
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        guard words > 0 else { return nil }
+        return words == 1 ? "1 word" : "\(words) words"
     }
 }
 

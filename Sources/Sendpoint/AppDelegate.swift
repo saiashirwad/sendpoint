@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let facts = store.map {
             SessionUIFacts(sessions: $0.sessions, currentSessionID: $0.currentSessionID, lastCleared: $0.lastCleared)
         }
-        if let facts, let current = facts.current {
+        if let facts, facts.current != nil {
             menu.addItem(item(facts.currentTitle))
             let sessionMenu = NSMenu(title: "Stack")
             for session in facts.sessions {
@@ -268,12 +268,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sessionMenu.addItem(.separator())
             sessionMenu.addItem(item("Switch Stack…", action: #selector(showQuickSwitcher),
                 combo: settings.switchSessionCombo))
-            sessionMenu.addItem(.separator())
-            sessionMenu.addItem(item("New Stack…", action: #selector(newSession(_:))))
-            sessionMenu.addItem(item("Rename Current Stack…", action: #selector(renameSession(_:)),
-                represents: current.id))
-            sessionMenu.addItem(item("Delete Current Stack…",
-                action: facts.canDelete ? #selector(deleteSession(_:)) : nil, represents: current.id))
             let sessionRoot = item("Stack")
             sessionRoot.submenu = sessionMenu
             menu.addItem(sessionRoot)
@@ -464,27 +458,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func newSession(_ sender: NSMenuItem) {
-        guard let store else { NSSound.beep(); return }
-        guard let name = SessionDialogs.requestNewSessionName(sessions: store.sessions) else { return }
-        enqueueMenuMutation(.createSession(Session(name: name)), presentsError: true)
-    }
-
-    @objc private func renameSession(_ sender: NSMenuItem) {
-        guard let store, let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
-        guard let name = SessionDialogs.requestRenamedSessionName(sessionID: sessionID, sessions: store.sessions)
-        else { return }
-        enqueueMenuMutation(.renameSession(sessionID: sessionID, name: name), presentsError: true)
-    }
-
-    @objc private func deleteSession(_ sender: NSMenuItem) {
-        guard let store, let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
-        guard SessionDialogs.confirmsDelete(sessionID: sessionID, sessions: store.sessions,
-                                            lastCleared: store.lastCleared)
-        else { return }
-        enqueueMenuMutation(.deleteSession(sessionID: sessionID), presentsError: true)
-    }
-
     @objc private func retryPendingMutations() {
         guard let store else { NSSound.beep(); return }
         store.retryPendingMutations()
@@ -492,19 +465,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatusItem()
     }
 
-    private func enqueueMenuMutation(
-        _ mutation: SessionDocumentMutation,
-        presentsError: Bool = false
-    ) {
+    private func enqueueMenuMutation(_ mutation: SessionDocumentMutation) {
         guard let store else { NSSound.beep(); return }
         store.mutate(mutation) { [weak self] outcome in
             self?.refreshStatusItem()
-            switch outcome {
-            case let .rejected(message), let .commitFailed(message):
-                NSSound.beep()
-                if presentsError { SessionDialogs.showMessage(message) }
-            case .committed, .noOp, .cancelled: break
-            }
+            if case .rejected = outcome { NSSound.beep() }
+            if case .commitFailed = outcome { NSSound.beep() }
         }
     }
 
