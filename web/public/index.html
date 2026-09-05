@@ -171,13 +171,10 @@
     /* the steps and the byline sit together at the foot of the panel */
     .tail { display: flex; flex-direction: column; gap: 22px; }
     .meet { border-top: 1px solid var(--line); padding-top: 20px; display: flex; flex-direction: column; gap: 16px; }
-    .byline { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; }
-    .byline img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; display: block; box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 12%, transparent); }
-    .byline .who { display: flex; flex-direction: column; line-height: 1.3; }
-    .byline .name { font-weight: 600; font-size: 0.9rem; letter-spacing: -0.005em; }
-    .byline .handle { font-size: 0.86rem; color: var(--fg-3); }
-    .byline .handle b { font-weight: 600; color: var(--fg-2); transition: color 0.15s ease; }
-    .byline:hover .handle b { color: var(--fg); }
+    .byline { display: inline-flex; align-items: center; gap: 9px; align-self: flex-start; font-size: 0.95rem; line-height: 1; letter-spacing: -0.005em; }
+    .byline img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 12%, transparent); }
+    .byline .handle { color: var(--fg-2); font-weight: 500; transition: color 0.15s ease; }
+    .byline:hover .handle { color: var(--fg); }
     .stage {
       border-left: 1px solid var(--line);
       min-width: 0;
@@ -453,7 +450,7 @@
         <div class="meet">
         <a class="byline" href="https://x.com/texoport__">
           <img src="/avatar.jpg" alt="">
-          <span class="who"><span class="name">Used this? Have thoughts?</span><span class="handle">I'm <b>@texoport__</b> on X. DMs are open.</span></span>
+          <span class="handle">@texoport__</span>
         </a>
         </div>
       </div>
