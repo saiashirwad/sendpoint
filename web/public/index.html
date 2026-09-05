@@ -85,7 +85,7 @@
     .side > * { position: relative; }
     .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1.02rem; line-height: 1; letter-spacing: -0.01em; }
     .brand img { width: 1.2em; height: 1.2em; }
-    .hero { margin: auto 0; padding: 40px 0; }
+    .hero { margin: 0; padding: 64px 0 0; }
     .hero h1 {
       font-size: clamp(2.3rem, 3.9vw, 3.7rem);
       letter-spacing: -0.034em; line-height: 1.02;
@@ -151,8 +151,7 @@
 
     /* how it works: three quiet lines under a hairline */
     .steps {
-      list-style: none; margin: 0; padding: 20px 0 0;
-      border-top: 1px solid var(--line);
+      list-style: none; margin: 0; padding: 0;
       display: flex; flex-direction: column; gap: 10px;
     }
     .steps li { display: grid; grid-template-columns: 2.2em 1fr; align-items: baseline; font-size: 0.95rem; line-height: 1.45; color: var(--fg-2); letter-spacing: -0.005em; }
@@ -169,7 +168,7 @@
     kbd + kbd { margin-left: 0.15em; }
 
     /* the steps and the byline sit together at the foot of the panel */
-    .tail { display: flex; flex-direction: column; gap: 22px; }
+    .tail { margin-top: auto; padding-top: 36px; display: flex; flex-direction: column; gap: 22px; }
     .meet { border-top: 1px solid var(--line); padding-top: 20px; display: flex; flex-direction: column; gap: 16px; }
     .byline { display: inline-flex; align-items: center; gap: 9px; align-self: flex-start; font-size: 0.95rem; line-height: 1; letter-spacing: -0.005em; }
     .byline img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 12%, transparent); }
@@ -413,7 +412,7 @@
     @media (max-width: 980px) {
       .split { grid-template-columns: 1fr; min-height: 0; }
       .side { padding: 20px 24px; }
-      .hero { padding: 36px 0 28px; }
+      .hero { padding: 40px 0 0; }
       .actions .btn { flex: 0 1 auto; }
       .hero h1 { font-size: 2.4rem; }
       .tail { padding-top: 16px; }
