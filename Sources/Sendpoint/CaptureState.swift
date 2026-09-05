@@ -146,7 +146,7 @@ enum CaptureState: Equatable {
                 note = text
             }
             guard let target = session.target,
-                  let annotation = CaptureAnnotationPolicy.annotation(for: target, note: note)
+                  let annotation = target.annotation(note: note)
             else {
                 if session.phase == .transcribing {
                     session.phase = .failed("No speech was found.")

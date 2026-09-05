@@ -103,29 +103,6 @@ enum ShortcutRegistrationIssue: Equatable, Identifiable {
     }
 }
 
-enum ProfileMutationError: Error, Equatable, LocalizedError {
-    case unknownProfile
-    case lastProfile
-    case emptyName
-    case duplicateName
-    case unsavedChanges
-
-    var errorDescription: String? {
-        switch self {
-        case .unknownProfile:
-            return "That template no longer exists."
-        case .lastProfile:
-            return "The last template cannot be deleted."
-        case .emptyName:
-            return "Enter a template name."
-        case .duplicateName:
-            return "A template with that name already exists."
-        case .unsavedChanges:
-            return "Save or discard the template changes first."
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class AppSettings {
@@ -174,12 +151,11 @@ final class AppSettings {
 
     private(set) var shortcutRegistrationIssues: [ShortcutRegistrationIssue] = []
 
-    private(set) var profiles: [Profile]
-    private(set) var activeProfileID: UUID
+    private var profileCollection: ProfileCollection
 
-    var activeProfile: Profile {
-        profiles.first(where: { $0.id == activeProfileID }) ?? profiles[0]
-    }
+    var profiles: [Profile] { profileCollection.profiles }
+    var activeProfileID: UUID { profileCollection.activeProfileID }
+    var activeProfile: Profile { profileCollection.activeProfile }
 
     var stackExportMode: StackExportMode {
         StackExportMode(pasteDirectly: pasteDirectly)
@@ -233,17 +209,10 @@ final class AppSettings {
 
         let decoded = defaults.data(forKey: Key.profiles)
             .flatMap { try? JSONDecoder().decode([Profile].self, from: $0) }
-        let storedProfiles = AppSettings.validProfiles(decoded)
-        let loadedProfiles = storedProfiles.map(AppSettings.builtInsFirst) ?? Profile.builtIns
-        let loadedStoredProfiles = storedProfiles != nil
-        profiles = loadedProfiles
-
-        let requestedID = loadedStoredProfiles
-            ? defaults.string(forKey: Key.activeProfileID).flatMap(UUID.init(uuidString:))
-            : nil
-        activeProfileID = requestedID.flatMap { requested in
-            loadedProfiles.contains(where: { $0.id == requested }) ? requested : nil
-        } ?? loadedProfiles[0].id
+        profileCollection = ProfileCollection(
+            restoring: decoded,
+            activeProfileID: defaults.string(forKey: Key.activeProfileID).flatMap(UUID.init(uuidString:))
+        )
 
         pasteDirectly = defaults.object(forKey: Key.pasteDirectly) as? Bool ?? true
         restoreFocusAfterSave = defaults.object(forKey: Key.restoreFocusAfterSave) as? Bool ?? true
@@ -311,66 +280,43 @@ final class AppSettings {
     }
 
     func selectProfile(id: UUID) throws {
-        guard profiles.contains(where: { $0.id == id }) else {
-            throw ProfileMutationError.unknownProfile
-        }
-        guard activeProfileID != id else { return }
-        activeProfileID = id
-        persistActiveProfileID()
-        onProfilesChanged?()
+        try changeProfiles { try $0.select(id: id) }
     }
 
     func updateProfile(_ profile: Profile) throws {
-        guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else {
-            throw ProfileMutationError.unknownProfile
-        }
-        var stored = profile
-        stored.name = try validatedName(profile.name, excluding: profile.id)
-        guard stored != profiles[index] else { return }
-        profiles[index] = stored
-        persistProfiles()
-        onProfilesChanged?()
+        try changeProfiles { try $0.update(profile) }
     }
 
     func addProfile(_ profile: Profile) throws {
-        guard !profiles.contains(where: { $0.id == profile.id }) else {
-            throw ProfileMutationError.duplicateName
-        }
-        var stored = profile
-        stored.name = try validatedName(profile.name, excluding: nil)
-        profiles.append(stored)
-        persistProfiles()
-        onProfilesChanged?()
+        try changeProfiles { try $0.add(profile) }
     }
 
     @discardableResult
     func deleteProfile(id: UUID) throws -> UUID {
-        guard profiles.count > 1 else { throw ProfileMutationError.lastProfile }
-        guard let index = profiles.firstIndex(where: { $0.id == id }) else {
-            throw ProfileMutationError.unknownProfile
-        }
-        profiles.remove(at: index)
-        if activeProfileID == id {
-            activeProfileID = profiles[min(index, profiles.count - 1)].id
-            persistActiveProfileID()
-        }
-        persistProfiles()
-        onProfilesChanged?()
+        try changeProfiles { try $0.delete(id: id) }
         return activeProfileID
     }
 
     func profile(id: UUID) -> Profile? {
-        profiles.first(where: { $0.id == id })
+        profileCollection.profile(id: id)
     }
 
     func validatedName(_ proposedName: String, excluding profileID: UUID?) throws -> String {
-        let trimmed = proposedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw ProfileMutationError.emptyName }
-        let normalized = Self.normalizedProfileName(trimmed)
-        guard !profiles.contains(where: {
-            $0.id != profileID && Self.normalizedProfileName($0.name) == normalized
-        }) else { throw ProfileMutationError.duplicateName }
-        return trimmed
+        try profileCollection.validatedName(proposedName, excluding: profileID)
+    }
+
+    /// Publish a valid snapshot before notifying clients. Rejected and unchanged
+    /// operations neither write defaults nor notify observers.
+    private func changeProfiles(_ change: (inout ProfileCollection) throws -> Void) throws {
+        var candidate = profileCollection
+        try change(&candidate)
+        guard candidate != profileCollection else { return }
+        let profilesChanged = candidate.profiles != profiles
+        let selectionChanged = candidate.activeProfileID != activeProfileID
+        profileCollection = candidate
+        if profilesChanged { persistProfiles() }
+        if selectionChanged { persistActiveProfileID() }
+        onProfilesChanged?()
     }
 
     private func persistProfiles() {
@@ -392,38 +338,4 @@ final class AppSettings {
         return try? JSONDecoder().decode(KeyCombo.self, from: data)
     }
 
-    /// The stored list when every entry is usable, otherwise nil.
-    private static func validProfiles(_ decoded: [Profile]?) -> [Profile]? {
-        guard let decoded, !decoded.isEmpty else { return nil }
-        var ids: Set<UUID> = []
-        var names: Set<String> = []
-        for profile in decoded {
-            let trimmed = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard
-                !trimmed.isEmpty,
-                trimmed == profile.name,
-                ids.insert(profile.id).inserted,
-                names.insert(normalizedProfileName(profile.name)).inserted
-            else { return nil }
-        }
-        return decoded
-    }
-
-    /// Built-ins keep their canonical order even in a list saved by an
-    /// older build; the user's own templates follow in the order they were made.
-    private static func builtInsFirst(_ profiles: [Profile]) -> [Profile] {
-        let builtInIDs = Profile.builtIns.map(\.id)
-        let builtIns = builtInIDs.compactMap { id in profiles.first { $0.id == id } }
-        let custom = profiles.filter { !builtInIDs.contains($0.id) }
-        return builtIns + custom
-    }
-
-    private static func normalizedProfileName(_ value: String) -> String {
-        value
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(
-                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
-                locale: Locale(identifier: "en_US_POSIX")
-            )
-    }
 }

@@ -12,24 +12,6 @@ enum PaletteLevel: Equatable, Hashable {
     }
 }
 
-/// The notes of one stack that match a query. Matching is case- and
-/// diacritic-insensitive over the quote, the note, the app, and the window.
-struct NoteListing: Equatable {
-    let entries: [Annotation]
-
-    init(entries: [Annotation], query: String) {
-        self.entries = entries.matching(query) { entry in
-            var parts = [entry.note, entry.provenance.application.name]
-            if case let .selection(quote) = entry.subject { parts.append(quote) }
-            if let window = entry.provenance.windowTitle { parts.append(window) }
-            return parts.joined(separator: "\n")
-        }
-    }
-
-    var ids: [UUID] { entries.map(\.id) }
-    var isEmpty: Bool { entries.isEmpty }
-}
-
 /// Which note carries the keyboard highlight inside a stack.
 struct NoteHighlightState: Equatable {
     private(set) var highlight: UUID?

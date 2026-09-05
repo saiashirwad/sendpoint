@@ -12,6 +12,8 @@ enum ProvenanceCommand {
     ) async throws -> Data {
         try Task.checkCancellation()
         let process = Process()
+        let terminated = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in terminated.signal() }
         let pipe = Pipe()
         process.executableURL = executable
         process.arguments = arguments
@@ -28,7 +30,10 @@ enum ProvenanceCommand {
             // One teardown path covers success, cancellation, timeout and errors.
             if process.isRunning {
                 kill(process.processIdentifier, SIGKILL)
-                process.waitUntilExit()
+                // waitUntilExit relies on a thread run loop, which an async
+                // caller may have left. The termination callback is independent
+                // of that thread; bound the wait even if notification is delayed.
+                _ = terminated.wait(timeout: .now() + 1)
             }
             try? readHandle.close()
             try? pipe.fileHandleForWriting.close()

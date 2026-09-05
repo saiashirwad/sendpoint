@@ -21,7 +21,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         let effects = state.update(.save)
         let request = CaptureSaveRequest(
             target: target, destinationSessionID: context.sessionID,
-            annotation: try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Keep this draft"))
+            annotation: try XCTUnwrap(target.annotation(note: "Keep this draft"))
         )
         XCTAssertEqual(effects, [.save(request)])
         XCTAssertEqual(state.update(.changeNote("A late edit")), [])

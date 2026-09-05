@@ -2,6 +2,12 @@ import SendpointDomain
 import Foundation
 import Observation
 
+enum ProfileEditorError: Error, Equatable, LocalizedError {
+    case unsavedChanges
+
+    var errorDescription: String? { "Save or discard the template changes first." }
+}
+
 @MainActor
 @Observable
 final class ProfileEditorState {
@@ -85,7 +91,7 @@ final class ProfileEditorState {
     }
 
     func delete() throws {
-        guard !isDirty else { throw ProfileMutationError.unsavedChanges }
+        guard !isDirty else { throw ProfileEditorError.unsavedChanges }
         let oldProfiles = settings.profiles
         guard let oldIndex = oldProfiles.firstIndex(where: { $0.id == editedProfileID }) else {
             throw ProfileMutationError.unknownProfile

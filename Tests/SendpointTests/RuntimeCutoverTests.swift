@@ -5,18 +5,6 @@ import XCTest
 @testable import Sendpoint
 
 final class RuntimeCutoverTests: XCTestCase {
-    func testTypedSelectionWithoutNoteIsRejectedAtCaptureBoundary() {
-        let context = AnnotationCaptureContext(sessionID: UUID())
-        let target = context.target(captured: CapturedSelection(
-            text: "Selected text",
-            appName: "Reader",
-            appBundleID: "com.example.reader",
-            screenRect: nil
-        ))
-
-        XCTAssertNil(CaptureAnnotationPolicy.annotation(for: target, note: "  \n "))
-    }
-
     func testCaptureContextSuppliedIdentifiersSessionAndDateSurviveTargetConstruction() throws {
         let sessionID = UUID()
         let captureID = UUID()
@@ -37,7 +25,7 @@ final class RuntimeCutoverTests: XCTestCase {
         ))
 
         let annotation = try XCTUnwrap(
-            CaptureAnnotationPolicy.annotation(for: target, note: "  My note  ")
+            target.annotation(note: "  My note  ")
         )
         XCTAssertEqual(target.sessionID, sessionID)
         XCTAssertEqual(target.captureID, captureID)

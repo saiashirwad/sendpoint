@@ -40,18 +40,14 @@ struct AnnotationCaptureTarget: Equatable {
     var sessionID: UUID { context.sessionID }
     var annotationID: UUID { context.annotationID }
     var createdAt: Date { context.createdAt }
-}
 
-/// Applies the note policy at the boundary between capture UI and the store.
-enum CaptureAnnotationPolicy {
-    static func annotation(for target: AnnotationCaptureTarget, note: String) -> Annotation? {
-        guard let note = note.nonblank else { return nil }
-        return Annotation(
-            id: target.annotationID,
-            subject: target.captured.text.nonblank == nil ? .standalone : .selection(quote: target.captured.text),
+    func annotation(note: String) -> Annotation? {
+        Annotation.capturing(
+            selection: captured.text,
             note: note,
-            provenance: Provenance(application: target.application),
-            createdAt: target.createdAt
+            application: application,
+            id: annotationID,
+            createdAt: createdAt
         )
     }
 }

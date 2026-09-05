@@ -128,60 +128,13 @@ final class ProvenanceProbeTests: XCTestCase {
         }
     }
 
-    func testGhosttyPathParsingThroughInjectedProviderKeepsGenericFallback() async {
-        let ghostty = CapturedApplication(
-            identity: ApplicationIdentity(name: "Ghostty", bundleID: "com.mitchellh.ghostty"),
-            processIdentifier: 8
+    func testBrowserTabParserAcceptsOnlyWebURL() {
+        let fields = BrowserActiveTabParser.fields(
+            from: ["Article title", "https://example.com/story?item=1"]
         )
-        let valid = ProvenanceProbe(
-            genericLookup: { _ in ProvenanceFields(windowTitle: "Terminal") },
-            providers: [ProvenanceProvider(bundleIDs: ["com.mitchellh.ghostty"], lookup: { _ in
-                    ProvenanceFields(
-                        workingDirectory: LocalFileLocation.documentURL(
-                            "file:///tmp/project", localHosts: []
-                        )
-                    )
-                })]
-        )
-        let validResult = await valid.probe(ghostty)
-        XCTAssertEqual(validResult.windowTitle, "Terminal")
-        XCTAssertEqual(validResult.workingDirectory, URL(fileURLWithPath: "/tmp/project"))
-
-        let unsafe = ProvenanceProbe(
-            genericLookup: { _ in ProvenanceFields(windowTitle: "Terminal") },
-            providers: [ProvenanceProvider(bundleIDs: ["com.mitchellh.ghostty"], lookup: { _ in
-                    ProvenanceFields(
-                        workingDirectory: LocalFileLocation.documentURL(
-                            "file://remote-host/tmp/private", localHosts: []
-                        )
-                    )
-                })]
-        )
-        let unsafeResult = await unsafe.probe(ghostty)
         XCTAssertEqual(
-            unsafeResult,
-            Provenance(application: ghostty.identity, windowTitle: "Terminal")
-        )
-    }
-
-    func testBrowserTabParsingThroughInjectedProviderAcceptsOnlyWebURL() async {
-        let helium = CapturedApplication(
-            identity: ApplicationIdentity(name: "Helium", bundleID: "net.imput.helium"),
-            processIdentifier: 7
-        )
-        let valid = ProvenanceProbe(
-            genericLookup: { _ in ProvenanceFields(windowTitle: "Helium") },
-            providers: [ProvenanceProvider(bundleIDs: ["net.imput.helium"], lookup: { _ in
-                    BrowserActiveTabParser.fields(
-                        from: ["Article title", "https://example.com/story?item=1"]
-                    )
-                })]
-        )
-        let validResult = await valid.probe(helium)
-        XCTAssertEqual(
-            validResult,
-            Provenance(
-                application: helium.identity,
+            fields,
+            ProvenanceFields(
                 windowTitle: "Article title",
                 url: URL(string: "https://example.com/story?item=1")
             )
@@ -234,7 +187,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         await gate.resolve(ProvenanceFields(windowTitle: "Focused window"))
         await owner.waitForIdle()
 
-        let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
+        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
         let saved = owner.annotationForSave(baseline, target: target)
 
         XCTAssertEqual(saved.provenance.windowTitle, "Focused window")
@@ -249,7 +202,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         let target = makeTarget()
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
+        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
         XCTAssertEqual(owner.annotationForSave(baseline, target: target), baseline)
         XCTAssertEqual(owner.pendingTaskCount, 1)
 
@@ -296,7 +249,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         let target = makeTarget(sessionID: original.id)
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
+        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
         let initial = owner.annotationForSave(baseline, target: target)
         store.mutate(.addAnnotation(sessionID: original.id, annotation: initial))
         store.mutate(.switchSession(sessionID: other.id))
@@ -326,7 +279,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         let target = makeTarget(sessionID: original.id)
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
+        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
         let initial = owner.annotationForSave(baseline, target: target)
         store.mutate(.addAnnotation(sessionID: original.id, annotation: initial))
         store.mutate(.removeAnnotation(
@@ -353,7 +306,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         owner.start(for: target)
         await gate.waitUntilRequested()
 
-        let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
+        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
         XCTAssertEqual(owner.annotationForSave(baseline, target: target), baseline)
         owner.abandon(for: target)
 
@@ -407,7 +360,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
             screenRect: nil
         ))
         let staleAnnotation = try XCTUnwrap(
-            CaptureAnnotationPolicy.annotation(for: staleTarget, note: "Stale")
+            staleTarget.annotation(note: "Stale")
         )
         XCTAssertEqual(
             owner.annotationForSave(staleAnnotation, target: staleTarget),
@@ -420,7 +373,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         await owner.waitForIdle()
         XCTAssertTrue(updates.isEmpty)
 
-        let original = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Real"))
+        let original = try XCTUnwrap(target.annotation(note: "Real"))
         XCTAssertEqual(
             owner.annotationForSave(original, target: target).provenance.windowTitle,
             "Original"

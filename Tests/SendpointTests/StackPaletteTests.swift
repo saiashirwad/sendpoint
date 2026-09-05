@@ -37,18 +37,6 @@ final class StackPaletteTests: XCTestCase {
         ]
     }
 
-    func testNoteListingSearchesQuoteNoteAppAndWindow() {
-        let all = NoteListing(entries: entries, query: "  ")
-        XCTAssertEqual(all.ids, [firstNoteID, secondNoteID, thirdNoteID])
-
-        XCTAssertEqual(NoteListing(entries: entries, query: "QUADRAT").ids, [firstNoteID], "quote")
-        XCTAssertEqual(NoteListing(entries: entries, query: "monoid").ids, [secondNoteID], "note")
-        XCTAssertEqual(
-            NoteListing(entries: entries, query: "helium").ids, [firstNoteID, thirdNoteID], "app")
-        XCTAssertEqual(NoteListing(entries: entries, query: "deep dive").ids, [firstNoteID], "window")
-        XCTAssertTrue(NoteListing(entries: entries, query: "zzz").isEmpty)
-    }
-
     func testNoteHighlightWrapsAndConfines() {
         let ids = [firstNoteID, secondNoteID, thirdNoteID]
         var state = NoteHighlightState()

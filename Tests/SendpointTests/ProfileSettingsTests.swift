@@ -5,24 +5,6 @@ import XCTest
 
 @MainActor
 final class ProfileSettingsTests: XCTestCase {
-    func testStackExportCopyMatchesTheVisibleOutcome() {
-        XCTAssertEqual(StackExportMode(pasteDirectly: true).shortcutTitle, "Paste stack as Markdown")
-        XCTAssertEqual(
-            StackExportMode(pasteDirectly: true).shortcutDetail,
-            "Fills the template and pastes it at your cursor."
-        )
-        XCTAssertEqual(StackExportMode(pasteDirectly: true).exportMomentCaption, "When you paste")
-        XCTAssertEqual(StackExportMode(pasteDirectly: true).verb, "paste")
-
-        XCTAssertEqual(StackExportMode(pasteDirectly: false).shortcutTitle, "Copy stack as Markdown")
-        XCTAssertEqual(
-            StackExportMode(pasteDirectly: false).shortcutDetail,
-            "Fills the template and copies it to the clipboard."
-        )
-        XCTAssertEqual(StackExportMode(pasteDirectly: false).exportMomentCaption, "When you copy")
-        XCTAssertEqual(StackExportMode(pasteDirectly: false).verb, "copy")
-    }
-
     func testMissingEmptyAndInvalidProfileDataFallBackToBuiltInsAndPlain() throws {
         for seed in [Seed.missing, .empty, .invalidData] {
             let defaults = makeDefaults()
@@ -59,70 +41,6 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(settings.profiles, [.plain, .pointByPoint])
         XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
         XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.plain.id.uuidString)
-    }
-
-    func testStoredBuiltInsAreReorderedCanonicallyAndCustomsFollowWithActiveKept() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        let custom = Profile(
-            name: "Mine",
-            preamble: "",
-            includeApplication: false,
-            includeWindow: false,
-            includeLink: false,
-            includeTimestamps: false,
-            includeHeading: false,
-            clearSessionAfterExport: false
-        )
-        defaults.set(
-            try JSONEncoder().encode([Profile.coherent, custom, .pointByPoint, .plain]),
-            forKey: "profiles"
-        )
-        defaults.set(Profile.pointByPoint.id.uuidString, forKey: "activeProfileID")
-
-        let settings = AppSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.profiles, [.plain, .coherent, .pointByPoint, custom])
-        XCTAssertEqual(settings.activeProfileID, Profile.pointByPoint.id)
-    }
-
-    func testMalformedProfileCollectionsFallBackAtomically() throws {
-        var blank = Profile.plain
-        blank.name = ""
-        var untrimmed = Profile.plain
-        untrimmed.name = " Plain "
-        var foldedDuplicate = Profile.pointByPoint
-        foldedDuplicate.name = "cOhÉrEnt"
-        var duplicateID = Profile.pointByPoint
-        duplicateID = Profile(
-            id: Profile.coherent.id,
-            name: duplicateID.name,
-            preamble: duplicateID.preamble,
-            includeApplication: duplicateID.includeApplication,
-            includeWindow: duplicateID.includeWindow,
-            includeLink: duplicateID.includeLink,
-            includeTimestamps: duplicateID.includeTimestamps,
-            includeHeading: duplicateID.includeHeading,
-            clearSessionAfterExport: duplicateID.clearSessionAfterExport
-        )
-        let malformed: [[Profile]] = [
-            [blank],
-            [untrimmed],
-            [.coherent, foldedDuplicate],
-            [.coherent, duplicateID],
-        ]
-
-        for profiles in malformed {
-            let defaults = makeDefaults()
-            defer { remove(defaults) }
-            defaults.set(try JSONEncoder().encode(profiles), forKey: "profiles")
-            defaults.set(profiles[0].id.uuidString, forKey: "activeProfileID")
-
-            let settings = AppSettings(defaults: defaults)
-
-            XCTAssertEqual(settings.profiles, Profile.builtIns)
-            XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
-        }
     }
 
     func testValidProfilesAndActiveProfilePersistAcrossSettingsInstances() throws {
@@ -360,7 +278,7 @@ final class ProfileSettingsTests: XCTestCase {
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Dirty"
         XCTAssertThrowsError(try editor.delete()) {
-            XCTAssertEqual($0 as? ProfileMutationError, .unsavedChanges)
+            XCTAssertEqual($0 as? ProfileEditorError, .unsavedChanges)
         }
 
         editor.revert()
@@ -376,6 +294,37 @@ final class ProfileSettingsTests: XCTestCase {
             XCTAssertEqual($0 as? ProfileMutationError, .lastProfile)
         }
         XCTAssertEqual(settings.activeProfileID, settings.profiles[0].id)
+    }
+
+    func testProfileChangesNotifyOnlyAfterPersistingAValidSnapshot() throws {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let settings = AppSettings(defaults: defaults)
+        var selections: [UUID] = []
+        settings.onProfilesChanged = {
+            selections.append(settings.activeProfileID)
+            let saved = defaults.data(forKey: "profiles")
+                .flatMap { try? JSONDecoder().decode([Profile].self, from: $0) }
+            XCTAssertEqual(saved, settings.profiles)
+            XCTAssertEqual(defaults.string(forKey: "activeProfileID"), settings.activeProfileID.uuidString)
+            XCTAssertTrue(settings.profiles.contains { $0.id == settings.activeProfileID })
+        }
+        let initialData = defaults.data(forKey: "profiles")
+        try settings.selectProfile(id: Profile.plain.id)
+        try settings.updateProfile(.plain)
+        XCTAssertThrowsError(try settings.addProfile(.plain)) {
+            XCTAssertEqual($0 as? ProfileMutationError, .duplicateID)
+        }
+        XCTAssertTrue(selections.isEmpty)
+        XCTAssertEqual(defaults.data(forKey: "profiles"), initialData)
+
+        try settings.selectProfile(id: Profile.coherent.id)
+        var edited = Profile.coherent
+        edited.name = "  Revised  "
+        try settings.updateProfile(edited)
+        XCTAssertEqual(settings.activeProfile.name, "Revised")
+        try settings.deleteProfile(id: Profile.coherent.id)
+        XCTAssertEqual(selections, [Profile.coherent.id, Profile.coherent.id, Profile.pointByPoint.id])
     }
 
     private enum Seed {
