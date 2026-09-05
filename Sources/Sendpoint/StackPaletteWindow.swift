@@ -12,7 +12,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     private static let frameAutosaveName = "StackPalette"
 
-    private let panel: NSPanel
+    private let panel: CapturePanel
     private let model: StackPaletteModel
     private var keyMonitor: Any?
     private var lifecycle: Lifecycle = .active
@@ -26,18 +26,18 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         onDismiss: @escaping () -> Void
     ) {
         self.onDismiss = onDismiss
-        let panel = NSPanel(
+        // Borderless: the SwiftUI sheet draws its own rounded edge, and the
+        // window is clear behind it so the shadow follows that shape.
+        let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 560),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
         panel.title = "Stacks"
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
-        panel.standardWindowButton(.closeButton)?.isHidden = true
-        panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
         panel.isReleasedWhenClosed = false
@@ -52,21 +52,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         self.model = model
         super.init()
         model.onClose = { [weak self] in self?.releaseWindow() }
-
-        // The palette is a sheet of frosted glass over the desktop, so the
-        // window itself is clear and a popover-material view carries the tint.
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        let glass = NSVisualEffectView()
-        glass.material = .popover
-        glass.blendingMode = .behindWindow
-        glass.state = .active
+        panel.onClose = { [weak self] in self?.close() }
         let hosting = NSHostingView(rootView: StackPaletteView(model: model))
         hosting.sizingOptions = []
-        hosting.frame = glass.bounds
-        hosting.autoresizingMask = [.width, .height]
-        glass.addSubview(hosting)
-        panel.contentView = glass
+        panel.contentView = hosting
         panel.delegate = self
         installKeyMonitor()
     }

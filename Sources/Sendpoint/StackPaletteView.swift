@@ -39,10 +39,13 @@ struct StackPaletteView: View {
             minWidth: Self.minimumSize.width, maxWidth: .infinity,
             minHeight: Self.minimumSize.height, maxHeight: .infinity
         )
-        // The window's material is a frosted popover; in the light appearance
-        // a white wash over it keeps the sheet paper-white instead of grey.
-        .background(Color.white.opacity(colorScheme == .dark ? 0 : 0.78))
+        .background(PaletteTint.surface(colorScheme))
         .overlay { overlayMenu }
+        .clipShape(RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous)
+                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
+        )
         .ignoresSafeArea()
         .onAppear {
             DispatchQueue.main.async { focus = .search }
@@ -80,8 +83,8 @@ struct StackPaletteView: View {
                     }
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .background(Capsule().fill(Color.accentColor.opacity(0.14)))
-                    .foregroundStyle(Color.accentColor)
+                    .background(Capsule().fill(PaletteTint.chip))
+                    .foregroundStyle(Color.primary)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -212,10 +215,10 @@ struct StackPaletteView: View {
                 Spacer(minLength: 4)
                 Keycap("⌘Z")
             }
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(Color.primary)
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(Color.accentColor.opacity(0.09))
+            .background(PaletteTint.hover)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -234,7 +237,7 @@ struct StackPaletteView: View {
             HStack(spacing: 10) {
                 // A single dot marks the current stack; everything else stays quiet.
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(Color.primary)
                     .frame(width: 6, height: 6)
                     .opacity(session.isCurrent ? 1 : 0)
                     .frame(width: 10)
@@ -280,7 +283,7 @@ struct StackPaletteView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .bold))
                     .frame(width: 10)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.secondary)
                 (Text("Create ") + Text("“\(name)”").fontWeight(.semibold))
                     .font(.system(size: 14))
                     .lineLimit(1)
@@ -297,7 +300,7 @@ struct StackPaletteView: View {
             Image(systemName: "plus")
                 .font(.system(size: 11, weight: .bold))
                 .frame(width: 10)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.secondary)
             inlineNameField(field: .create, placeholder: "New stack name")
             Spacer(minLength: 8)
             Keycap("↩")
@@ -306,7 +309,7 @@ struct StackPaletteView: View {
         .frame(height: rowHeight)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.10))
+                .fill(PaletteTint.selection)
         )
     }
 
@@ -508,7 +511,7 @@ struct StackPaletteView: View {
             if let flash = model.state.flash {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.primary)
                     Text(flash.text)
                 }
                 .font(.caption.weight(.medium))
@@ -663,7 +666,7 @@ struct StackPaletteView: View {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
                             .frame(width: 12)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.primary)
                             .opacity(isActive ? 1 : 0)
                         Text(profile.name)
                             .font(.system(size: 13, weight: .medium))
@@ -684,35 +687,35 @@ struct StackPaletteView: View {
 
 // MARK: - Pieces
 
-/// The palette's whole color story: state is a translucent wash of the
-/// system accent, and captured passages get the one warm color. Everything
-/// else is a grey drawn with opacity so it reads the same over any material
-/// and in either appearance.
+/// The palette's whole color story: a solid sheet, near-black or paper-white,
+/// with every state drawn as a grey wash of the text color so it reads the
+/// same in either appearance.
 private enum PaletteTint {
+    static let cornerRadius: CGFloat = 16
+
+    static func surface(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(white: 0.09) : .white
+    }
+    /// A hairline edge so the sheet separates from whatever sits behind it.
+    static func rim(_ scheme: ColorScheme) -> Color {
+        Color.primary.opacity(scheme == .dark ? 0.12 : 0.08)
+    }
+    /// Raised surface for the ⌘K and template menus.
+    static func raised(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(white: 0.14) : Color(white: 0.985)
+    }
     /// Highlighted row or menu item.
-    static let selection = Color.accentColor.opacity(0.15)
-    /// Highlighted note: a neutral lift, so a tall block of text is not
-    /// swimming in blue.
-    static let noteSelection = Color.primary.opacity(0.07)
+    static let selection = Color.primary.opacity(0.10)
+    /// Highlighted note: a little quieter, so a tall block of text does not glare.
+    static let noteSelection = Color.primary.opacity(0.06)
     /// Pointer resting on a row.
-    static let hover = Color.primary.opacity(0.045)
+    static let hover = Color.primary.opacity(0.04)
+    /// Small filled chips: the back button and note numbers.
+    static let chip = Color.primary.opacity(0.08)
     /// Ring around the note being edited.
-    static let editing = Color.accentColor.opacity(0.75)
-    /// Small tinted badges (note numbers).
-    static let badge = Color.accentColor.opacity(0.12)
-
-    /// Highlighter ink over a captured passage. In the dark the ink stays
-    /// faint and the text itself warms up, since amber over near-black only
-    /// ever reads as mud.
-    static func marker(_ scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color(red: 1.0, green: 0.76, blue: 0.28).opacity(0.16)
-            : Color(red: 0.98, green: 0.78, blue: 0.22).opacity(0.36)
-    }
-
-    static func markedText(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(red: 1.0, green: 0.90, blue: 0.68) : Color.primary.opacity(0.85)
-    }
+    static let editing = Color.primary.opacity(0.35)
+    /// The rule beside a captured passage.
+    static let quoteRule = Color.primary.opacity(0.22)
 }
 
 /// A palette row: flat by default, washed with the accent when highlighted.
@@ -767,10 +770,10 @@ private struct NoteCard: View {
             HStack(spacing: 8) {
                 Text("\(index + 1)")
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.secondary)
                     .frame(minWidth: 20, minHeight: 18)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous).fill(PaletteTint.badge))
+                        RoundedRectangle(cornerRadius: 5, style: .continuous).fill(PaletteTint.chip))
 
                 AppIcon(application: entry.provenance.application)
 
@@ -815,7 +818,7 @@ private struct NoteCard: View {
             }
 
             if !quote.isEmpty {
-                HighlightedPassage(text: quote)
+                QuotedPassage(text: quote)
             }
 
             // Only the note being edited is a text field. Every other note is
@@ -877,27 +880,25 @@ private struct NoteCard: View {
     }
 }
 
-/// A captured passage drawn the way a highlighter marks a page: the tint
-/// follows the lines of text instead of boxing them.
-private struct HighlightedPassage: View {
+/// A captured passage set as a quiet quotation: a thin rule down the left
+/// and the text a step softer than the note it belongs to.
+private struct QuotedPassage: View {
     let text: String
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        Text(marked)
+        Text(text)
             .font(.callout)
-            .lineSpacing(5)
+            .lineSpacing(4)
             .lineLimit(6)
-            .foregroundStyle(PaletteTint.markedText(colorScheme))
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)
-    }
-
-    private var marked: AttributedString {
-        var attributed = AttributedString(text)
-        attributed.backgroundColor = PaletteTint.marker(colorScheme)
-        return attributed
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(PaletteTint.quoteRule)
+                    .frame(width: 2)
+            }
     }
 }
 
@@ -950,6 +951,7 @@ private struct OverlayPanel<Rows: View>: View {
     @Binding var query: String
     var focus: FocusState<PaletteField?>.Binding
     @ViewBuilder let rows: () -> Rows
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -991,13 +993,13 @@ private struct OverlayPanel<Rows: View>: View {
         .frame(width: 380)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.thickMaterial)
+                .fill(PaletteTint.raised(colorScheme))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.18), radius: 22, y: 10)
     }
 }
 
