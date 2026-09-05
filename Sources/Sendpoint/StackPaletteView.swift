@@ -618,6 +618,7 @@ struct StackPaletteView: View {
             title: "Actions",
             emptyText: "No matching actions",
             isEmpty: items.isEmpty,
+            highlight: model.state.overlayHighlight,
             query: $model.overlayQuery,
             focus: $focus
         ) {
@@ -643,6 +644,7 @@ struct StackPaletteView: View {
                     }
                     .foregroundStyle(item.isDestructive ? Color.red : Color.primary)
                 }
+                .id(index)
             }
         }
     }
@@ -653,6 +655,7 @@ struct StackPaletteView: View {
             title: "Copy with template",
             emptyText: "No matching templates",
             isEmpty: profiles.isEmpty,
+            highlight: model.state.overlayHighlight,
             query: $model.overlayQuery,
             focus: $focus
         ) {
@@ -680,6 +683,7 @@ struct StackPaletteView: View {
                     }
                     .foregroundStyle(Color.primary)
                 }
+                .id(index)
             }
         }
     }
@@ -948,6 +952,8 @@ private struct OverlayPanel<Rows: View>: View {
     let title: String
     let emptyText: String
     let isEmpty: Bool
+    /// Index of the highlighted row; the list scrolls to keep it in view.
+    let highlight: Int
     @Binding var query: String
     var focus: FocusState<PaletteField?>.Binding
     @ViewBuilder let rows: () -> Rows
@@ -962,20 +968,23 @@ private struct OverlayPanel<Rows: View>: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 12)
                 .padding(.bottom, 4)
-            ScrollView {
-                VStack(spacing: 2) {
-                    rows()
-                    if isEmpty {
-                        Text(emptyText)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, minHeight: 40)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 2) {
+                        rows()
+                        if isEmpty {
+                            Text(emptyText)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                        }
                     }
+                    .padding(8)
                 }
-                .padding(8)
+                .frame(maxHeight: 380)
+                .fixedSize(horizontal: false, vertical: true)
+                .onChange(of: highlight) { proxy.scrollTo(highlight) }
             }
-            .frame(maxHeight: 380)
-            .fixedSize(horizontal: false, vertical: true)
             Divider()
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
