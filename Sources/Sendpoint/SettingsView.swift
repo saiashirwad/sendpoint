@@ -48,7 +48,6 @@ struct SettingsView: View {
     @Bindable var permissionState: PermissionState
     let onSelectProfile: (UUID) -> Void
     let onShowAccessibilityHelper: () -> Void
-    let onShowInputMonitoringHelper: () -> Void
     let onRunSetup: () -> Void
 
     @State private var tab: SettingsTab = .voice
@@ -70,16 +69,12 @@ struct SettingsView: View {
     /// Cards stop stretching past this so a wide window stays readable.
     private static let contentMaxWidth: CGFloat = 760
 
-    /// One sentence for the voice shortcut, used wherever it is listed.
-    static let voiceNoteDetail = "Select text, then hold to speak, or tap to start and tap again to save."
-
     init(
         settings: AppSettings,
         profileEditor: ProfileEditorState,
         permissionState: PermissionState,
         onSelectProfile: @escaping (UUID) -> Void,
         onShowAccessibilityHelper: @escaping () -> Void,
-        onShowInputMonitoringHelper: @escaping () -> Void,
         onRunSetup: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
@@ -87,7 +82,6 @@ struct SettingsView: View {
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onSelectProfile = onSelectProfile
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
-        self.onShowInputMonitoringHelper = onShowInputMonitoringHelper
         self.onRunSetup = onRunSetup
     }
 
@@ -294,17 +288,23 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             SettingsSection("How it works") {
                 SettingsCard {
-                    SettingsIconRow(icon: "mic.fill", title: "Voice note", detail: Self.voiceNoteDetail) {
-                        StaticKeycap(VoiceModifierShortcut.displayString)
+                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
+                    SettingsDivider()
+                    Picker("Recording mode", selection: Binding(
+                        get: { settings.voiceMode },
+                        set: { settings.setVoiceMode($0) }
+                    )) {
+                        ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
+                            Text(mode.title).tag(mode)
+                        }
                     }
-                    SettingsDivider()
-                    HowToRow(icon: "hand.raised.fill", lead: "Hold", sentence: "Speak, then release to save.")
-                    SettingsDivider()
-                    HowToRow(icon: "hand.tap.fill", lead: "Tap", sentence: "Talk as long as you like, tap again to save.")
+                    .pickerStyle(.segmented)
+                    .padding(12)
                     SettingsDivider()
                     HowToRow(icon: "escape", lead: "Esc", sentence: "Discard the recording.")
                 }
             }
+            shortcutFeedbackView
             if !permissionState.isVoiceReady {
                 voiceNeedsAttention
             }
@@ -389,9 +389,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             SettingsSection("Making notes") {
                 SettingsCard {
-                    SettingsIconRow(icon: "mic.fill", title: "Voice note", detail: Self.voiceNoteDetail) {
-                        StaticKeycap(VoiceModifierShortcut.displayString)
-                    }
+                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
                     SettingsDivider()
                     shortcutRow(
                         icon: "square.and.pencil",
@@ -509,7 +507,6 @@ struct SettingsView: View {
                 PermissionCapabilityList(
                     permissionState: permissionState,
                     onShowAccessibilityHelper: onShowAccessibilityHelper,
-                    onShowInputMonitoringHelper: onShowInputMonitoringHelper,
                     scope: .accessibility
                 )
             }
@@ -517,7 +514,6 @@ struct SettingsView: View {
                 PermissionCapabilityList(
                     permissionState: permissionState,
                     onShowAccessibilityHelper: onShowAccessibilityHelper,
-                    onShowInputMonitoringHelper: onShowInputMonitoringHelper,
                     scope: .voice
                 )
             }
@@ -603,7 +599,6 @@ private struct NewProfilePopover: View {
         }
     }
 }
-
 
 // MARK: - Building blocks
 

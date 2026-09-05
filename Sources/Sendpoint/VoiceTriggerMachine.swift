@@ -1,139 +1,102 @@
-import Foundation
+/// A preference, not a gesture inferred from how long the keys stay down.
+enum VoiceRecordingMode: String, CaseIterable, Sendable {
+    case hold
+    case tap
 
-/// The input that owns a voice capture.
-enum VoiceTriggerSource: Equatable, Sendable {
-    case hotKey
+    var title: String { self == .hold ? "Hold" : "Tap" }
+    var detail: String {
+        switch self {
+        case .hold: "Hold to speak, then release to save to the stack."
+        case .tap: "Press once to speak, then press again to save to the stack."
+        }
+    }
 }
 
-/// Events delivered by the modifier-only voice shortcut and its capture owner.
-enum VoiceTriggerEvent: Equatable, Sendable {
-    case hotKeyPressed(at: TimeInterval)
-    case hotKeyReleased(at: TimeInterval)
+enum VoiceTriggerEvent: Equatable {
+    case pressed
+    case released
+    case menuToggle
     case escape
-    case captureEnded(source: VoiceTriggerSource)
-    /// The registered shortcut changed. An active capture must not wait for
-    /// a key-up that belonged to the old registration.
-    case shortcutConfigurationChanged
+    case captureEnded
+    case configurationChanged(VoiceRecordingMode)
 }
 
-/// Commands for the capture owner. The machine never touches AppKit or audio.
-enum VoiceTriggerCommand: Equatable, Sendable {
-    case beginCapture(source: VoiceTriggerSource)
-    case finishCapture(source: VoiceTriggerSource)
-    case cancelCapture(source: VoiceTriggerSource)
-    case setLatched(Bool)
+enum VoiceTriggerCommand: Equatable {
+    case beginCapture
+    case finishCapture
+    case cancelCapture
 }
 
-enum VoiceTriggerState: Equatable, Sendable {
-    case idle
-    case comboHeld(pressedAt: TimeInterval)
-    case comboLatched
-    /// The capture has ended, but the physical shortcut may still be down.
-    case awaitingComboRelease
-}
+/// Tracks physical key release separately from capture completion so repeats,
+/// cancellation, and synchronous startup failures cannot retrigger recording.
+struct VoiceTriggerMachine: Equatable {
+    enum State: Equatable {
+        case idle
+        case held
+        case recording
+        case awaitingRelease
+    }
 
-enum VoiceTriggerTiming {
-    /// A short press latches the recording; a press at or above this duration
-    /// is push-to-talk and saves when the key is released.
-    static let tapHoldThreshold: TimeInterval = 0.35
-}
-
-/// Pure state machine for Option-Command voice capture.
-///
-/// Timestamps come from a monotonic clock supplied by the caller. A release
-/// earlier than its press is stale and is ignored. Once a gesture has acted,
-/// duplicate presses and releases cannot finalize it a second time.
-struct VoiceTriggerMachine: Equatable, Sendable {
-    private(set) var state: VoiceTriggerState = .idle
+    private(set) var state: State = .idle
+    private(set) var mode: VoiceRecordingMode = .hold
 
     mutating func handle(_ event: VoiceTriggerEvent) -> [VoiceTriggerCommand] {
         switch event {
-        case let .hotKeyPressed(at):
-            return pressed(at: at)
-        case let .hotKeyReleased(at):
-            return released(at: at)
-        case .escape:
-            return escape()
-        case let .captureEnded(source):
-            return captureEnded(source: source)
-        case .shortcutConfigurationChanged:
-            return configurationChanged()
-        }
-    }
-
-    private mutating func pressed(at time: TimeInterval) -> [VoiceTriggerCommand] {
-        guard time.isFinite else { return [] }
-        switch state {
-        case .idle:
-            state = .comboHeld(pressedAt: time)
-            return [
-                .beginCapture(source: .hotKey),
-                .setLatched(false),
-            ]
-        case .comboLatched:
-            state = .awaitingComboRelease
-            return [.finishCapture(source: .hotKey)]
-        case .comboHeld, .awaitingComboRelease:
-            return []
-        }
-    }
-
-    private mutating func released(at time: TimeInterval) -> [VoiceTriggerCommand] {
-        guard time.isFinite else { return [] }
-        switch state {
-        case let .comboHeld(pressedAt):
-            guard time >= pressedAt else { return [] }
-            if time - pressedAt >= VoiceTriggerTiming.tapHoldThreshold {
-                state = .idle
-                return [.finishCapture(source: .hotKey)]
+        case .pressed:
+            switch state {
+            case .idle:
+                state = .held
+                return [.beginCapture]
+            case .recording:
+                state = .awaitingRelease
+                return [.finishCapture]
+            case .held, .awaitingRelease:
+                return []
             }
-            state = .comboLatched
-            return [.setLatched(true)]
-        case .awaitingComboRelease:
+        case .released:
+            switch state {
+            case .held:
+                state = mode == .hold ? .idle : .recording
+                return mode == .hold ? [.finishCapture] : []
+            case .awaitingRelease:
+                state = .idle
+            case .idle, .recording:
+                break
+            }
+        case .menuToggle:
+            switch state {
+            case .idle:
+                state = .recording
+                return [.beginCapture]
+            case .recording:
+                state = .idle
+                return [.finishCapture]
+            case .held, .awaitingRelease:
+                break
+            }
+        case .escape:
+            switch state {
+            case .held:
+                state = .awaitingRelease
+                return [.cancelCapture]
+            case .recording:
+                state = .idle
+                return [.cancelCapture]
+            case .idle, .awaitingRelease:
+                break
+            }
+        case .captureEnded:
+            switch state {
+            case .held: state = .awaitingRelease
+            case .recording: state = .idle
+            case .idle, .awaitingRelease: break
+            }
+        case let .configurationChanged(mode):
+            let wasRecording = state == .held || state == .recording
             state = .idle
-            return []
-        case .idle, .comboLatched:
-            return []
-        }
-    }
-
-    private mutating func escape() -> [VoiceTriggerCommand] {
-        switch state {
-        case .comboHeld:
-            // Keep the pending physical key-up harmless.
-            state = .awaitingComboRelease
-            return [.cancelCapture(source: .hotKey)]
-        case .comboLatched:
-            state = .idle
-            return [.cancelCapture(source: .hotKey)]
-        case .idle, .awaitingComboRelease:
-            return []
-        }
-    }
-
-    private mutating func captureEnded(source: VoiceTriggerSource) -> [VoiceTriggerCommand] {
-        switch state {
-        case .comboHeld:
-            // Wait for the matching release so it cannot start a new capture.
-            state = .awaitingComboRelease
-        case .comboLatched, .awaitingComboRelease:
-            state = .idle
-        case .idle:
-            break
+            self.mode = mode
+            return wasRecording ? [.cancelCapture] : []
         }
         return []
-    }
-
-    private mutating func configurationChanged() -> [VoiceTriggerCommand] {
-        switch state {
-        case .comboHeld, .comboLatched:
-            state = .idle
-            return [.cancelCapture(source: .hotKey)]
-        case .awaitingComboRelease:
-            state = .idle
-            return []
-        case .idle:
-            return []
-        }
     }
 }

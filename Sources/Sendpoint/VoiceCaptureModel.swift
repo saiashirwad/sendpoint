@@ -6,28 +6,19 @@ import Observation
 final class VoiceCaptureModel {
     private(set) var lifecycle: VoiceCaptureLifecycle
     private(set) var target: AnnotationCaptureTarget?
-    let trigger: VoiceTriggerSource
-    private(set) var isLatched = false
 
     var phase: VoiceCapturePhase { lifecycle.phase }
     var identity: VoiceCaptureIdentity { lifecycle.identity }
     var captured: CapturedSelection? { target?.captured }
 
     init(
-        context: AnnotationCaptureContext,
-        trigger: VoiceTriggerSource = .hotKey
+        context: AnnotationCaptureContext
     ) {
-        self.trigger = trigger
         lifecycle = VoiceCaptureLifecycle(identity: VoiceCaptureIdentity(
             captureID: context.captureID,
             annotationID: context.annotationID,
             sessionID: context.sessionID
         ))
-    }
-
-    func setLatched(_ latched: Bool) {
-        guard lifecycle.phase != .dismissed else { return }
-        isLatched = latched
     }
 
     func setCapturedSelection(_ captured: CapturedSelection, context: AnnotationCaptureContext) {

@@ -7,11 +7,6 @@ enum PermissionCheck {
         NSWorkspace.shared.open(url)
     }
 
-    static func openInputMonitoringSettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!
-        NSWorkspace.shared.open(url)
-    }
-
     static var isMicrophoneAuthorized: Bool {
         microphonePermissionState == .granted
     }

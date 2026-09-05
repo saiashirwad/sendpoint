@@ -43,6 +43,7 @@ enum StackExportMode: Equatable, Sendable {
 }
 
 enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
+    case voiceCapture
     case capture
     case copy
     case stack
@@ -51,6 +52,7 @@ enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
+        case .voiceCapture: "Voice note"
         case .capture: "Typed note"
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
@@ -132,6 +134,8 @@ final class AppSettings {
     private enum Key {
         static let profiles = "profiles"
         static let activeProfileID = "activeProfileID"
+        static let voiceCaptureCombo = "voiceCaptureCombo"
+        static let voiceMode = "voiceMode"
         static let captureCombo = "captureCombo"
         static let copyCombo = "copyCombo"
         static let stackCombo = "stackCombo"
@@ -145,6 +149,16 @@ final class AppSettings {
     }
 
     private let defaults: UserDefaults
+
+    private(set) var voiceCaptureCombo: KeyCombo { didSet { persist(voiceCaptureCombo, key: Key.voiceCaptureCombo); onHotKeysChanged?() } }
+    private(set) var voiceMode: VoiceRecordingMode
+
+    func setVoiceMode(_ mode: VoiceRecordingMode) {
+        guard mode != voiceMode else { return }
+        voiceMode = mode
+        defaults.set(mode.rawValue, forKey: Key.voiceMode)
+        onHotKeysChanged?()
+    }
 
     private(set) var captureCombo: KeyCombo { didSet { persist(captureCombo, key: Key.captureCombo); onHotKeysChanged?() } }
     private(set) var copyCombo: KeyCombo { didSet { persist(copyCombo, key: Key.copyCombo); onHotKeysChanged?() } }
@@ -203,6 +217,9 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        voiceCaptureCombo = AppSettings.read(Key.voiceCaptureCombo, from: defaults)
+            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command])
+        voiceMode = defaults.string(forKey: Key.voiceMode).flatMap(VoiceRecordingMode.init(rawValue:)) ?? .hold
         captureCombo = AppSettings.read(Key.captureCombo, from: defaults)
             ?? KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command])
         copyCombo = AppSettings.read(Key.copyCombo, from: defaults)
@@ -244,7 +261,7 @@ final class AppSettings {
         }
 
         for obsoleteKey in [
-            "includeSource", "includeHeading", "clearAfterCopy", "voiceCaptureCombo",
+            "includeSource", "includeHeading", "clearAfterCopy",
         ] {
             defaults.removeObject(forKey: obsoleteKey)
         }
@@ -260,6 +277,7 @@ final class AppSettings {
 
     func combo(for slot: ShortcutSlot) -> KeyCombo {
         switch slot {
+        case .voiceCapture: voiceCaptureCombo
         case .capture: captureCombo
         case .copy: copyCombo
         case .stack: stackCombo
@@ -270,10 +288,6 @@ final class AppSettings {
 
     func shortcutConflict(for proposed: KeyCombo, excluding slot: ShortcutSlot) -> ShortcutConflict? {
         guard proposed.isValid else { return .invalid }
-
-        if VoiceModifierShortcut.conflicts(with: proposed) {
-            return .reserved("Voice note (\(VoiceModifierShortcut.displayString))")
-        }
 
         let fixed: [(KeyCombo, String)] = [
             (KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command]), "Close Window (⌘W)"),
@@ -295,6 +309,7 @@ final class AppSettings {
             throw conflict
         }
         switch slot {
+        case .voiceCapture: voiceCaptureCombo = proposed
         case .capture: captureCombo = proposed
         case .copy: copyCombo = proposed
         case .stack: stackCombo = proposed

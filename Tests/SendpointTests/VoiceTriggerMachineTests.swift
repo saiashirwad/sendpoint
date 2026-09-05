@@ -2,129 +2,105 @@ import XCTest
 @testable import Sendpoint
 
 final class VoiceTriggerMachineTests: XCTestCase {
-    private let source = VoiceTriggerSource.hotKey
-
-    func testShortPressLatchesAndSecondPressFinalizesOnce() {
+    func testDefaultHoldFinishesOnReleaseEvenForAnImmediateTap() {
         var machine = VoiceTriggerMachine()
-
-        XCTAssertEqual(
-            machine.handle(.hotKeyPressed(at: 10)),
-            [.beginCapture(source: source), .setLatched(false)]
-        )
-        XCTAssertEqual(machine.state, .comboHeld(pressedAt: 10))
-
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 10.349)), [.setLatched(true)])
-        XCTAssertEqual(machine.state, .comboLatched)
-
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 11)), [.finishCapture(source: source)])
-        XCTAssertEqual(machine.state, .awaitingComboRelease)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 11.1)), [])
-        XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 12)), [.beginCapture(source: source), .setLatched(false)])
-    }
-
-    func testThresholdIsInclusiveForHold() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 20))
-
-        XCTAssertEqual(
-            machine.handle(.hotKeyReleased(at: 20 + VoiceTriggerTiming.tapHoldThreshold)),
-            [.finishCapture(source: source)]
-        )
+        XCTAssertEqual(machine.mode, .hold)
+        XCTAssertEqual(machine.handle(.released), [])
+        XCTAssertEqual(machine.handle(.pressed), [.beginCapture])
+        XCTAssertEqual(machine.handle(.pressed), [])
+        XCTAssertEqual(machine.handle(.released), [.finishCapture])
+        XCTAssertEqual(machine.handle(.released), [])
         XCTAssertEqual(machine.state, .idle)
     }
 
-    func testReleaseBeforePressAndDuplicateEventsAreIgnored() {
+    func testTapWaitsForSecondPressAndIgnoresRepeatsThroughCompletion() {
         var machine = VoiceTriggerMachine()
-
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 30)), [])
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 31)), [.beginCapture(source: source), .setLatched(false)])
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 31.1)), [])
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 30.9)), [])
-        XCTAssertEqual(machine.state, .comboHeld(pressedAt: 31))
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 31.35)), [.finishCapture(source: source)])
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 31.4)), [])
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 31.5)), [.beginCapture(source: source), .setLatched(false)])
+        XCTAssertEqual(machine.handle(.configurationChanged(.tap)), [])
+        XCTAssertEqual(machine.handle(.pressed), [.beginCapture])
+        XCTAssertEqual(machine.handle(.pressed), [])
+        XCTAssertEqual(machine.handle(.released), [])
+        XCTAssertEqual(machine.state, .recording)
+        XCTAssertEqual(machine.handle(.released), [])
+        XCTAssertEqual(machine.handle(.pressed), [.finishCapture])
+        XCTAssertEqual(machine.handle(.captureEnded), [])
+        XCTAssertEqual(machine.handle(.captureEnded), [])
+        XCTAssertEqual(machine.handle(.pressed), [])
+        XCTAssertEqual(machine.handle(.released), [])
+        XCTAssertEqual(machine.handle(.pressed), [.beginCapture])
     }
 
-    func testEscapeCancelsHoldAndConsumesItsPendingRelease() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 40))
+    func testEscapeWhileHeldConsumesReleaseEvenIfTeardownFinishesSynchronously() {
+        for mode in VoiceRecordingMode.allCases {
+            var machine = VoiceTriggerMachine()
+            _ = machine.handle(.configurationChanged(mode))
+            _ = machine.handle(.pressed)
+            XCTAssertEqual(machine.handle(.escape), [.cancelCapture])
+            XCTAssertEqual(machine.handle(.captureEnded), [])
+            XCTAssertEqual(machine.handle(.pressed), [])
+            XCTAssertEqual(machine.handle(.escape), [])
+            XCTAssertEqual(machine.handle(.released), [])
+            XCTAssertEqual(machine.state, .idle)
+        }
+    }
 
-        XCTAssertEqual(machine.handle(.escape), [.cancelCapture(source: source)])
-        XCTAssertEqual(machine.state, .awaitingComboRelease)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 40.1)), [])
-        XCTAssertEqual(machine.state, .idle)
+    func testEscapeCancelsTapRecordingOnce() {
+        var machine = VoiceTriggerMachine()
+        _ = machine.handle(.configurationChanged(.tap))
+        _ = machine.handle(.pressed)
+        _ = machine.handle(.released)
+        XCTAssertEqual(machine.handle(.escape), [.cancelCapture])
+        XCTAssertEqual(machine.handle(.captureEnded), [])
         XCTAssertEqual(machine.handle(.escape), [])
-    }
-
-    func testEscapeCancelsLatchedCapture() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 50))
-        _ = machine.handle(.hotKeyReleased(at: 50.1))
-
-        XCTAssertEqual(machine.handle(.escape), [.cancelCapture(source: source)])
-        XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 50.2)), [])
-    }
-
-    func testCaptureEndingBeforeStartCannotStrandMachine() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 60))
-
-        XCTAssertEqual(machine.handle(.captureEnded(source: source)), [])
-        XCTAssertEqual(machine.state, .awaitingComboRelease)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 60.1)), [])
         XCTAssertEqual(machine.state, .idle)
     }
 
-    func testCaptureEndedWhileLatchedResetsMachineAndRejectsLateFinalization() {
+    func testStartupFailureCannotRestartUntilRelease() {
         var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 70))
-        _ = machine.handle(.hotKeyReleased(at: 70.1))
-
-        XCTAssertEqual(machine.handle(.captureEnded(source: source)), [])
-        XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 70.2)), [.beginCapture(source: source), .setLatched(false)])
+        _ = machine.handle(.pressed)
+        XCTAssertEqual(machine.handle(.captureEnded), [])
+        XCTAssertEqual(machine.handle(.pressed), [])
+        XCTAssertEqual(machine.handle(.released), [])
+        XCTAssertEqual(machine.handle(.pressed), [.beginCapture])
     }
 
-    func testShortcutChangeCancelsHeldCaptureAndRejectsOldRelease() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 90))
-
-        XCTAssertEqual(
-            machine.handle(.shortcutConfigurationChanged),
-            [.cancelCapture(source: source)]
-        )
-        XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 90.1)), [])
-        XCTAssertEqual(
-            machine.handle(.hotKeyPressed(at: 91)),
-            [.beginCapture(source: source), .setLatched(false)]
-        )
+    func testConfigurationChangeCancelsHeldOrTapRecordingAndRejectsOldRelease() {
+        for mode in VoiceRecordingMode.allCases {
+            var machine = VoiceTriggerMachine()
+            _ = machine.handle(.configurationChanged(mode))
+            _ = machine.handle(.pressed)
+            if mode == .tap { _ = machine.handle(.released) }
+            XCTAssertEqual(machine.handle(.configurationChanged(.hold)), [.cancelCapture])
+            XCTAssertEqual(machine.handle(.captureEnded), [])
+            XCTAssertEqual(machine.handle(.released), [])
+            XCTAssertEqual(machine.handle(.configurationChanged(.tap)), [])
+            XCTAssertEqual(machine.handle(.pressed), [.beginCapture])
+        }
     }
 
-    func testShortcutChangeCancelsLatchedCaptureWithoutSecondFinalization() {
-        var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 100))
-        _ = machine.handle(.hotKeyReleased(at: 100.1))
-
-        XCTAssertEqual(
-            machine.handle(.shortcutConfigurationChanged),
-            [.cancelCapture(source: source)]
-        )
-        XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyPressed(at: 101)), [.beginCapture(source: source), .setLatched(false)])
+    func testMenuStartStopWorksInBothModesWithoutSyntheticKeyEvents() {
+        for mode in VoiceRecordingMode.allCases {
+            var machine = VoiceTriggerMachine()
+            _ = machine.handle(.configurationChanged(mode))
+            XCTAssertEqual(machine.handle(.menuToggle), [.beginCapture])
+            XCTAssertEqual(machine.handle(.released), [])
+            XCTAssertEqual(machine.handle(.menuToggle), [.finishCapture])
+            XCTAssertEqual(machine.state, .idle)
+            XCTAssertEqual(machine.handle(.menuToggle), [.beginCapture])
+            XCTAssertEqual(machine.handle(.pressed), [.finishCapture])
+            XCTAssertEqual(machine.handle(.captureEnded), [])
+            XCTAssertEqual(machine.handle(.pressed), [])
+            XCTAssertEqual(machine.handle(.released), [])
+            XCTAssertEqual(machine.state, .idle)
+        }
     }
 
-    func testShortcutChangeResetsAwaitingReleaseWithoutCancellingAgain() {
+    func testMenuStartupFailureAndConfigurationChangeResetRecording() {
         var machine = VoiceTriggerMachine()
-        _ = machine.handle(.hotKeyPressed(at: 110))
-        _ = machine.handle(.escape)
-        XCTAssertEqual(machine.state, .awaitingComboRelease)
-
-        XCTAssertEqual(machine.handle(.shortcutConfigurationChanged), [])
+        _ = machine.handle(.menuToggle)
+        XCTAssertEqual(machine.handle(.captureEnded), [])
         XCTAssertEqual(machine.state, .idle)
-        XCTAssertEqual(machine.handle(.hotKeyReleased(at: 110.1)), [])
+        _ = machine.handle(.menuToggle)
+        XCTAssertEqual(machine.handle(.configurationChanged(.tap)), [.cancelCapture])
+        XCTAssertEqual(machine.state, .idle)
     }
 }

@@ -15,26 +15,36 @@ final class HotKeyCenter {
 
     typealias RegisterEvent = @MainActor (UInt32, UInt32, EventHotKeyID) -> (OSStatus, EventHotKeyRef?)
 
-    private var handlers: [UInt32: () -> Void] = [:]
+    private struct Handler {
+        let pressed: () -> Void
+        let released: (() -> Void)?
+    }
+    private var handlers: [UInt32: Handler] = [:]
     private var refs: [UInt32: EventHotKeyRef] = [:]
     private var nextID: UInt32 = 1
     private var handlerInstalled = false
     private let registerEvent: RegisterEvent
+    private let unregisterEvent: @MainActor (EventHotKeyRef) -> Void
 
-    init(registerEvent: @escaping RegisterEvent = HotKeyCenter.liveRegisterEvent) {
+    init(
+        registerEvent: @escaping RegisterEvent = HotKeyCenter.liveRegisterEvent,
+        unregisterEvent: @escaping @MainActor (EventHotKeyRef) -> Void = { UnregisterEventHotKey($0) }
+    ) {
         self.registerEvent = registerEvent
+        self.unregisterEvent = unregisterEvent
     }
 
     /// Replaces any shortcut previously registered under `name`.
     @discardableResult
-    func register(name: String, combo: KeyCombo?, action: @escaping () -> Void) -> HotKeyRegistrationResult {
+    func register(name: String, combo: KeyCombo?, released: (() -> Void)? = nil, action: @escaping () -> Void) -> HotKeyRegistrationResult {
         unregister(name: name)
         guard let combo, combo.isValid else { return .invalid }
         return registerRaw(
             name: name,
             keyCode: combo.keyCode,
             carbonModifiers: combo.carbonModifiers,
-            pressed: action
+            pressed: action,
+            released: released
         )
     }
 
@@ -45,7 +55,8 @@ final class HotKeyCenter {
         name: String,
         keyCode: UInt16,
         carbonModifiers: UInt32,
-        pressed: @escaping () -> Void
+        pressed: @escaping () -> Void,
+        released: (() -> Void)? = nil
     ) -> HotKeyRegistrationResult {
         unregister(name: name)
         installHandlerIfNeeded()
@@ -61,7 +72,7 @@ final class HotKeyCenter {
             return .failed(status)
         }
         Diag.log("hotkey ok name=\(name) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
-        handlers[id] = pressed
+        handlers[id] = Handler(pressed: pressed, released: released)
         refs[id] = ref
         names[name] = id
         return .registered
@@ -69,16 +80,16 @@ final class HotKeyCenter {
 
     func unregister(name: String) {
         guard let id = names.removeValue(forKey: name) else { return }
-        if let ref = refs.removeValue(forKey: id) { UnregisterEventHotKey(ref) }
+        if let ref = refs.removeValue(forKey: id) { unregisterEvent(ref) }
         handlers[id] = nil
     }
 
     private var names: [String: UInt32] = [:]
 
-    fileprivate func fire(id: UInt32) {
+    func fire(id: UInt32, released: Bool) {
         guard let handler = handlers[id] else { return }
         Diag.log("hotkey fired id=\(id)")
-        handler()
+        if released { handler.released?() } else { handler.pressed() }
     }
 
     private func installHandlerIfNeeded() {
@@ -88,7 +99,10 @@ final class HotKeyCenter {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        var specs = [pressedSpec]
+        var specs = [pressedSpec, EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyReleased)
+        )]
         InstallEventHandler(
             GetApplicationEventTarget(), hotKeyEventHandler,
             specs.count, &specs, nil, nil
@@ -121,6 +135,7 @@ private func hotKeyEventHandler(
     )
     guard status == noErr else { return status }
     let hotKeyID = id.id
-    DispatchQueue.main.async { HotKeyCenter.shared.fire(id: hotKeyID) }
+    let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
+    DispatchQueue.main.async { HotKeyCenter.shared.fire(id: hotKeyID, released: released) }
     return noErr
 }

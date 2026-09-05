@@ -38,7 +38,7 @@ final class ShortcutCollisionTests: XCTestCase {
         XCTAssertThrowsError(try settings.setShortcut(undo, for: .clear))
     }
 
-    func testOptionCommandPrefixIsReservedForVoice() throws {
+    func testOptionCommandPrefixIsAvailable() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = AppSettings(defaults: defaults)
@@ -47,11 +47,9 @@ final class ShortcutCollisionTests: XCTestCase {
             modifiers: [.option, .command]
         )
 
-        XCTAssertEqual(
-            settings.shortcutConflict(for: prefixed, excluding: .switchSession),
-            .reserved("Voice note (⌥⌘)")
-        )
-        XCTAssertThrowsError(try settings.setShortcut(prefixed, for: .switchSession))
+        XCTAssertNil(settings.shortcutConflict(for: prefixed, excluding: .switchSession))
+        try settings.setShortcut(prefixed, for: .switchSession)
+        XCTAssertEqual(settings.switchSessionCombo, prefixed)
     }
 
     func testStalePersistedConflictsRemainVisibleToRegistrationValidation() throws {

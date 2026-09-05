@@ -52,7 +52,7 @@ final class CaptureController {
     private let permissionState: PermissionState
     var onAccessibilityRequired: (() -> Void)?
     var onStatusChange: (() -> Void)?
-    var onVoiceCaptureEnded: ((VoiceTriggerSource) -> Void)?
+    var onVoiceCaptureEnded: (() -> Void)?
     var onVoiceEscape: (() -> Void)?
     private var lifecycle: Lifecycle = .awaitingStore
 
@@ -112,27 +112,27 @@ final class CaptureController {
     }
 
     /// Starts a capture and a microphone recording together. `endVoiceCapture`
-    /// is called by the matching global-hotkey release event.
-    func beginVoiceCapture(trigger: VoiceTriggerSource = .hotKey) {
+    /// finishes the recording on hold release or the second tap.
+    func beginVoiceCapture() {
         guard let store, !store.isTornDown else {
             NSSound.beep()
-            onVoiceCaptureEnded?(trigger)
+            onVoiceCaptureEnded?()
             return
         }
         guard permissionState.isTextCaptureReady else {
             onAccessibilityRequired?()
-            onVoiceCaptureEnded?(trigger)
+            onVoiceCaptureEnded?()
             return
         }
 
         if isOpen {
             NSSound.beep()
-            onVoiceCaptureEnded?(trigger)
+            onVoiceCaptureEnded?()
             return
         }
 
         let context = AnnotationCaptureContext(sessionID: store.currentSessionID)
-        let model = VoiceCaptureModel(context: context, trigger: trigger)
+        let model = VoiceCaptureModel(context: context)
 
         // Install the lifecycle owner before selection capture. The clipboard
         // fallback runs the main run loop, so the matching key-up can arrive
@@ -191,23 +191,14 @@ final class CaptureController {
     }
 
     func endVoiceCapture() {
-        endVoiceCapture(source: .hotKey)
-    }
-
-    func endVoiceCapture(source: VoiceTriggerSource) {
         guard let model = voiceModel else { return }
-        guard model.trigger == source else { return }
         runVoiceAction(model.release(), for: model)
     }
 
-    func cancelVoiceCapture(source: VoiceTriggerSource) {
-        guard let model = voiceModel, model.trigger == source else { return }
+    func cancelVoiceCapture() {
+        guard let model = voiceModel else { return }
         if case .transcribing = model.phase { return }
         teardownVoice(returnFocus: true)
-    }
-
-    func setVoiceOverlayLatched(_ latched: Bool) {
-        voiceModel?.setLatched(latched)
     }
 
     private func present(_ target: AnnotationCaptureTarget) {
@@ -750,7 +741,7 @@ final class CaptureController {
 
     /// The only voice teardown path. It is safe to call more than once.
     private func teardownVoice(returnFocus: Bool) {
-        let endedSource = voiceModel?.trigger
+        let hadCapture = voiceModel != nil
         if let target = voiceModel?.target {
             provenanceWork.cancelBeforeSave(for: target)
         }
@@ -777,8 +768,8 @@ final class CaptureController {
             previousApp.activate()
         }
         previousApp = nil
-        if let endedSource {
-            onVoiceCaptureEnded?(endedSource)
+        if hadCapture {
+            onVoiceCaptureEnded?()
         }
     }
 

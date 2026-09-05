@@ -466,9 +466,11 @@ struct StackPaletteView: View {
                 Text("Nothing captured yet")
                     .font(.title3.weight(.semibold))
                 HStack(spacing: 5) {
-                    Text("Hold")
-                    Keycap(VoiceModifierShortcut.displayString, size: 12)
-                    Text("to speak and release to save, or tap it once to start and again to save")
+                    Text(model.settings.voiceMode.title)
+                    Keycap(model.settings.voiceCaptureCombo.displayString, size: 12)
+                    Text(model.settings.voiceMode == .hold
+                        ? "to speak, then release to save"
+                        : "to start, then press again to save")
                 }
                 HStack(spacing: 5) {
                     Text("Or press")

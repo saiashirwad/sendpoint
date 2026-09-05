@@ -95,9 +95,9 @@ fi
 
 if [ "$AD_HOC" = true ]; then
     echo "==> Building an ad-hoc signed release"
-    CODESIGN_IDENTITY=- APP_BUILD="$APP_BUILD" ./build.sh
+    CODESIGN_IDENTITY=- APP_BUILD="$APP_BUILD" ./build.sh release
 else
-    APP_BUILD="$APP_BUILD" ./build.sh
+    APP_BUILD="$APP_BUILD" ./build.sh release
 fi
 
 if [ "$AD_HOC" = false ]; then
