@@ -24,31 +24,29 @@
   <style>
     :root {
       --bg: #ffffff;
-      --bg-2: #f6f6f8;
-      --fg: #141419;
-      --fg-2: #5c5c6b;
-      --fg-3: #9a9aa8;
-      --line: #e6e6ec;
-      --accent: #4b4be0;
+      --bg-2: #f5f5f5;
+      --fg: #111111;
+      --fg-2: #5d5d60;
+      --fg-3: #9a9a9e;
+      --line: #e6e6e8;
+      --accent: #111111;
       --accent-fg: #ffffff;
-      --mark: #ffd84d;
-      --mark-fg: #2b2a5a;
-      --desk: #e9e9ef;
+      --sel: rgba(0, 0, 0, 0.11);
+      --desk: #0f0f10;
       color-scheme: light dark;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #1c1c22;
-        --bg-2: #25252d;
-        --fg: #f0f0f4;
-        --fg-2: #b0b0be;
-        --fg-3: #7d7d8c;
-        --line: #35353f;
-        --accent: #7a7aff;
-        --accent-fg: #0f0f13;
-        --mark: #e6c23a;
-        --mark-fg: #1a1a2e;
-        --desk: #2c2c36;
+        --bg: #0f0f10;
+        --bg-2: #19191b;
+        --fg: #f2f2f2;
+        --fg-2: #a7a7ab;
+        --fg-3: #6f6f74;
+        --line: #26262a;
+        --accent: #f2f2f2;
+        --accent-fg: #0f0f10;
+        --sel: rgba(255, 255, 255, 0.17);
+        --desk: #060607;
       }
     }
 
@@ -70,50 +68,116 @@
     /* ---------- split layout ---------- */
     .split {
       display: grid;
-      grid-template-columns: minmax(340px, 34%) 1fr;
+      grid-template-columns: minmax(340px, min(34%, 540px)) 1fr;
       min-height: 100vh;
     }
     .side {
       display: flex; flex-direction: column;
       padding: 28px 44px 28px 48px;
+      position: relative; overflow: hidden;
     }
-    .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 1.05rem; line-height: 1; }
-    .brand img { width: 1.15em; height: 1.15em; }
-    .hero { margin: auto 0; padding: 48px 0; }
-    .hero h1 { font-size: clamp(2.2rem, 3.6vw, 3.5rem); }
-    .hero .lede { font-size: 1.1rem; line-height: 1.5; color: var(--fg-2); margin: 1.3em 0 1.8em; max-width: 25em; }
-    .hero .lede p { margin: 0 0 0.85em; }
-    .hero .lede .hook { font-size: 1.3rem; line-height: 1.35; color: var(--fg); font-weight: 500; letter-spacing: -0.01em; margin-bottom: 0.9em; }
-    .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    /* a faint light from above, the same idea as the capsule's gradient stroke */
+    .side::before {
+      content: ""; position: absolute; left: -20%; right: -20%; top: -10%; height: 60%;
+      background: radial-gradient(55% 60% at 28% 0%, color-mix(in srgb, var(--fg) 7%, transparent), transparent 72%);
+      pointer-events: none;
+    }
+    .side > * { position: relative; }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 1.02rem; line-height: 1; letter-spacing: -0.01em; }
+    .brand img { width: 1.2em; height: 1.2em; }
+    .hero { margin: auto 0; padding: 40px 0; }
+    .hero h1 {
+      font-size: clamp(2.3rem, 3.9vw, 3.7rem);
+      letter-spacing: -0.034em; line-height: 1.02;
+      text-wrap: balance; max-width: 9.5em;
+      margin-left: -0.05em; /* optical: the T's side bearing */
+    }
+    /* "loud" is the one living word: a soft band of sound drifts through the
+       letters now and then, and while the demo is speaking the word breathes
+       with the same loudness that drives the ribbon (--v, 0 to 1). */
+    .loud {
+      --v: 0;
+      display: inline-block;
+      color: transparent;
+      background: linear-gradient(100deg,
+        var(--fg) 0%, var(--fg) 38%,
+        color-mix(in srgb, var(--fg) 58%, transparent) 50%,
+        var(--fg) 62%, var(--fg) 100%);
+      background-size: 260% 100%;
+      background-position: 120% 0;
+      -webkit-background-clip: text; background-clip: text;
+      animation: loud-sheen 7.5s cubic-bezier(.45,0,.2,1) 1.2s infinite;
+      transform: scale(calc(1 + var(--v) * 0.022));
+      transform-origin: 0% 100%;
+      filter: drop-shadow(0 0 calc(var(--v) * 0.16em) color-mix(in srgb, var(--fg) calc(var(--v) * 40%), transparent));
+      will-change: transform, filter, background-position;
+    }
+    @keyframes loud-sheen {
+      0% { background-position: 120% 0; }
+      26% { background-position: -20% 0; }
+      100% { background-position: -20% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .loud { animation: none; transform: none; filter: none; }
+    }
+    .hero .lede { margin: 26px 0 30px; max-width: 24em; }
+    .hero .lede p { margin: 0; }
+    .hero .lede .hook { font-size: 1.2rem; line-height: 1.4; color: var(--fg-2); font-weight: 400; letter-spacing: -0.012em; text-wrap: balance; margin-left: -0.04em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 12px 20px; border-radius: 10px;
-      font-weight: 600; font-size: 1rem; line-height: 1;
-      border: 1px solid var(--line);
-      background: var(--bg-2);
-      transition: transform 0.08s ease, background 0.15s ease;
+      display: inline-flex; align-items: center; gap: 9px;
+      height: 42px; padding: 0 18px; border-radius: 11px;
+      font-weight: 600; font-size: 0.95rem; line-height: 1; letter-spacing: -0.005em;
+      color: var(--fg);
+      border: 1px solid transparent;
+      background:
+        linear-gradient(color-mix(in srgb, var(--fg) 6%, var(--bg)), color-mix(in srgb, var(--fg) 6%, var(--bg))) padding-box,
+        linear-gradient(180deg, color-mix(in srgb, var(--fg) 16%, transparent), color-mix(in srgb, var(--fg) 6%, transparent)) border-box;
+      transition: transform 0.08s ease, background 0.15s ease, opacity 0.15s ease;
     }
     .btn svg { width: 1.05em; height: 1.05em; fill: currentColor; flex: none; margin-top: -0.05em; }
-    .btn:hover { background: var(--line); }
+    .btn:hover {
+      background:
+        linear-gradient(color-mix(in srgb, var(--fg) 10%, var(--bg)), color-mix(in srgb, var(--fg) 10%, var(--bg))) padding-box,
+        linear-gradient(180deg, color-mix(in srgb, var(--fg) 22%, transparent), color-mix(in srgb, var(--fg) 8%, transparent)) border-box;
+    }
     .btn:active { transform: translateY(1px); }
-    .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-    .btn.primary:hover { filter: brightness(1.08); }
-    .fine { font-size: 0.9rem; color: var(--fg-3); margin-top: 14px; }
-    .byline {
-      display: inline-flex; align-items: center; gap: 12px;
-      margin-top: 28px;
+    .btn.primary {
+      background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 24px -8px color-mix(in srgb, var(--fg) 45%, transparent);
     }
-    .byline img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; display: block; }
-    .byline .who { display: flex; flex-direction: column; line-height: 1.25; }
-    .byline .name { font-weight: 600; font-size: 0.95rem; }
-    .byline .handle { font-size: 0.9rem; color: var(--fg-3); }
-    .byline .handle b { font-weight: 600; color: var(--fg-2); }
-    .byline:hover .handle b { color: var(--accent); }
-    .side footer {
-      font-size: 0.9rem; color: var(--fg-3);
-      display: flex; flex-wrap: wrap; gap: 6px 18px;
+    .btn.primary:hover { background: var(--accent); opacity: 0.9; }
+    .fine { font-size: 0.86rem; color: var(--fg-3); margin: 16px 0 0; letter-spacing: -0.005em; line-height: 1.5; }
+
+    /* how it works: three quiet lines under a hairline */
+    .steps {
+      list-style: none; margin: 0; padding: 20px 0 0;
+      border-top: 1px solid var(--line);
+      display: flex; flex-direction: column; gap: 10px;
     }
-    .side footer a:hover { color: var(--fg); }
+    .steps li { display: grid; grid-template-columns: 2.2em 1fr; align-items: baseline; font-size: 0.95rem; line-height: 1.45; color: var(--fg-2); letter-spacing: -0.005em; }
+    .steps .n { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.76em; color: var(--fg-3); letter-spacing: 0.06em; }
+    kbd {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 1.55em; height: 1.45em; padding: 0 0.38em; margin: 0 0.06em;
+      border-radius: 5px; vertical-align: -0.12em;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      font-size: 0.84em; font-weight: 500; color: var(--fg);
+      background: color-mix(in srgb, var(--fg) 7%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 13%, transparent), 0 1px 0 color-mix(in srgb, var(--fg) 10%, transparent);
+    }
+    kbd + kbd { margin-left: 0.15em; }
+
+    /* the steps and the byline sit together at the foot of the panel */
+    .tail { display: flex; flex-direction: column; gap: 22px; }
+    .meet { border-top: 1px solid var(--line); padding-top: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .byline { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; }
+    .byline img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; display: block; box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 12%, transparent); }
+    .byline .who { display: flex; flex-direction: column; line-height: 1.3; }
+    .byline .name { font-weight: 600; font-size: 0.9rem; letter-spacing: -0.005em; }
+    .byline .handle { font-size: 0.86rem; color: var(--fg-3); }
+    .byline .handle b { font-weight: 600; color: var(--fg-2); transition: color 0.15s ease; }
+    .byline:hover .handle b { color: var(--fg); }
     .stage {
       border-left: 1px solid var(--line);
       min-width: 0;
@@ -131,13 +195,14 @@
       min-height: 34em;
       user-select: none;
     }
-
+    /* the wallpaper is daylight in light mode and settles under a neutral
+       dusk wash in dark mode, so the black window and capsule sit in it */
     .scene::before {
       content: ""; position: absolute; inset: 0; pointer-events: none;
-      background: rgba(8, 14, 40, 0);
+      background: rgba(0, 0, 0, 0);
     }
     @media (prefers-color-scheme: dark) {
-      .scene::before { background: rgba(8, 14, 40, 0.38); }
+      .scene::before { background: rgba(0, 0, 0, 0.5); }
     }
 
     /* menu bar: transparent over the wallpaper, like macOS */
@@ -161,7 +226,7 @@
     .menubar .item .sp { width: 1.3em; height: 1.3em; }
     .menubar .badge {
       min-width: 1.5em; height: 1.5em; padding: 0 0.4em;
-      border-radius: 1em; background: var(--accent); color: var(--accent-fg);
+      border-radius: 1em; background: #fff; color: #111;
       font-weight: 600; font-size: 0.85em;
       display: inline-flex; align-items: center; justify-content: center;
       transform: scale(0); transition: transform 0.25s cubic-bezier(.2,1.4,.5,1);
@@ -178,7 +243,7 @@
       border-radius: 10px;
       overflow: hidden;
       display: flex; flex-direction: column;
-      box-shadow: 0 18px 50px rgba(10, 30, 90, 0.35), 0 0 0 0.5px rgba(0,0,0,0.15);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0,0,0,0.4);
     }
     .win .bar {
       display: flex; align-items: center; gap: 0.6em;
@@ -225,9 +290,8 @@
     .col { position: relative; z-index: 0; isolation: isolate; }
     .hl {
       position: absolute; z-index: -1; pointer-events: none;
-      background: #b4d5fe; border-radius: 2px;
+      background: var(--sel); border-radius: 2px;
     }
-    @media (prefers-color-scheme: dark) { .hl { background: rgba(80, 140, 255, 0.42); } }
 
     .composer-wrap { padding: 0.5em 1.2em 0.9em; }
     .composer {
@@ -252,7 +316,7 @@
     }
     .composer .text .ph { color: var(--fg-3); }
     .composer .text b { font-weight: 600; }
-    .composer.flash { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+    .composer.flash { border-color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 
     /* voice capsule, matches the app's overlay: a low wordless pill whose
        only moving part is a single ribbon of sound. A dim quote badge with
@@ -299,6 +363,7 @@
       opacity: 0; transition: opacity 0.3s ease;
     }
     .subs.on { opacity: 1; }
+    .subs .w { color: rgba(255,255,255,0.72); }
     .subs .line {
       display: inline; padding: 0.15em 0.5em;
       background: rgba(20, 20, 26, 0.78);
@@ -307,11 +372,11 @@
     }
     .subs .w { opacity: 0; display: inline; transition: opacity 0.14s ease; }
     .subs .w.on { opacity: 1; }
-    .subs .w.hot { color: var(--mark); }
+    .subs .w.hot { color: #fff; }
     @media (prefers-color-scheme: dark) {
-      .subs { color: #14141a; }
-      .subs .line { background: rgba(255, 255, 255, 0.88); }
-      .subs .w.hot { color: #4b4be0; }
+      .subs .line { background: rgba(255, 255, 255, 0.9); }
+      .subs .w { color: rgba(0,0,0,0.62); }
+      .subs .w.hot { color: #111; }
     }
 
     /* note card that flies into the menu bar */
@@ -322,7 +387,7 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 0.55em 0.7em;
-      box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.35);
       font-size: 0.82em; line-height: 1.35;
       pointer-events: none;
       transform-origin: top right;
@@ -338,7 +403,8 @@
       .split { grid-template-columns: minmax(300px, 34%) 1fr; }
       .side { padding: 24px 28px; }
       .hero .lede { font-size: 1.05rem; }
-      .hero .lede .hook { font-size: 1.2rem; }
+      .hero .lede .hook { font-size: 1.1rem; }
+      .hero .lede { margin: 20px 0 24px; }
       .actions .btn { flex: 1 1 auto; justify-content: center; }
       .scene { font-size: clamp(11px, min(1.25vw, 2vh), 18px); }
     }
@@ -348,7 +414,7 @@
       .hero { padding: 36px 0 28px; }
       .actions .btn { flex: 0 1 auto; }
       .hero h1 { font-size: 2.4rem; }
-      .side footer { order: 3; padding-top: 16px; }
+      .tail { padding-top: 16px; }
       .stage { border-left: 0; border-top: 1px solid var(--line); }
       .scene { font-size: clamp(10px, 1.5vw, 14px); height: 78vh; min-height: 36em; }
       .win { left: 1em; right: 1em; }
@@ -363,7 +429,7 @@
     <aside class="side">
       <a class="brand" href="/"><img src="/icon.svg" alt="">Sendpoint</a>
       <div class="hero">
-        <h1>Think out loud while you read.</h1>
+        <h1>Think out <span class="loud" id="loud">loud</span> while you read.</h1>
         <div class="lede">
           <p class="hook">Make a voice note before the thought gets away.</p>
         </div>
@@ -371,16 +437,21 @@
           <a class="btn primary" href="https://github.com/saiashirwad/sendpoint/releases/download/v1.2.0/Sendpoint-1.2.0.zip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5.1c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>Download for Mac</a>
           <a class="btn" href="https://github.com/saiashirwad/sendpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>GitHub</a>
         </div>
-        <p class="fine">macOS 14 or later, Apple Silicon. Free.</p>
+        <p class="fine">Free. For Apple Silicon Macs on macOS 14 or later.</p>
+      </div>
+      <div class="tail">
+        <ol class="steps">
+          <li><span class="n">01</span><span>Select the passage that raised the thought.</span></li>
+          <li><span class="n">02</span><span>Hold <kbd>⌘</kbd><kbd>`</kbd> and say it.</span></li>
+          <li><span class="n">03</span><span>Send the whole train of thought as one prompt.</span></li>
+        </ol>
+        <div class="meet">
         <a class="byline" href="https://x.com/texoport__">
           <img src="/avatar.jpg" alt="">
           <span class="who"><span class="name">Used this? Have thoughts?</span><span class="handle">I'm <b>@texoport__</b> on X. DMs are open.</span></span>
         </a>
+        </div>
       </div>
-      <footer>
-        <span>Everything stays on your Mac.</span>
-        <a href="https://github.com/saiashirwad/sendpoint/releases">Releases</a>
-      </footer>
     </aside>
 
     <section class="stage">
@@ -393,7 +464,7 @@
           </div>
           <div class="right">
             <div class="item" id="mbitem">
-              <svg class="sp" viewBox="0 0 1024 1024" aria-hidden="true"><rect x="100" y="100" width="824" height="824" rx="186" fill="#fff" fill-opacity="0.18"/><path fill="#fff" d="M296 262H728A84 84 0 0 1 812 346V598A84 84 0 0 1 728 682H420L318 778L336 682H296A84 84 0 0 1 212 598V346A84 84 0 0 1 296 262Z"/><rect x="292" y="356" width="440" height="42" rx="21" fill="#2a6fe0" fill-opacity="0.35"/><rect x="280" y="437" width="372" height="70" rx="20" fill="#FFD84D"/><rect x="292" y="451" width="348" height="42" rx="21" fill="#2B2A5A"/><rect x="292" y="546" width="380" height="42" rx="21" fill="#2a6fe0" fill-opacity="0.35"/></svg>
+              <svg class="sp" viewBox="0 0 1024 1024" aria-hidden="true"><rect x="100" y="100" width="824" height="824" rx="186" fill="#fff" fill-opacity="0.18"/><path fill="#fff" d="M296 262H728A84 84 0 0 1 812 346V598A84 84 0 0 1 728 682H420L318 778L336 682H296A84 84 0 0 1 212 598V346A84 84 0 0 1 296 262Z"/><rect x="292" y="356" width="440" height="42" rx="21" fill="#111" fill-opacity="0.22"/><rect x="280" y="437" width="372" height="70" rx="20" fill="#FFD84D"/><rect x="292" y="451" width="348" height="42" rx="21" fill="#2B2A5A"/><rect x="292" y="546" width="380" height="42" rx="21" fill="#111" fill-opacity="0.22"/></svg>
               <span class="badge" id="badge">0</span>
             </div>
             <svg class="glyph wifi" viewBox="1.5 0 21 18" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9.2 12.1a4 4 0 0 1 5.6 0" fill="none"/><path d="M6.5 9.4a7.8 7.8 0 0 1 11 0" fill="none"/><path d="M3.8 6.7a11.6 11.6 0 0 1 16.4 0" fill="none"/><circle cx="12" cy="15" r="1.4" fill="#fff" stroke="none"/></svg>
@@ -454,7 +525,7 @@
     const scene = $("scene"), badge = $("badge"), mbitem = $("mbitem"),
           msgs = $("msgs"), col = $("col"),
           subs = $("subs"), subline = $("subline"),
-          capsule = $("capsule"), ct = $("ct"), wave = $("wave"),
+          capsule = $("capsule"), ct = $("ct"), wave = $("wave"), loud = $("loud"),
           composer = $("composer"), ctext = $("ctext");
     const PH = '<span class="ph">Ask anything</span>';
     let added = [];
@@ -475,6 +546,18 @@
     let energy = 0;             // target loudness while speaking
     const samples = new Array(48).fill(0);
     let lastPush = 0;
+    let breath = 0;             // smoothed loudness the headline breathes with
+    // Siri-ish light: full strength on the outline, a third inside. One
+    // period of colour spans the ribbon and drifts slowly to the right.
+    const HUES = ["#9ad4f2", "#b3a6f2", "#eea6bf", "#f0c895", "#a4dcc0", "#9ad4f2"];
+    const rainbow = (w, t) => {
+      const phase = (t * 0.12) % 1;
+      const x0 = -w * (1 - phase);
+      const g = wctx.createLinearGradient(x0, 0, x0 + 2 * w, 0);
+      const n = HUES.length - 1;
+      for (let k = 0; k <= 2 * n; k++) g.addColorStop(k / (2 * n), HUES[k % n]);
+      return g;
+    };
     const hairline = (w, h, style, width) => {
       wctx.strokeStyle = style; wctx.lineWidth = width; wctx.lineCap = "round";
       wctx.beginPath(); wctx.moveTo(0, h / 2); wctx.lineTo(w, h / 2); wctx.stroke();
@@ -500,6 +583,8 @@
         const level = Math.max(0.04, Math.min(1, energy * (0.7 + Math.random() * 0.5) + 0.03 * Math.random()));
         samples.shift(); samples.push(level);
       }
+      breath += ((mode === "live" ? samples[samples.length - 1] : 0) - breath) * 0.18;
+      loud.style.setProperty("--v", breath < 0.005 ? "0" : breath.toFixed(3));
 
       if (mode === "live") {
         const levels = samples.map((_, i) => {
@@ -517,8 +602,10 @@
         wctx.lineTo(bottom[0].x, bottom[0].y);
         smoothCurve(bottom);
         wctx.closePath();
-        wctx.fillStyle = "rgba(255,255,255,0.22)"; wctx.fill();
-        wctx.strokeStyle = "rgba(255,255,255,0.92)"; wctx.lineWidth = 1.1; wctx.lineJoin = "round"; wctx.stroke();
+        const light = rainbow(w, t);
+        wctx.globalAlpha = 0.24; wctx.fillStyle = light; wctx.fill();
+        wctx.globalAlpha = 0.9; wctx.strokeStyle = light; wctx.lineWidth = 1.15; wctx.lineJoin = "round"; wctx.stroke();
+        wctx.globalAlpha = 1;
       } else if (mode === "busy") {
         hairline(w, h, "rgba(255,255,255,0.18)", 1.4);
         const sweep = (t * 0.85) % 1;
