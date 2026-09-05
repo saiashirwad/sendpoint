@@ -1,6 +1,6 @@
 # Sendpoint
 
-A macOS menu bar app for making voice notes while you read.
+Think out loud while you read.
 
 ## Development
 
