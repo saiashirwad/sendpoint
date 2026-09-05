@@ -515,18 +515,17 @@ final class CaptureController {
                       let target = model.target,
                       self.target(target, matches: identity)
                 else { return }
-                guard let note = transcript.nonblank else {
+                // Nothing said means nothing to do: the overlay just leaves,
+                // and the front app gets its focus back without a word.
+                guard let note = transcript.nonblank,
+                      let annotation = CaptureAnnotationPolicy.annotation(
+                          for: target,
+                          note: note
+                      )
+                else {
                     self.voiceTranscriptionTask = nil
-                    self.showVoiceFailure("No speech was found.", for: model)
-                    return
-                }
-
-                guard let annotation = CaptureAnnotationPolicy.annotation(
-                    for: target,
-                    note: note
-                ) else {
-                    self.voiceTranscriptionTask = nil
-                    self.showVoiceFailure("No speech was found.", for: model)
+                    Diag.log("voice note held no speech; dismissed quietly")
+                    self.teardownVoice(returnFocus: true)
                     return
                 }
                 guard let store = self.store, !store.isTornDown else {
@@ -758,8 +757,7 @@ final class CaptureController {
         if let voiceKeyMonitor { NSEvent.removeMonitor(voiceKeyMonitor) }
         voiceKeyMonitor = nil
         voicePanel?.onClose = nil
-        voicePanel?.orderOut(nil)
-        voicePanel?.contentView = nil
+        fadeOut(voicePanel)
         voicePanel = nil
         voiceModel = nil
 
@@ -771,6 +769,20 @@ final class CaptureController {
         if hadCapture {
             onVoiceCaptureEnded?()
         }
+    }
+
+    /// Lets the overlay leave the way it arrived. The panel is already
+    /// disowned, so a new capture during the fade gets a fresh one.
+    private func fadeOut(_ panel: NSPanel?) {
+        guard let panel else { return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.orderOut(nil)
+            panel.contentView = nil
+        })
     }
 
     private func applyLateProvenance(_ mutation: SessionDocumentMutation) {

@@ -127,28 +127,45 @@ final class VoiceAnnotationService {
 
     /// Stops the microphone before starting transcription, so its use stays
     /// limited to the time that the shortcut was held.
+    /// Clips shorter than this hold no words, and the recogniser rejects them
+    /// outright. A stray tap of the shortcut produces one; it is silence, not
+    /// a failure.
+    static let minimumClipDuration: TimeInterval = 0.3
+
+    /// Returns an empty string when the clip held no speech, including clips
+    /// too short to carry any.
     func stopAndTranscribe() async throws -> String {
         try Task.checkCancellation()
-        let url = try stopRecording()
-        defer { try? FileManager.default.removeItem(at: url) }
+        let clip = try stopRecording()
+        defer { try? FileManager.default.removeItem(at: clip.url) }
+
+        guard clip.duration >= Self.minimumClipDuration else {
+            Diag.log("voice clip too short to hold speech; treating as silence")
+            return ""
+        }
 
         try Task.checkCancellation()
         let modelIsReady = await transcriber.isReady()
         try Task.checkCancellation()
         Diag.log(modelIsReady ? "voice transcription started" : "voice model download started")
-        let transcript = try await transcriber.transcribe(url: url)
-        try Task.checkCancellation()
-        return transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let transcript = try await transcriber.transcribe(url: clip.url)
+            try Task.checkCancellation()
+            return transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch ASRError.invalidAudioData {
+            Diag.log("voice clip rejected by the recogniser as too short; treating as silence")
+            return ""
+        }
     }
 
     func discardRecording() {
         guard isRecording || recordingURL != nil else { return }
-        let url = try? stopRecording()
-        if let url { try? FileManager.default.removeItem(at: url) }
+        let clip = try? stopRecording()
+        if let clip { try? FileManager.default.removeItem(at: clip.url) }
         Diag.log("voice recording discarded")
     }
 
-    private func stopRecording() throws -> URL {
+    private func stopRecording() throws -> (url: URL, duration: TimeInterval) {
         guard let engine, let url = recordingURL else {
             throw VoiceAnnotationError.noActiveRecording
         }
@@ -157,10 +174,13 @@ final class VoiceAnnotationService {
         engine.stop()
         self.engine = nil
         levelMeter.reset()
+        let duration = recordingFile.map { file in
+            Double(file.length) / max(file.fileFormat.sampleRate, 1)
+        } ?? 0
         recordingFile = nil // Flush the audio file before FluidAudio reads it.
         recordingURL = nil
-        Diag.log("voice recording stopped")
-        return url
+        Diag.log("voice recording stopped, \(Int(duration * 1000))ms")
+        return (url, duration)
     }
 }
 
