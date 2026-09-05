@@ -71,28 +71,6 @@ final class RuntimeCutoverTests: XCTestCase {
         XCTAssertNil(panel.onClose)
     }
 
-    func testMoveMappingProducesDomainFinalIndexesForSwiftUIDestination() {
-        let ids = (0..<4).map { _ in UUID() }
-        let moves = AnnotationMoveMapping.moves(
-            annotationIDs: ids,
-            from: IndexSet(integer: 0),
-            to: 3
-        )
-
-        XCTAssertEqual(apply(moves, to: ids), [ids[1], ids[2], ids[0], ids[3]])
-    }
-
-    func testMoveMappingHandlesMultipleRows() {
-        let ids = (0..<5).map { _ in UUID() }
-        let moves = AnnotationMoveMapping.moves(
-            annotationIDs: ids,
-            from: IndexSet([1, 2]),
-            to: 5
-        )
-
-        XCTAssertEqual(apply(moves, to: ids), [ids[0], ids[3], ids[4], ids[1], ids[2]])
-    }
-
     @MainActor
     func testClipboardWriteFailureDoesNotClear() async throws {
         let annotation = Annotation(
@@ -107,13 +85,14 @@ final class RuntimeCutoverTests: XCTestCase {
         var profile = Profile.plain
         profile.clearSessionAfterExport = true
 
-        let copied = SessionExport.copy(store: store, profile: profile) { text in
+        let exporter = ExportController(services: ExportServices(write: { text in
             attemptedText = text
-            return false
-        }
+            return nil
+        }, paste: { _, _ in XCTFail("Must not paste"); return false }))
+        exporter.copy(store: store, sessionID: session.id, profile: profile) { _ in }
         await store.waitForIdle()
 
-        XCTAssertFalse(copied)
+        if case .failed = exporter.state {} else { XCTFail("Expected clipboard failure") }
         XCTAssertFalse(attemptedText.isEmpty)
         XCTAssertEqual(store.currentEntries, [annotation])
         store.teardown()
@@ -151,29 +130,18 @@ final class RuntimeCutoverTests: XCTestCase {
         let store = try await AnnotationStore(persistence: persistence, defaultSession: session)
         var written = ""
 
-        let copied = SessionExport.copy(store: store, settings: settings) { markdown in
+        let exporter = ExportController(services: ExportServices(write: { markdown in
             written = markdown
-            return true
-        }
+            return 1
+        }, paste: { _, _ in XCTFail("Must not paste"); return false }))
+        exporter.copy(store: store, sessionID: session.id, profile: settings.activeProfile) { _ in }
         await store.waitForIdle()
 
-        XCTAssertTrue(copied)
+        XCTAssertEqual(exporter.state, .idle)
         XCTAssertEqual(written, "Use this profile\n\n## 1\n\nA note")
         XCTAssertTrue(store.currentEntries.isEmpty)
         XCTAssertEqual(store.lastCleared?.entries, [annotation])
         store.teardown()
     }
 
-    private func apply(
-        _ moves: [AnnotationMoveMapping.Move],
-        to source: [UUID]
-    ) -> [UUID] {
-        var result = source
-        for move in moves {
-            let sourceIndex = result.firstIndex(of: move.annotationID)!
-            let id = result.remove(at: sourceIndex)
-            result.insert(id, at: move.destinationIndex)
-        }
-        return result
-    }
 }

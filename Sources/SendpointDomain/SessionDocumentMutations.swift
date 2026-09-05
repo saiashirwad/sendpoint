@@ -19,6 +19,7 @@ public enum SessionDocumentMutation: Equatable, Sendable {
     /// Moves an annotation to a final zero-based index in its session.
     case moveAnnotation(sessionID: UUID, annotationID: UUID, destinationIndex: Int)
     case clearSession(sessionID: UUID)
+    case clearExportedAnnotations(sessionID: UUID, entries: [Annotation])
     case undoClear
 }
 
@@ -237,6 +238,24 @@ public enum SessionDocumentMutations {
             guard !entries.isEmpty else { return .noOp }
             document.lastCleared = ClearedBatch(sessionID: sessionID, entries: entries)
             document.sessions[sessionIndex].entries.removeAll()
+
+        case let .clearExportedAnnotations(sessionID, exported):
+            guard let index = sessionIndex(sessionID, in: document) else {
+                return .rejected("The target session no longer exists.")
+            }
+            // Late provenance may enrich the same note. User edits and new notes
+            // must survive cleanup of an older export snapshot.
+            let removed = document.sessions[index].entries.filter { entry in
+                exported.contains { snapshot in
+                    snapshot.id == entry.id && snapshot.note == entry.note
+                        && snapshot.subject == entry.subject && snapshot.createdAt == entry.createdAt
+                        && snapshot.provenance.application == entry.provenance.application
+                }
+            }
+            guard !removed.isEmpty else { return .noOp }
+            let ids = Set(removed.map(\.id))
+            document.sessions[index].entries.removeAll { ids.contains($0.id) }
+            document.lastCleared = ClearedBatch(sessionID: sessionID, entries: removed)
 
         case .undoClear:
             guard let batch = document.lastCleared else { return .noOp }

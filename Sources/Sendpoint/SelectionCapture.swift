@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-struct CapturedSelection {
+struct CapturedSelection: Equatable {
     var text: String
     var appName: String?
     var appBundleID: String?
@@ -32,7 +32,8 @@ enum SelectionCapture {
         var clipboardTimeout: TimeInterval { self == .patient ? 0.7 : 0.15 }
     }
 
-    static func capture(fallback: FallbackPolicy = .patient) -> CapturedSelection {
+    static func capture(fallback: FallbackPolicy = .patient) async throws -> CapturedSelection {
+        try Task.checkCancellation()
         let app = NSWorkspace.shared.frontmostApplication
         let processIdentifier = app?.processIdentifier ?? 0
         var rect: CGRect?
@@ -44,15 +45,14 @@ enum SelectionCapture {
             rect = axRect
         }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            text = AutomaticSelectionMonitor.shared.takeSelection(
-                for: processIdentifier
-            ) ?? copyViaKeystroke(
-                processIdentifier: processIdentifier,
-                fallback: fallback
-            ) ?? AutomaticSelectionMonitor.shared.takeSelection(
-                for: processIdentifier
-            ) ?? ""
+            if let automatic = AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) {
+                text = automatic
+            } else {
+                text = try await copyViaKeystroke(processIdentifier: processIdentifier, fallback: fallback)
+                    ?? AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) ?? ""
+            }
         }
+        try Task.checkCancellation()
 
         return CapturedSelection(
             text: text,
@@ -108,12 +108,13 @@ enum SelectionCapture {
     private static func copyViaKeystroke(
         processIdentifier: pid_t,
         fallback: FallbackPolicy
-    ) -> String? {
+    ) async throws -> String? {
         let pasteboard = NSPasteboard.general
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
 
-        if fallback.waitsForModifierRelease { waitForModifierRelease() }
+        if fallback.waitsForModifierRelease { try await waitForModifierRelease() }
+        try Task.checkCancellation()
         postCommandKey(
             8,
             processIdentifier: processIdentifier > 0 ? processIdentifier : nil
@@ -128,7 +129,7 @@ enum SelectionCapture {
                 result = pasteboard.string(forType: .string)
                 break
             }
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+            try await Task.sleep(for: .milliseconds(20))
         }
 
         // Do not overwrite clipboard data changed after the copy we observed.
@@ -139,22 +140,25 @@ enum SelectionCapture {
     }
 
     /// Sends ⌘V to the app that was frontmost when export began.
-    static func paste(into processIdentifier: pid_t) {
-        guard processIdentifier > 0 else { return }
-        waitForModifierRelease()
+    static func paste(into processIdentifier: pid_t, expectedRevision: Int) async throws -> Bool {
+        guard processIdentifier > 0 else { return false }
+        try await waitForModifierRelease()
+        try Task.checkCancellation()
+        guard NSPasteboard.general.changeCount == expectedRevision else { return false }
         postCommandKey(9, processIdentifier: processIdentifier)  // kVK_ANSI_V
+        return true
     }
 
     /// A synthetic ⌘-key event inherits whatever modifiers are physically held.
     /// The hotkey that triggered us is ⌃⌘-something, so firing straight away
     /// makes the target app see ⌃⌘C or ⌃⌘V — neither of which is copy or paste.
     /// Wait for the user's fingers to come off first.
-    private static func waitForModifierRelease(timeout: TimeInterval = 0.7) {
+    private static func waitForModifierRelease(timeout: TimeInterval = 0.7) async throws {
         let watched: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if NSEvent.modifierFlags.intersection(watched).isEmpty { return }
-            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+            try await Task.sleep(for: .milliseconds(20))
         }
         Diag.log("waitForModifierRelease timed out, flags still \(NSEvent.modifierFlags.rawValue)")
     }

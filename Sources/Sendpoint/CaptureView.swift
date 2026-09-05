@@ -3,10 +3,7 @@ import SwiftUI
 
 /// The typed capture draft and its inline save recovery controls.
 struct CaptureView: View {
-    @Bindable var model: CaptureModel
-    let onRetry: () -> Void
-    let onSaveToCurrentSession: () -> Void
-    let onDiscard: () -> Void
+    @Bindable var model: CaptureController
 
     @FocusState private var noteFocused: Bool
     @State private var quoteHeight: CGFloat = 0
@@ -14,7 +11,7 @@ struct CaptureView: View {
     private let quoteMaxHeight: CGFloat = 150
 
     private var quote: String {
-        model.captured.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        (model.captured?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -23,7 +20,7 @@ struct CaptureView: View {
                 quoteBlock
             }
             noteEditor
-            if case .editing = model.savePhase {
+            if case .editing = model.state.session?.phase {
                 HStack(spacing: 12) {
                     ShortcutHint(keys: "⌘↩", label: "Save")
                     ShortcutHint(keys: "esc", label: "Discard")
@@ -89,10 +86,10 @@ struct CaptureView: View {
 
     @ViewBuilder
     private var saveStatus: some View {
-        switch model.savePhase {
-        case .editing, .dismissed:
+        switch model.state.session?.phase {
+        case .editing, .none:
             EmptyView()
-        case .pendingCommit:
+        case .saving:
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
@@ -101,31 +98,19 @@ struct CaptureView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
-        case let .retryableCommitFailure(_, message):
+        case let .saveFailed(_, message, retryable, missing):
             statusRow(message: message, color: .red) {
-                Button("Retry", action: onRetry)
-                    .buttonStyle(.borderedProminent)
-            }
-        case let .targetUnavailable(message):
-            VStack(alignment: .leading, spacing: 8) {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Save to Current Stack", action: onSaveToCurrentSession)
-                        .buttonStyle(.borderedProminent)
-                    Button("Discard", role: .destructive, action: onDiscard)
+                if retryable {
+                    Button("Retry") { model.send(.retry) }.buttonStyle(.borderedProminent)
+                } else {
+                    if missing {
+                        Button("Save to Current Stack") { model.saveToCurrentSession() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Button("Discard", role: .destructive) { model.send(.dismiss) }
                 }
             }
-        case let .terminalSaveFailure(message):
-            statusRow(message: message, color: .red) {
-                Button("Discard", role: .destructive, action: onDiscard)
-            }
-        case .committed:
-            Label("Saved", systemImage: "checkmark.circle.fill")
-                .font(.callout)
-                .foregroundStyle(.green)
+        default: EmptyView()
         }
     }
 

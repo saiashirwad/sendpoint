@@ -8,7 +8,7 @@ import SwiftUI
 /// a dim snippet of that text sits beside the ribbon so it is clear what the
 /// words will attach to.
 struct VoiceCaptureView: View {
-    @Bindable var model: VoiceCaptureModel
+    @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
 
     @State private var appeared = false
@@ -75,11 +75,11 @@ struct VoiceCaptureView: View {
     // Reading the selection happens while the microphone is already open, so
     // the overlay never mentions it: from the user's side it is all listening.
     private var ribbonMode: Ribbon.Mode {
-        switch model.phase {
-        case .recording, .selecting(_, recordingStarted: true): .live
-        case .transcribing: .thinking
-        case .failed: .flat
-        case .selecting, .starting, .dismissed: .idle
+        switch model.state.session?.phase {
+        case .recording, .selectingVoice(recording: true, finishRequested: _): .live
+        case .transcribing, .saving: .thinking
+        case .failed, .saveFailed: .flat
+        default: .idle
         }
     }
 
@@ -89,16 +89,17 @@ struct VoiceCaptureView: View {
     }
 
     private var failureMessage: String? {
-        if case let .failed(message, _) = model.phase { return message }
+        if case let .failed(message) = model.state.session?.phase { return message }
         return nil
     }
 
     private var accessibilityLabel: String {
-        switch model.phase {
-        case .selecting, .starting, .recording: "Voice note: listening"
+        switch model.state.session?.phase {
+        case .selectingVoice, .startingVoice, .recording: "Voice note: listening"
         case .transcribing: "Voice note: transcribing"
-        case let .failed(message, _): "Voice note: \(message)"
-        case .dismissed: ""
+        case let .failed(message): "Voice note: \(message)"
+        case .saving: "Voice note: saving"
+        default: ""
         }
     }
 }

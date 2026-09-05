@@ -21,195 +21,79 @@ final class CapturePanel: NSPanel {
     }
 }
 
+/// Native windows are resources, never a second source of workflow state.
 @MainActor
-final class CaptureController {
+final class CaptureWindows {
+    private unowned let model: CaptureController
     private var panel: CapturePanel?
-    private var model: CaptureModel?
     private var keyMonitor: Any?
-    private var voicePanel: CapturePanel?
-    private var voiceModel: VoiceCaptureModel?
-    private var voiceKeyMonitor: Any?
     private var voiceEscapeMonitor: Any?
-    private var previousApp: NSRunningApplication?
-    private var voiceStartupTask: Task<Void, Never>?
-    private var voiceTranscriptionTask: Task<Void, Never>?
-    private var voiceFailureTask: Task<Void, Never>?
-    private let provenanceProbe: ProvenanceProbe
-    private lazy var provenanceWork = PendingProvenanceWorkOwner(
-        probe: provenanceProbe,
-        lateUpdate: { [weak self] mutation in self?.applyLateProvenance(mutation) }
-    )
+    private var surface: CaptureSurface?
 
-    private enum Lifecycle {
-        case awaitingStore
-        case ready(AnnotationStore)
-        case tornDown
-    }
+    init(model: CaptureController) { self.model = model }
 
-    private let panelWidth: CGFloat = 460
-    private let panelHeight: CGFloat = 340
-    private let settings: AppSettings
-    private let permissionState: PermissionState
-    var onAccessibilityRequired: (() -> Void)?
-    var onStatusChange: (() -> Void)?
-    var onVoiceCaptureEnded: (() -> Void)?
-    var onVoiceEscape: (() -> Void)?
-    private var lifecycle: Lifecycle = .awaitingStore
-
-    private var store: AnnotationStore? {
-        guard case let .ready(store) = lifecycle else { return nil }
-        return store
-    }
-
-    init(
-        settings: AppSettings,
-        permissionState: PermissionState,
-        provenanceProbe: ProvenanceProbe = .live()
-    ) {
-        self.settings = settings
-        self.permissionState = permissionState
-        self.provenanceProbe = provenanceProbe
-    }
-
-    func configure(store: AnnotationStore) {
-        switch lifecycle {
-        case .awaitingStore:
-            lifecycle = .ready(store)
-        case let .ready(existingStore):
-            precondition(existingStore === store, "CaptureController cannot change stores")
-        case .tornDown:
-            break
+    func show(_ surface: CaptureSurface) {
+        guard surface != self.surface else { return }
+        close()
+        self.surface = surface
+        switch surface {
+        case .editor: presentEditor()
+        case .voice: presentVoice()
         }
-    }
-
-    var isOpen: Bool { panel != nil || voiceModel != nil }
-
-    func beginCapture() {
-        guard let store, !store.isTornDown else { NSSound.beep(); return }
-        if voiceModel != nil {
-            // A typed request must not take focus or interrupt a voice note.
-            NSSound.beep()
-            return
-        }
-        if isOpen {
-            // Second press while open: just bring it back to the front.
-            NSApp.activate(ignoringOtherApps: true)
-            (panel ?? voicePanel)?.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        guard permissionState.isTextCaptureReady else {
-            onAccessibilityRequired?()
-            return
-        }
-
-        previousApp = NSWorkspace.shared.frontmostApplication
-        let context = AnnotationCaptureContext(sessionID: store.currentSessionID)
-        let captured = SelectionCapture.capture()
-        let target = context.target(captured: captured)
-        provenanceWork.start(for: target)
-        present(target)
-    }
-
-    /// Starts a capture and a microphone recording together. `endVoiceCapture`
-    /// finishes the recording on hold release or the second tap.
-    func beginVoiceCapture() {
-        guard let store, !store.isTornDown else {
-            NSSound.beep()
-            onVoiceCaptureEnded?()
-            return
-        }
-        guard permissionState.isTextCaptureReady else {
-            onAccessibilityRequired?()
-            onVoiceCaptureEnded?()
-            return
-        }
-
-        if isOpen {
-            NSSound.beep()
-            onVoiceCaptureEnded?()
-            return
-        }
-
-        let context = AnnotationCaptureContext(sessionID: store.currentSessionID)
-        let model = VoiceCaptureModel(context: context)
-
-        // Install the lifecycle owner before selection capture. The clipboard
-        // fallback runs the main run loop, so the matching key-up can arrive
-        // while this synchronous call is still in progress.
-        voiceModel = model
-        previousApp = NSWorkspace.shared.frontmostApplication
-
-        // Show the overlay at once; the user is already talking.
-        showVoiceOverlay(model)
-
-        var recordingStartError: Error?
-        if VoiceAnnotationService.shared.isMicrophoneAuthorized {
-            let identity = model.identity
-            do {
-                try VoiceAnnotationService.shared.startRecording()
-                guard isCurrentVoiceCapture(model, identity: identity),
-                      case .selecting = model.phase
-                else {
-                    VoiceAnnotationService.shared.discardRecording()
-                    if voiceModel === model {
-                        teardownVoice(returnFocus: true)
-                    }
-                    return
-                }
-                _ = model.recordingStarted()
-            } catch {
-                recordingStartError = error
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.panel else { return event }
+            if event.keyCode == 53 {
+                if self.surface == .voice { self.model.voiceEscape() }
+                else { self.model.send(.dismiss) }
+                return nil
             }
-        }
-
-        let captured = SelectionCapture.capture(fallback: .brief)
-        guard voiceModel === model, model.phase != .dismissed else {
-            VoiceAnnotationService.shared.discardRecording()
-            if voiceModel === model {
-                teardownVoice(returnFocus: true)
+            if (event.keyCode == 36 || event.keyCode == 76), event.modifierFlags.contains(.command) {
+                self.model.send(.save)
+                return nil
             }
-            return
-        }
-
-        model.setCapturedSelection(captured, context: context)
-        if let target = model.target {
-            provenanceWork.start(for: target)
-        }
-        let selectionAction = model.selectionCompleted()
-
-        if let recordingStartError {
-            Diag.log("voice recording failed: \(recordingStartError.localizedDescription)")
-            showVoiceFailure("Couldn’t start recording. Try again.", for: model)
-            return
-        }
-
-        runVoiceAction(selectionAction, for: model)
-        if case .starting = model.phase {
-            startVoiceRecording(for: model)
+            return event
         }
     }
 
-    func endVoiceCapture() {
-        guard let model = voiceModel else { return }
-        runVoiceAction(model.release(), for: model)
+    func focus() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
-    func cancelVoiceCapture() {
-        guard let model = voiceModel else { return }
-        if case .transcribing = model.phase { return }
-        teardownVoice(returnFocus: true)
+    func stopEscapeHandling() {
+        HotKeyCenter.shared.unregister(name: "voiceEscape")
+        if let voiceEscapeMonitor { NSEvent.removeMonitor(voiceEscapeMonitor) }
+        voiceEscapeMonitor = nil
     }
 
-    private func present(_ target: AnnotationCaptureTarget) {
-        let captured = target.captured
+    func close() {
+        stopEscapeHandling()
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+        panel?.onClose = nil
+        panel?.orderOut(nil)
+        panel?.contentView = nil
+        panel?.close()
+        panel = nil
+        surface = nil
+    }
+
+    private func installVoiceEscapeFallback() {
+        voiceEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return }
+            MainActor.assumeIsolated { self?.model.voiceEscape() }
+        }
+    }
+
+    private func presentEditor() {
+        let captured = model.state.session?.target?.captured
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.onClose = { [weak self] in self?.dismiss(returnFocus: true) }
+        panel.onClose = { [weak self] in self?.model.send(.dismiss) }
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.standardWindowButton(.closeButton)?.isHidden = true
@@ -223,23 +107,15 @@ final class CaptureController {
         panel.minSize = NSSize(width: 380, height: 220)
         panel.animationBehavior = .utilityWindow
 
-        let model = CaptureModel(target: target)
-        self.model = model
-        let view = CaptureView(
-            model: model,
-            onRetry: { [weak self] in self?.retryTypedSave() },
-            onSaveToCurrentSession: { [weak self] in self?.saveTypedCaptureToCurrentSession() },
-            onDiscard: { [weak self] in self?.discardTypedCapture() }
-        )
+        let view = CaptureView(model: model)
         // The hosting view fills the whole frame, title-bar strip included, so
         // the material runs edge to edge under the transparent title bar.
         let hosting = NSHostingView(rootView: view)
         panel.contentView = hosting
 
-        position(panel, near: captured.screenRect)
+        position(panel, near: captured?.screenRect)
 
         self.panel = panel
-        installKeyMonitor()
 
         // Synchronous: the stack window must be out of the way before we
         // activate, or activating drags it forward with the panel.
@@ -251,14 +127,14 @@ final class CaptureController {
 
     /// Puts the overlay on screen without activating the app, so the front
     /// app keeps focus while its selection is still being read.
-    private func showVoiceOverlay(_ model: VoiceCaptureModel) {
+    private func presentVoice() {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 110),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.onClose = { [weak self] in self?.teardownVoice(returnFocus: true) }
+        panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -272,18 +148,18 @@ final class CaptureController {
 
         let hosting = NSHostingView(rootView: VoiceCaptureView(
             model: model,
-            meter: VoiceAnnotationService.shared.levelMeter
+            meter: model.levelMeter
         ))
         panel.contentView = hosting
         panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
         positionVoiceOverlay(panel)
-        voicePanel = panel
-        installVoiceKeyMonitor()
+        self.panel = panel
+
         let escapeRegistration = HotKeyCenter.shared.registerRaw(
             name: "voiceEscape",
             keyCode: 53,
             carbonModifiers: 0,
-            pressed: { [weak self] in self?.onVoiceEscape?() }
+            pressed: { [weak self] in self?.model.voiceEscape() }
         )
         if case .failed = escapeRegistration {
             installVoiceEscapeFallback()
@@ -350,474 +226,6 @@ final class CaptureController {
         NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
     }
 
-    // MARK: - Keys
-
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let panel = self.panel, event.window === panel else { return event }
-            let isReturn = event.keyCode == 36 || event.keyCode == 76
-            if isReturn && event.modifierFlags.contains(.command) {
-                if self.model?.canBeginCommit == true {
-                    self.commit()
-                }
-                return nil
-            }
-            if event.keyCode == 53 { // escape
-                self.dismiss(returnFocus: true)
-                return nil
-            }
-            return event
-        }
-    }
-
-    private func installVoiceKeyMonitor() {
-        voiceKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let panel = self.voicePanel, event.window === panel else { return event }
-            if event.keyCode == 53 { // escape
-                self.escapeWhileRecording()
-                return nil
-            }
-            return event
-        }
-    }
-
-    /// Carbon Escape is preferred because it can consume the event without
-    /// taking focus. If registration fails, this passive monitor still lets
-    /// Escape cancel a recording from another app; the front app also sees it.
-    private func installVoiceEscapeFallback() {
-        voiceEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return }
-            DispatchQueue.main.async { [weak self] in
-                self?.escapeWhileRecording()
-            }
-        }
-        if voiceEscapeMonitor == nil {
-            Diag.log("voice Escape fallback monitor unavailable; Escape cancel works only when Sendpoint is active")
-        }
-    }
-
-    private func escapeWhileRecording() {
-        guard let model = voiceModel else { return }
-        switch model.phase {
-        case .selecting, .starting, .recording:
-            if let onVoiceEscape {
-                onVoiceEscape()
-            } else {
-                teardownVoice(returnFocus: true)
-            }
-        case .transcribing, .failed, .dismissed:
-            break
-        }
-    }
-
-    private func removeVoiceEscapeHandling() {
-        HotKeyCenter.shared.unregister(name: "voiceEscape")
-        if let voiceEscapeMonitor { NSEvent.removeMonitor(voiceEscapeMonitor) }
-        voiceEscapeMonitor = nil
-    }
-
-    // MARK: - Finish
-
-    private func startVoiceRecording(for model: VoiceCaptureModel) {
-        guard isCurrentVoiceCapture(model),
-              case .starting = model.phase
-        else { return }
-
-        voiceStartupTask?.cancel()
-
-        if VoiceAnnotationService.shared.isMicrophoneAuthorized {
-            startAuthorizedVoiceRecording(for: model)
-            return
-        }
-
-        let identity = model.identity
-        voiceStartupTask = Task { [weak self, weak model] in
-            guard let self, let model else { return }
-            let allowed = await VoiceAnnotationService.shared.requestMicrophoneAccess()
-            guard !Task.isCancelled,
-                  self.isCurrentVoiceCapture(model, identity: identity),
-                  case .starting = model.phase
-            else { return }
-            self.voiceStartupTask = nil
-
-            guard allowed else {
-                self.showVoiceFailure("Microphone access is off. Turn it on in Settings › Voice.", for: model)
-                return
-            }
-            self.startAuthorizedVoiceRecording(for: model)
-        }
-    }
-
-    private func startAuthorizedVoiceRecording(for model: VoiceCaptureModel) {
-        guard isCurrentVoiceCapture(model),
-              case .starting = model.phase
-        else { return }
-
-        let identity = model.identity
-        do {
-            try VoiceAnnotationService.shared.startRecording()
-            guard isCurrentVoiceCapture(model, identity: identity),
-                  case .starting = model.phase
-            else {
-                VoiceAnnotationService.shared.discardRecording()
-                return
-            }
-            runVoiceAction(model.recordingStarted(), for: model)
-        } catch {
-            Diag.log("voice recording failed: \(error.localizedDescription)")
-            showVoiceFailure("Couldn’t start recording. Try again.", for: model)
-        }
-    }
-
-    private func runVoiceAction(_ action: VoiceCaptureAction, for model: VoiceCaptureModel) {
-        guard voiceModel === model else { return }
-        switch action {
-        case .beginTranscription:
-            guard isCurrentVoiceCapture(model) else { return }
-            finishVoiceCapture(for: model)
-        case .dismiss:
-            teardownVoice(returnFocus: true)
-        case .none, .saveAndDismiss:
-            break
-        }
-    }
-
-    private func finishVoiceCapture(for model: VoiceCaptureModel) {
-        guard isCurrentVoiceCapture(model),
-              case .transcribing = model.phase,
-              voiceTranscriptionTask == nil
-        else { return }
-
-        // Escape is a recording cancel key. Once transcription owns the
-        // capture, let the front app receive Escape normally.
-        removeVoiceEscapeHandling()
-        voiceStartupTask?.cancel()
-        voiceStartupTask = nil
-        let identity = model.identity
-
-        voiceTranscriptionTask = Task { [weak self, weak model] in
-            guard let self, let model else { return }
-
-            let modelIsReady = await VoiceAnnotationService.shared.isVoiceModelReady()
-            guard !Task.isCancelled,
-                  self.isCurrentVoiceCapture(model, identity: identity),
-                  case .transcribing = model.phase
-            else { return }
-            if !modelIsReady {
-                model.modelPreparationBegan()
-            }
-
-            do {
-                let transcript = try await VoiceAnnotationService.shared.stopAndTranscribe()
-                guard !Task.isCancelled,
-                      self.isCurrentVoiceCapture(model, identity: identity),
-                      case .transcribing = model.phase,
-                      let target = model.target,
-                      self.target(target, matches: identity)
-                else { return }
-                // Nothing said means nothing to do: the overlay just leaves,
-                // and the front app gets its focus back without a word.
-                guard let note = transcript.nonblank,
-                      let annotation = CaptureAnnotationPolicy.annotation(
-                          for: target,
-                          note: note
-                      )
-                else {
-                    self.voiceTranscriptionTask = nil
-                    Diag.log("voice note held no speech; dismissed quietly")
-                    self.teardownVoice(returnFocus: true)
-                    return
-                }
-                guard let store = self.store, !store.isTornDown else {
-                    self.teardownVoice(returnFocus: true)
-                    return
-                }
-                guard store.sessions.contains(where: { $0.id == identity.sessionID }) else {
-                    self.voiceTranscriptionTask = nil
-                    self.showVoiceFailure("That stack no longer exists.", for: model)
-                    return
-                }
-                guard model.transcriptionSucceeded() == .saveAndDismiss else { return }
-
-                let savedAnnotation = self.provenanceWork.annotationForSave(
-                    annotation,
-                    target: target
-                )
-                self.voiceTranscriptionTask = nil
-                store.mutate(.addAnnotation(
-                    sessionID: identity.sessionID,
-                    annotation: savedAnnotation
-                ))
-                Diag.log("saved voice annotation")
-                self.teardownVoice(returnFocus: true)
-            } catch is CancellationError {
-                // The one teardown path owns cleanup after cancellation.
-            } catch {
-                guard !Task.isCancelled,
-                      self.isCurrentVoiceCapture(model, identity: identity),
-                      case .transcribing = model.phase
-                else { return }
-                self.voiceTranscriptionTask = nil
-                Diag.log("voice transcription failed: \(error.localizedDescription)")
-                let message = VoiceModelDownloadFailure(error) == .offline
-                    ? "No internet connection. The voice model needs a one-time download."
-                    : "Couldn’t transcribe that. Try again."
-                self.showVoiceFailure(message, for: model)
-            }
-        }
-    }
-
-    private func showVoiceFailure(_ message: String, for model: VoiceCaptureModel) {
-        guard isCurrentVoiceCapture(model) else { return }
-        let failureID = UUID()
-        model.fail(message: message, failureID: failureID)
-
-        guard case let .failed(_, currentFailureID) = model.phase,
-              currentFailureID == failureID
-        else { return }
-
-        voiceStartupTask?.cancel()
-        voiceStartupTask = nil
-        voiceTranscriptionTask?.cancel()
-        voiceTranscriptionTask = nil
-        VoiceAnnotationService.shared.discardRecording()
-        voiceFailureTask?.cancel()
-
-        let identity = model.identity
-        voiceFailureTask = Task { [weak self, weak model] in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled,
-                  let self, let model,
-                  self.isCurrentVoiceCapture(model, identity: identity)
-            else { return }
-            self.voiceFailureTask = nil
-            self.runVoiceAction(model.failureTimeout(failureID: failureID), for: model)
-        }
-    }
-
-    private func isCurrentVoiceCapture(
-        _ model: VoiceCaptureModel,
-        identity: VoiceCaptureIdentity? = nil
-    ) -> Bool {
-        guard voiceModel === model, model.phase != .dismissed else { return false }
-        if let identity, model.identity != identity { return false }
-        if let target = model.target, !self.target(target, matches: model.identity) { return false }
-        return true
-    }
-
-    private func target(_ target: AnnotationCaptureTarget, matches identity: VoiceCaptureIdentity) -> Bool {
-        target.captureID == identity.captureID
-            && target.annotationID == identity.annotationID
-            && target.sessionID == identity.sessionID
-    }
-
-    /// Saves the panel that is actually on screen. Nothing else can trigger it.
-    private func commit() {
-        guard let model, panel != nil,
-              model.canBeginCommit,
-              let annotation = CaptureAnnotationPolicy.annotation(
-                for: model.target,
-                note: model.note
-              ),
-              let store,
-              !store.isTornDown
-        else {
-            NSSound.beep()
-            return
-        }
-
-        let savedAnnotation = provenanceWork.annotationForSave(
-            annotation,
-            target: model.target
-        )
-        guard let request = model.beginCommit(
-            annotation: savedAnnotation,
-            destinationSessionID: model.target.sessionID
-        ) else {
-            NSSound.beep()
-            return
-        }
-        enqueueTypedSave(request, model: model, store: store)
-    }
-
-    private func retryTypedSave() {
-        guard let model, panel != nil,
-              let store, !store.isTornDown,
-              model.retryPendingCommit()
-        else {
-            NSSound.beep()
-            return
-        }
-        store.retryPendingMutations()
-        onStatusChange?()
-    }
-
-    private func saveTypedCaptureToCurrentSession() {
-        guard let model, panel != nil,
-              let store, !store.isTornDown
-        else {
-            NSSound.beep()
-            return
-        }
-
-        guard let request = model.beginRetarget(
-            destinationSessionID: store.currentSessionID
-        ) else {
-            NSSound.beep()
-            return
-        }
-        // This is the only retarget path. Stop the old provenance route before
-        // using the same frozen annotation in the current committed session.
-        provenanceWork.abandon(for: model.target)
-        enqueueTypedSave(request, model: model, store: store)
-    }
-
-    private func discardTypedCapture() {
-        guard let model, panel != nil,
-              model.discard() == .abandonProvenance
-        else {
-            NSSound.beep()
-            return
-        }
-        provenanceWork.abandon(for: model.target)
-        dismiss(returnFocus: true)
-        onStatusChange?()
-    }
-
-    private func enqueueTypedSave(
-        _ request: CaptureSaveRequest,
-        model: CaptureModel,
-        store: AnnotationStore
-    ) {
-        store.mutate(.addAnnotation(
-            sessionID: request.identity.destinationSessionID,
-            annotation: request.annotation
-        ), outcome: { [weak self, weak store, model] outcome in
-            guard let self else { return }
-            let destinationStillExists = store?.sessions.contains {
-                $0.id == request.identity.destinationSessionID
-            } ?? false
-            let action = model.receive(
-                outcome,
-                for: request.identity,
-                destinationStillExists: destinationStillExists
-            )
-            if CaptureSaveOutcomeRouting.abandonsProvenance(after: outcome) {
-                // The exact add left the queue. Abandon its route even if the
-                // user already hid the panel and the model ignored the outcome.
-                self.provenanceWork.abandon(for: model.target)
-            }
-            self.onStatusChange?()
-
-            guard self.model === model, self.panel != nil else { return }
-            if action == .dismiss {
-                Diag.log("saved annotation")
-                self.dismiss(returnFocus: true)
-            }
-        })
-        onStatusChange?()
-    }
-
-    func dismiss(returnFocus: Bool) {
-        if let model,
-           model.dismiss() == .abandonProvenance {
-            provenanceWork.abandon(for: model.target)
-        }
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        keyMonitor = nil
-        panel?.onClose = nil
-        panel?.orderOut(nil)
-        panel?.contentView = nil
-        panel = nil
-        model = nil
-
-        if returnFocus, settings.restoreFocusAfterSave,
-           let previousApp, previousApp.bundleIdentifier != Bundle.main.bundleIdentifier {
-            previousApp.activate()
-        }
-        previousApp = nil
-    }
-
-    /// The only voice teardown path. It is safe to call more than once.
-    private func teardownVoice(returnFocus: Bool) {
-        let hadCapture = voiceModel != nil
-        if let target = voiceModel?.target {
-            provenanceWork.cancelBeforeSave(for: target)
-        }
-        _ = voiceModel?.cancel()
-        voiceStartupTask?.cancel()
-        voiceStartupTask = nil
-        voiceTranscriptionTask?.cancel()
-        voiceTranscriptionTask = nil
-        voiceFailureTask?.cancel()
-        voiceFailureTask = nil
-        VoiceAnnotationService.shared.discardRecording()
-
-        removeVoiceEscapeHandling()
-        if let voiceKeyMonitor { NSEvent.removeMonitor(voiceKeyMonitor) }
-        voiceKeyMonitor = nil
-        voicePanel?.onClose = nil
-        fadeOut(voicePanel)
-        voicePanel = nil
-        voiceModel = nil
-
-        if returnFocus, settings.restoreFocusAfterSave,
-           let previousApp, previousApp.bundleIdentifier != Bundle.main.bundleIdentifier {
-            previousApp.activate()
-        }
-        previousApp = nil
-        if hadCapture {
-            onVoiceCaptureEnded?()
-        }
-    }
-
-    /// Lets the overlay leave the way it arrived. The panel is already
-    /// disowned, so a new capture during the fade gets a fresh one.
-    private func fadeOut(_ panel: NSPanel?) {
-        guard let panel else { return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            panel.orderOut(nil)
-            panel.contentView = nil
-        })
-    }
-
-    private func applyLateProvenance(_ mutation: SessionDocumentMutation) {
-        guard let store, !store.isTornDown,
-              case let .updateAnnotationProvenance(
-                  sessionID,
-                  annotationID,
-                  expectedApplication,
-                  provenance
-              ) = mutation,
-              provenance.application == expectedApplication,
-              let session = store.sessions.first(where: { $0.id == sessionID })
-        else { return }
-
-        if let existing = session.entries.first(where: { $0.id == annotationID }),
-           existing.provenance.application != expectedApplication {
-            return
-        }
-        // A missing live entry can still be an in-flight add or the exact entry
-        // in lastCleared. The Domain mutation resolves both without resurrection.
-        store.mutate(mutation)
-    }
-
-    /// Cancels every task and closes every panel owned by this controller.
-    func teardown() {
-        if case .tornDown = lifecycle { return }
-        lifecycle = .tornDown
-        onAccessibilityRequired = nil
-        onStatusChange = nil
-        onVoiceCaptureEnded = nil
-        onVoiceEscape = nil
-        provenanceWork.teardown()
-        dismiss(returnFocus: false)
-        teardownVoice(returnFocus: false)
-    }
 }
 
 extension Notification.Name {

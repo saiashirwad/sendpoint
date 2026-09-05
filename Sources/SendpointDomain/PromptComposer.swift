@@ -56,6 +56,15 @@ public enum PromptComposer {
         return blocks.joined(separator: "\n\n")
     }
 
+    public static func noteMarkdown(_ entry: Annotation) -> String {
+        var parts: [String] = []
+        if case let .selection(quote) = entry.subject, let quote = quote.nonblank {
+            parts.append(blockquote(quote))
+        }
+        if let note = entry.note.nonblank { parts.append(note) }
+        return parts.joined(separator: "\n\n")
+    }
+
     private static func blockquote(_ quote: String) -> String {
         quote
             .split(separator: "\n", omittingEmptySubsequences: false)

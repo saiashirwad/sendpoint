@@ -21,7 +21,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     init(
         store: AnnotationStore,
         settings: AppSettings,
-        onSwitch: @escaping (UUID) -> Void,
+        export: ExportController,
         onSelectProfile: @escaping (UUID) -> Void,
         onDismiss: @escaping () -> Void
     ) {
@@ -51,13 +51,13 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         let model = StackPaletteModel(
             store: store,
             settings: settings,
-            onSwitch: onSwitch,
+            export: export,
             onSelectProfile: onSelectProfile,
             onClose: { closeHandler() }
         )
         self.model = model
         super.init()
-        closeHandler = { [weak self] in self?.close() }
+        closeHandler = { [weak self] in self?.releaseWindow() }
 
         // The palette is a sheet of frosted glass over the desktop, so the
         // window itself is clear and a popover-material view carries the tint.
@@ -79,7 +79,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     func show(at level: PaletteLevel) {
         guard lifecycle == .active else { return }
-        model.open(at: level)
+        model.send(.open(level))
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()
@@ -90,7 +90,13 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     /// The only close path. Safe to call more than once.
-    func close() {
+    func close() { model.send(.close) }
+
+    func teardown() { model.send(.teardown) }
+
+    func documentChanged() { model.send(.documentChanged) }
+
+    private func releaseWindow() {
         guard lifecycle == .active else { return }
         lifecycle = .tornDown
         panel.saveFrame(usingName: Self.frameAutosaveName)
@@ -125,7 +131,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
                   let key = PaletteKey(event: event)
             else { return event }
             let selection = (self.panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0
-            let handled = self.model.handle(key, textHasSelection: selection > 0)
+            let handled = self.model.send(.key(key, textHasSelection: selection > 0))
             return handled ? nil : event
         }
     }

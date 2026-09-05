@@ -6,7 +6,7 @@ import SwiftUI
 /// notes previewed beside it, and the same notes opened full-width with →.
 struct StackPaletteView: View {
     @Bindable var model: StackPaletteModel
-    @FocusState private var focus: StackPaletteModel.Field?
+    @FocusState private var focus: PaletteField?
     @Environment(\.colorScheme) private var colorScheme
 
     static let minimumSize = CGSize(width: 780, height: 460)
@@ -19,7 +19,16 @@ struct StackPaletteView: View {
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let error = model.store.error {
+            if let message = model.state.problem {
+                HStack {
+                    Text(message).foregroundStyle(.red)
+                    if case .failed(_, _, true) = model.state.interaction {
+                        Button("Retry") { model.send(.retry) }
+                    } else if case .failed = model.state.interaction {
+                        Button("Dismiss") { model.send(.cancelEdit) }
+                    }
+                }.padding(12)
+            } else if let error = model.store.error {
                 Divider()
                 errorRow(error)
             }
@@ -38,43 +47,29 @@ struct StackPaletteView: View {
         .onAppear {
             DispatchQueue.main.async { focus = .search }
         }
-        .onChange(of: model.focusRequest.generation) {
+        .onChange(of: model.state.focusRequest.generation) {
             // The target field may be created by the same update; focus it
             // once it exists.
-            let field = model.focusRequest.field
+            let field = model.state.focusRequest.field
             DispatchQueue.main.async { focus = field }
         }
         .onChange(of: focus) { old, new in
             if case let .note(id) = new {
-                model.noteFieldFocusChanged(to: id)
+                model.send(.noteFocus(id))
             } else if case .note = old {
-                model.noteFieldFocusChanged(to: nil)
+                model.send(.noteFocus(nil))
             }
         }
-        .onChange(of: model.store.sessions) {
-            model.sessionsChanged()
-        }
-        .onChange(of: model.store.currentSessionID) {
-            model.currentSessionChanged()
-        }
-        .task(id: model.flash?.generation) {
-            guard let generation = model.flash?.generation else { return }
-            do {
-                try await Task.sleep(for: .seconds(1.8))
-            } catch {
-                return
-            }
-            model.clearFlash(generation: generation)
-        }
+
     }
 
     // MARK: - Search bar
 
     private var searchBar: some View {
         HStack(spacing: 10) {
-            if case .notes = model.level, let session = model.shownSession {
+            if case .notes = model.state.level, let session = model.projection.shownSession {
                 Button {
-                    model.backToStacks()
+                    model.send(.perform(.backToStacks))
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "chevron.left")
@@ -101,7 +96,7 @@ struct StackPaletteView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .focused($focus, equals: .search)
-                .disabled(model.inlineEdit != nil || model.overlay != nil)
+                .disabled(model.state.inlineEdit != nil || model.state.overlay != nil)
 
             if !model.query.isEmpty {
                 Button {
@@ -122,7 +117,7 @@ struct StackPaletteView: View {
     }
 
     private var searchPlaceholder: String {
-        switch model.level {
+        switch model.state.level {
         case .stacks: return "Switch to or create a stack"
         case .notes: return "Search notes"
         }
@@ -130,12 +125,12 @@ struct StackPaletteView: View {
 
     private var templateButton: some View {
         Button {
-            model.toggleOverlay(.templates)
+            model.send(.toggleOverlay(.templates))
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "text.quote")
                     .font(.system(size: 10, weight: .semibold))
-                Text(model.activeProfile.name)
+                Text(model.projection.activeProfile.name)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -144,7 +139,7 @@ struct StackPaletteView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(Capsule().fill(Color.primary.opacity(model.overlay == .templates ? 0.12 : 0.06)))
+            .background(Capsule().fill(Color.primary.opacity(model.state.overlay == .templates ? 0.12 : 0.06)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -155,7 +150,7 @@ struct StackPaletteView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch model.level {
+        switch model.state.level {
         case .stacks:
             HStack(spacing: 0) {
                 stackColumn
@@ -169,9 +164,9 @@ struct StackPaletteView: View {
     }
 
     private var stackColumn: some View {
-        let listing = model.stackListing
+        let listing = model.projection.stackListing
         return VStack(spacing: 0) {
-            if let undo = model.facts.undo {
+            if let undo = model.projection.facts.undo {
                 undoBanner(undo)
             }
             ScrollViewReader { proxy in
@@ -181,7 +176,7 @@ struct StackPaletteView: View {
                             stackRow(session, position: index)
                                 .id(QuickSwitchRow.session(session.id))
                         }
-                        if case .createStack = model.inlineEdit {
+                        if case .createStack = model.state.inlineEdit {
                             inlineCreateRow
                         } else if let name = listing.creatableName {
                             createRow(name)
@@ -196,8 +191,8 @@ struct StackPaletteView: View {
                     }
                     .padding(6)
                 }
-                .onChange(of: model.stackState.highlight) {
-                    guard let highlight = model.stackState.highlight else { return }
+                .onChange(of: model.state.stackState.highlight) {
+                    guard let highlight = model.state.stackState.highlight else { return }
                     proxy.scrollTo(highlight, anchor: nil)
                 }
             }
@@ -206,7 +201,7 @@ struct StackPaletteView: View {
 
     private func undoBanner(_ undo: SessionUndoFacts) -> some View {
         Button {
-            model.perform(.undoClear)
+            model.send(.perform(.undoClear))
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.uturn.backward")
@@ -228,13 +223,13 @@ struct StackPaletteView: View {
     }
 
     private func stackRow(_ session: SessionItemFacts, position: Int) -> some View {
-        let isHighlighted = model.stackState.highlight == .session(session.id)
+        let isHighlighted = model.state.stackState.highlight == .session(session.id)
         var isRenaming = false
-        if case let .renameStack(id, _, _) = model.inlineEdit, id == session.id { isRenaming = true }
+        if case let .renameStack(id, _, _) = model.state.inlineEdit, id == session.id { isRenaming = true }
         return PaletteRow(
             isHighlighted: isHighlighted,
-            onSelect: { model.chooseStack(session.id) },
-            onActivate: { model.perform(.switchToStack(session.id)) }
+            onSelect: { model.send(.chooseStack(session.id)) },
+            onActivate: { model.send(.perform(.switchToStack(session.id))) }
         ) {
             HStack(spacing: 10) {
                 // A single dot marks the current stack; everything else stays quiet.
@@ -275,11 +270,11 @@ struct StackPaletteView: View {
     }
 
     private func createRow(_ name: String) -> some View {
-        let isHighlighted = model.stackState.highlight == .create(name)
+        let isHighlighted = model.state.stackState.highlight == .create(name)
         return PaletteRow(
             isHighlighted: isHighlighted,
-            onSelect: { model.chooseCreateRow(name) },
-            onActivate: { model.perform(.createStack(name)) }
+            onSelect: { model.send(.chooseCreate(name)) },
+            onActivate: { model.send(.perform(.createStack(name))) }
         ) {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
@@ -315,19 +310,19 @@ struct StackPaletteView: View {
         )
     }
 
-    private func inlineNameField(field: StackPaletteModel.Field, placeholder: String) -> some View {
+    private func inlineNameField(field: PaletteField, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             TextField(
                 placeholder,
                 text: Binding(
-                    get: { model.inlineText },
-                    set: { model.updateInlineText($0) }
+                    get: { (model.state.inlineEdit?.text ?? "") },
+                    set: { model.send(.editText($0)) }
                 )
             )
             .textFieldStyle(.plain)
             .font(.system(size: 14, weight: .medium))
             .focused($focus, equals: field)
-            if let problem = model.inlineProblem {
+            if let problem = model.state.problem {
                 Text(problem)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -339,13 +334,13 @@ struct StackPaletteView: View {
 
     @ViewBuilder
     private var previewPane: some View {
-        if case let .create(name) = model.stackState.highlight {
+        if case let .create(name) = model.state.stackState.highlight {
             placeholder(
                 symbol: "plus.rectangle.on.folder",
                 title: "Create “\(name)”",
                 detail: "Press ↩ to make it and switch to it."
             )
-        } else if let session = model.shownSession {
+        } else if let session = model.projection.shownSession {
             VStack(spacing: 0) {
                 previewHeader(session)
                 noteCards(session: session, interactive: false)
@@ -375,7 +370,7 @@ struct StackPaletteView: View {
 
     @ViewBuilder
     private var notesPane: some View {
-        if let session = model.shownSession {
+        if let session = model.projection.shownSession {
             noteCards(session: session, interactive: true)
         } else {
             placeholder(symbol: "square.stack.3d.up", title: "That stack is gone", detail: nil)
@@ -384,9 +379,9 @@ struct StackPaletteView: View {
 
     @ViewBuilder
     private func noteCards(session: Session, interactive: Bool) -> some View {
-        let listing = model.noteListing
-        let wasCleared = model.facts.undo?.sessionID == session.id
-        if session.entries.isEmpty && wasCleared, let undo = model.facts.undo {
+        let listing = model.projection.noteListing
+        let wasCleared = model.projection.facts.undo?.sessionID == session.id
+        if session.entries.isEmpty && wasCleared, let undo = model.projection.facts.undo {
             VStack(spacing: 14) {
                 placeholder(
                     symbol: "tray",
@@ -395,7 +390,7 @@ struct StackPaletteView: View {
                 )
                 .frame(maxHeight: 180)
                 Button {
-                    model.perform(.undoClear)
+                    model.send(.perform(.undoClear))
                 } label: {
                     HStack(spacing: 6) {
                         Text("Undo Clear")
@@ -424,20 +419,20 @@ struct StackPaletteView: View {
                             NoteCard(
                                 index: position,
                                 entry: entry,
-                                isHighlighted: interactive && model.highlightedNoteID == entry.id,
-                                isEditing: interactive && model.inlineEdit?.noteID == entry.id,
+                                isHighlighted: interactive && model.projection.highlightedNoteID == entry.id,
+                                isEditing: interactive && model.state.inlineEdit?.noteID == entry.id,
                                 interactive: interactive,
                                 isLast: index == listing.entries.count - 1,
                                 draft: Binding(
                                     get: {
-                                        model.inlineEdit?.noteID == entry.id ? model.inlineText : entry.note
+                                        model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.note
                                     },
-                                    set: { model.updateInlineText($0) }
+                                    set: { model.send(.editText($0)) }
                                 ),
                                 focus: $focus,
-                                onSelect: { model.chooseNote(entry.id) },
-                                onEdit: { model.beginEditingNote(entry.id) },
-                                onDelete: { model.perform(.deleteNote(entry.id)) }
+                                onSelect: { model.send(.chooseNote(entry.id)) },
+                                onEdit: { model.send(.perform(.editNote(entry.id))) },
+                                onDelete: { model.send(.perform(.deleteNote(entry.id))) }
                             )
                             .id(entry.id)
                         }
@@ -445,12 +440,12 @@ struct StackPaletteView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                 }
-                .onChange(of: model.highlightedNoteID) {
-                    guard let id = model.highlightedNoteID else { return }
+                .onChange(of: model.projection.highlightedNoteID) {
+                    guard let id = model.projection.highlightedNoteID else { return }
                     proxy.scrollTo(id, anchor: nil)
                 }
                 .onAppear {
-                    if let id = model.highlightedNoteID { proxy.scrollTo(id, anchor: .top) }
+                    if let id = model.projection.highlightedNoteID { proxy.scrollTo(id, anchor: .top) }
                 }
             }
         }
@@ -510,7 +505,7 @@ struct StackPaletteView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            if let flash = model.flash {
+            if let flash = model.state.flash {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.accentColor)
@@ -527,9 +522,9 @@ struct StackPaletteView: View {
 
             Spacer()
 
-            if let primary = model.primaryAction {
+            if let primary = model.projection.primaryAction {
                 Button {
-                    model.perform(primary.action)
+                    model.send(.perform(primary.action))
                 } label: {
                     HStack(spacing: 6) {
                         Text(primary.title)
@@ -545,7 +540,7 @@ struct StackPaletteView: View {
             Divider().frame(height: 14)
 
             Button {
-                model.toggleOverlay(.actions)
+                model.send(.toggleOverlay(.actions))
             } label: {
                 HStack(spacing: 6) {
                     Text("Actions")
@@ -556,19 +551,19 @@ struct StackPaletteView: View {
             }
             .buttonStyle(.plain)
         }
-        .animation(.easeOut(duration: 0.15), value: model.flash?.generation)
+        .animation(.easeOut(duration: 0.15), value: model.state.flash?.generation)
         .padding(.horizontal, 16)
         .frame(height: 36)
     }
 
     private var footerContext: String {
-        switch model.level {
+        switch model.state.level {
         case .stacks:
-            let count = model.facts.sessions.count
+            let count = model.projection.facts.sessions.count
             return "\(count) stack\(count == 1 ? "" : "s") · ↑↓ move · → open · esc close"
         case .notes:
-            let count = model.shownSession?.entries.count ?? 0
-            let name = model.shownSession?.name ?? ""
+            let count = model.projection.shownSession?.entries.count ?? 0
+            let name = model.projection.shownSession?.name ?? ""
             return "\(name) · \(count) note\(count == 1 ? "" : "s") · ↑↓ move · ⌥↑↓ reorder · ← back"
         }
     }
@@ -583,7 +578,7 @@ struct StackPaletteView: View {
                 .lineLimit(2)
             Spacer()
             if model.store.hasPendingMutations {
-                Button("Retry") { model.store.retryPendingMutations() }
+                Button("Retry") { model.send(.retry) }
                     .controlSize(.small)
             }
         }
@@ -596,11 +591,11 @@ struct StackPaletteView: View {
 
     @ViewBuilder
     private var overlayMenu: some View {
-        if let overlay = model.overlay {
+        if let overlay = model.state.overlay {
             ZStack(alignment: .bottomTrailing) {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
-                    .onTapGesture { model.closeOverlay() }
+                    .onTapGesture { model.send(.closeOverlay) }
                 Group {
                     switch overlay {
                     case .actions: actionsMenu
@@ -615,7 +610,7 @@ struct StackPaletteView: View {
     }
 
     private var actionsMenu: some View {
-        let items = model.filteredActionItems
+        let items = model.projection.filteredActionItems
         return OverlayPanel(
             title: "Actions",
             emptyText: "No matching actions",
@@ -624,9 +619,9 @@ struct StackPaletteView: View {
             focus: $focus
         ) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                let isHighlighted = index == model.overlayHighlight
-                OverlayRow(isHighlighted: isHighlighted, onHover: { model.setOverlayHighlight(index) }) {
-                    model.perform(item.action)
+                let isHighlighted = index == model.state.overlayHighlight
+                OverlayRow(isHighlighted: isHighlighted, onHover: { model.send(.overlayHighlight(index)) }) {
+                    model.send(.perform(item.action))
                 } content: {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 1) {
@@ -650,7 +645,7 @@ struct StackPaletteView: View {
     }
 
     private var templatesMenu: some View {
-        let profiles = model.filteredProfiles
+        let profiles = model.projection.filteredProfiles
         return OverlayPanel(
             title: "Copy with template",
             emptyText: "No matching templates",
@@ -659,10 +654,10 @@ struct StackPaletteView: View {
             focus: $focus
         ) {
             ForEach(Array(profiles.enumerated()), id: \.element.id) { index, profile in
-                let isHighlighted = index == model.overlayHighlight
+                let isHighlighted = index == model.state.overlayHighlight
                 let isActive = profile.id == model.settings.activeProfileID
-                OverlayRow(isHighlighted: isHighlighted, onHover: { model.setOverlayHighlight(index) }) {
-                    model.selectProfile(profile.id)
+                OverlayRow(isHighlighted: isHighlighted, onHover: { model.send(.overlayHighlight(index)) }) {
+                    model.send(.selectProfile(profile.id))
                 } content: {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
@@ -755,7 +750,7 @@ private struct NoteCard: View {
     let interactive: Bool
     let isLast: Bool
     @Binding var draft: String
-    var focus: FocusState<StackPaletteModel.Field?>.Binding
+    var focus: FocusState<PaletteField?>.Binding
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -953,7 +948,7 @@ private struct OverlayPanel<Rows: View>: View {
     let emptyText: String
     let isEmpty: Bool
     @Binding var query: String
-    var focus: FocusState<StackPaletteModel.Field?>.Binding
+    var focus: FocusState<PaletteField?>.Binding
     @ViewBuilder let rows: () -> Rows
 
     var body: some View {

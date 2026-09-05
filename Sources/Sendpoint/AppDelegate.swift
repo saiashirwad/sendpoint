@@ -18,8 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var storeState: StoreState = .loading
     private var bootstrapTask: Task<Void, Never>?
-    private var menuMutationTask: Task<Void, Never>?
-    private var pasteTask: Task<Void, Never>?
+    private let exportController = ExportController()
     private var captureObserver: NSObjectProtocol?
 
     private var flashToken = 0
@@ -116,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func storeDidChange() {
+        palette?.documentChanged()
         refreshStatusItem()
     }
 
@@ -149,11 +149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         bootstrapTask?.cancel()
         bootstrapTask = nil
-        menuMutationTask?.cancel()
-        menuMutationTask = nil
-        pasteTask?.cancel()
-        pasteTask = nil
-        palette?.close()
+        exportController.teardown()
+        palette?.teardown()
         setupWindowController?.teardown()
         setupWindowController = nil
         accessibilityHelperWindowController?.teardown()
@@ -543,39 +540,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func copyMarkdown() {
         guard let store else { NSSound.beep(); return }
-        pasteTask?.cancel()
-        pasteTask = nil
-        let count = store.currentEntries.count
-        let target = NSWorkspace.shared.frontmostApplication
-        let targetName = target?.localizedName ?? "?"
-        let targetProcessIdentifier = target?.processIdentifier ?? 0
-        Diag.log("copyMarkdown invoked, count=\(count) paste=\(settings.pasteDirectly) front=\(targetName)")
-        let clearsAfterExport = settings.activeProfile.clearSessionAfterExport
-        guard SessionExport.copy(store: store, settings: settings) else {
-            NSSound.beep()
-            return
-        }
-        if clearsAfterExport {
-            observeMenuMutation(store: store, presentsError: false)
-        }
-
-        guard settings.pasteDirectly else {
-            flashStatus("Copied \(count)")
-            return
-        }
-        // Give the target app a moment to see the new pasteboard before ⌘V.
-        // Retain its PID so a focus change cannot redirect the paste.
-        pasteTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(120))
-            } catch {
-                return
+        let target = settings.pasteDirectly ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
+        exportController.copy(store: store, sessionID: store.currentSessionID,
+            profile: settings.activeProfile, pasteTarget: target) { [weak self] message in
+                self?.flashStatus(message)
             }
-            guard !Task.isCancelled else { return }
-            SelectionCapture.paste(into: targetProcessIdentifier)
-            self?.pasteTask = nil
-        }
-        flashStatus("Pasted \(count)")
     }
 
     @objc private func clearStack() {
@@ -682,7 +651,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func retryPendingMutations() {
         guard let store else { NSSound.beep(); return }
         store.retryPendingMutations()
-        observeMenuMutation(store: store, presentsError: true)
+        exportController.send(.retry)
+        refreshStatusItem()
     }
 
     private func capturedSessionID(from sender: NSMenuItem) -> UUID? {
@@ -696,23 +666,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         presentsError: Bool = false
     ) {
         guard let store else { NSSound.beep(); return }
-        store.mutate(mutation)
-        observeMenuMutation(store: store, presentsError: presentsError)
-    }
-
-    private func observeMenuMutation(store: AnnotationStore, presentsError: Bool) {
-        menuMutationTask?.cancel()
-        menuMutationTask = Task { [weak self, weak store] in
-            guard let self, let store else { return }
-            await store.waitForIdle()
-            guard !Task.isCancelled else { return }
-            menuMutationTask = nil
-            refreshStatusItem()
-            if let error = store.error {
+        store.mutate(mutation) { [weak self] outcome in
+            self?.refreshStatusItem()
+            switch outcome {
+            case let .rejected(message), let .commitFailed(message):
                 NSSound.beep()
-                if presentsError {
-                    SessionDialogs.showMessage(annotationStoreErrorMessage(error))
-                }
+                if presentsError { SessionDialogs.showMessage(message) }
+            case .committed, .noOp, .cancelled: break
             }
         }
     }
@@ -735,9 +695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             palette = StackPaletteWindowController(
                 store: store,
                 settings: settings,
-                onSwitch: { [weak self] sessionID in
-                    self?.switchFromPalette(to: sessionID)
-                },
+                export: exportController,
                 onSelectProfile: { [weak self] profileID in
                     self?.requestProfileSelection(profileID)
                 },
@@ -745,14 +703,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
         palette?.show(at: level)
-    }
-
-    private func switchFromPalette(to sessionID: UUID) {
-        enqueueMenuMutation(
-            .switchSession(sessionID: sessionID),
-            presentsError: true
-        )
-        palette?.close()
     }
 
     private func presentPermissionHelpForCapture() {
