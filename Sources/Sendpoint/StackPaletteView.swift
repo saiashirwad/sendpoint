@@ -259,17 +259,6 @@ struct StackPaletteView: View {
                     .frame(minWidth: 18, alignment: .trailing)
                     .accessibilityLabel(session.countLabel)
             }
-            // A single dot in the gutter marks the current stack, so the
-            // names line up with the notes beside them.
-            .overlay(alignment: .leading) {
-                if session.isCurrent {
-                    Circle()
-                        .fill(Color.primary)
-                        .frame(width: 5, height: 5)
-                        .padding(.leading, -11)
-                        .accessibilityHidden(true)
-                }
-            }
         }
         .foregroundStyle(Color.primary)
         .frame(height: rowHeight)
