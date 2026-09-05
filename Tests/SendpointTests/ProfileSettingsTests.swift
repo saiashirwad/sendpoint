@@ -23,7 +23,7 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(StackExportMode(pasteDirectly: false).verb, "copy")
     }
 
-    func testMissingEmptyAndInvalidProfileDataFallBackToBuiltInsAndCoherent() throws {
+    func testMissingEmptyAndInvalidProfileDataFallBackToBuiltInsAndPlain() throws {
         for seed in [Seed.missing, .empty, .invalidData] {
             let defaults = makeDefaults()
             defer { remove(defaults) }
@@ -35,16 +35,16 @@ final class ProfileSettingsTests: XCTestCase {
                 defaults.set(UUID().uuidString, forKey: "activeProfileID")
             case .invalidData:
                 defaults.set(Data("not json".utf8), forKey: "profiles")
-                defaults.set(Profile.plain.id.uuidString, forKey: "activeProfileID")
+                defaults.set(Profile.coherent.id.uuidString, forKey: "activeProfileID")
             }
 
             let settings = AppSettings(defaults: defaults)
 
             XCTAssertEqual(settings.profiles, Profile.builtIns)
-            XCTAssertEqual(settings.activeProfileID, Profile.coherent.id)
-            XCTAssertEqual(settings.activeProfile, .coherent)
+            XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
+            XCTAssertEqual(settings.activeProfile, .plain)
             XCTAssertNotNil(defaults.data(forKey: "profiles"))
-            XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.coherent.id.uuidString)
+            XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.plain.id.uuidString)
         }
     }
 
@@ -56,9 +56,34 @@ final class ProfileSettingsTests: XCTestCase {
 
         let settings = AppSettings(defaults: defaults)
 
-        XCTAssertEqual(settings.profiles, [.pointByPoint, .plain])
+        XCTAssertEqual(settings.profiles, [.plain, .pointByPoint])
+        XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
+        XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.plain.id.uuidString)
+    }
+
+    func testStoredBuiltInsAreReorderedCanonicallyAndCustomsFollowWithActiveKept() throws {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let custom = Profile(
+            name: "Mine",
+            preamble: "",
+            includeApplication: false,
+            includeWindow: false,
+            includeLink: false,
+            includeTimestamps: false,
+            includeHeading: false,
+            clearSessionAfterExport: false
+        )
+        defaults.set(
+            try JSONEncoder().encode([Profile.coherent, custom, .pointByPoint, .plain]),
+            forKey: "profiles"
+        )
+        defaults.set(Profile.pointByPoint.id.uuidString, forKey: "activeProfileID")
+
+        let settings = AppSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.profiles, [.plain, .coherent, .pointByPoint, custom])
         XCTAssertEqual(settings.activeProfileID, Profile.pointByPoint.id)
-        XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.pointByPoint.id.uuidString)
     }
 
     func testMalformedProfileCollectionsFallBackAtomically() throws {
@@ -96,7 +121,7 @@ final class ProfileSettingsTests: XCTestCase {
             let settings = AppSettings(defaults: defaults)
 
             XCTAssertEqual(settings.profiles, Profile.builtIns)
-            XCTAssertEqual(settings.activeProfileID, Profile.coherent.id)
+            XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
         }
     }
 
@@ -159,7 +184,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDirtyExternalSelectionCancelKeepsDraftAndActiveProfile() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Unsaved external draft"
 
@@ -192,7 +217,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testCloseDiscardAndSaveDecisionsResolveDirtyDraft() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Discard me"
 
@@ -226,7 +251,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDraftDoesNotAffectStoredProfileUntilSaveAndCanRevert() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Changed"
 
@@ -246,7 +271,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDirtyDiscardSwitchPersistsPendingProfileAsActive() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Unsaved"
 
@@ -263,7 +288,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDirtySaveSwitchOverwritesSourceThenActivatesTarget() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.name = "Renamed Coherent"
 
@@ -296,7 +321,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDirtySaveAsNewSwitchClonesDraftThenPersistsPendingTargetAsActive() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000098")!
         let editor = ProfileEditorState(settings: settings, makeID: { newID })
         editor.draft.preamble = "Clone while switching"
@@ -331,7 +356,7 @@ final class ProfileSettingsTests: XCTestCase {
     func testDeleteIsGuardedWhileDirtyAndDeletingActiveKeepsValidActiveID() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = try makeSettingsOnCoherent(defaults)
         let editor = ProfileEditorState(settings: settings)
         editor.draft.preamble = "Dirty"
         XCTAssertThrowsError(try editor.delete()) {
@@ -357,6 +382,13 @@ final class ProfileSettingsTests: XCTestCase {
         case missing
         case empty
         case invalidData
+    }
+
+    /// Editor flows below edit Coherent; a fresh store opens on Plain.
+    private func makeSettingsOnCoherent(_ defaults: UserDefaults) throws -> AppSettings {
+        let settings = AppSettings(defaults: defaults)
+        try settings.selectProfile(id: Profile.coherent.id)
+        return settings
     }
 
     private func makeDefaults() -> UserDefaults {

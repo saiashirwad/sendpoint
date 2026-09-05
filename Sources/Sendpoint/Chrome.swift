@@ -311,7 +311,9 @@ struct HowToRow: View {
 struct SidebarMaterial: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .sidebar
+        // Lighter than the stock sidebar material so the selected row shows
+        // in light mode; still tinted by what is behind the window.
+        view.material = .underWindowBackground
         view.blendingMode = .behindWindow
         view.state = .followsWindowActiveState
         return view

@@ -572,9 +572,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onShowAccessibilityHelper: { [weak self] in
                 self?.presentAccessibilityHelper()
-            },
-            onRunSetup: { [weak self] in
-                self?.presentSetup()
             }
         )
         let hosting = NSHostingView(rootView: settingsView)

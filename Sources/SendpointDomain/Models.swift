@@ -177,5 +177,5 @@ public extension Profile {
         clearSessionAfterExport: false
     )
 
-    static let builtIns: [Profile] = [.coherent, .pointByPoint, .plain]
+    static let builtIns: [Profile] = [.plain, .coherent, .pointByPoint]
 }

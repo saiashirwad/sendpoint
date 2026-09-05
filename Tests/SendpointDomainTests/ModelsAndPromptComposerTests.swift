@@ -115,13 +115,13 @@ final class ModelsAndPromptComposerTests: XCTestCase {
     }
 
     func testProfileBuiltInsHaveStableIDsOrderTextAndCurrentSplitFlags() {
-        XCTAssertEqual(Profile.builtIns.map(\.name), ["Coherent", "Point by Point", "Plain"])
+        XCTAssertEqual(Profile.builtIns.map(\.name), ["Plain", "Coherent", "Point by Point"])
         XCTAssertEqual(
             Profile.builtIns.map(\.id),
             [
+                UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
                 UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
                 UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-                UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
             ]
         )
         XCTAssertTrue(Profile.coherent.preamble.hasPrefix("These are my reading notes"))

@@ -233,8 +233,9 @@ final class AppSettings {
 
         let decoded = defaults.data(forKey: Key.profiles)
             .flatMap { try? JSONDecoder().decode([Profile].self, from: $0) }
-        let loadedProfiles = AppSettings.validProfiles(decoded)
-        let loadedStoredProfiles = decoded.map { !$0.isEmpty && loadedProfiles == $0 } ?? false
+        let storedProfiles = AppSettings.validProfiles(decoded)
+        let loadedProfiles = storedProfiles.map(AppSettings.builtInsFirst) ?? Profile.builtIns
+        let loadedStoredProfiles = storedProfiles != nil
         profiles = loadedProfiles
 
         let requestedID = loadedStoredProfiles
@@ -391,8 +392,9 @@ final class AppSettings {
         return try? JSONDecoder().decode(KeyCombo.self, from: data)
     }
 
-    private static func validProfiles(_ decoded: [Profile]?) -> [Profile] {
-        guard let decoded, !decoded.isEmpty else { return Profile.builtIns }
+    /// The stored list when every entry is usable, otherwise nil.
+    private static func validProfiles(_ decoded: [Profile]?) -> [Profile]? {
+        guard let decoded, !decoded.isEmpty else { return nil }
         var ids: Set<UUID> = []
         var names: Set<String> = []
         for profile in decoded {
@@ -402,9 +404,18 @@ final class AppSettings {
                 trimmed == profile.name,
                 ids.insert(profile.id).inserted,
                 names.insert(normalizedProfileName(profile.name)).inserted
-            else { return Profile.builtIns }
+            else { return nil }
         }
         return decoded
+    }
+
+    /// Built-ins keep their canonical order even in a list saved by an
+    /// older build; the user's own templates follow in the order they were made.
+    private static func builtInsFirst(_ profiles: [Profile]) -> [Profile] {
+        let builtInIDs = Profile.builtIns.map(\.id)
+        let builtIns = builtInIDs.compactMap { id in profiles.first { $0.id == id } }
+        let custom = profiles.filter { !builtInIDs.contains($0.id) }
+        return builtIns + custom
     }
 
     private static func normalizedProfileName(_ value: String) -> String {

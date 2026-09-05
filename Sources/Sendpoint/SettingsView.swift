@@ -35,7 +35,6 @@ struct SettingsView: View {
     @Bindable var permissionState: PermissionState
     let onSelectProfile: (UUID) -> Void
     let onShowAccessibilityHelper: () -> Void
-    let onRunSetup: () -> Void
 
     @State private var tab: SettingsTab = .capture
     @State private var newProfile: NewProfileDraft?
@@ -61,15 +60,13 @@ struct SettingsView: View {
         profileEditor: ProfileEditorState,
         permissionState: PermissionState,
         onSelectProfile: @escaping (UUID) -> Void,
-        onShowAccessibilityHelper: @escaping () -> Void,
-        onRunSetup: @escaping () -> Void
+        onShowAccessibilityHelper: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
         _profileEditor = Bindable(wrappedValue: profileEditor)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onSelectProfile = onSelectProfile
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
-        self.onRunSetup = onRunSetup
     }
 
     var body: some View {
@@ -137,16 +134,15 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text("A template wraps your notes when you \(settings.stackExportMode.verb) a stack.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
     private var profileEditorPane: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ProfileNameField(text: $profileEditor.draft.name) {
-                profileTitleActions
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
+            SettingsSection("Name") {
+                ProfileNameField(text: $profileEditor.draft.name) {
+                    profileTitleActions
+                }
             }
 
             SettingsSection("Prompt") {
@@ -174,7 +170,7 @@ struct SettingsView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
                 )
             }
 
@@ -489,24 +485,6 @@ struct SettingsView: View {
                     onShowAccessibilityHelper: onShowAccessibilityHelper
                 )
             }
-            SettingsSection("Setup") {
-                SettingsCard {
-                    SettingsRow(
-                        "Setup assistant",
-                        subtitle: "Walk through permissions and the voice model again."
-                    ) {
-                        Button("Run Setup Again…", action: onRunSetup)
-                    }
-                }
-            }
-            Label {
-                Text("Text, audio, and transcription never leave this Mac.")
-            } icon: {
-                Image(systemName: "lock.shield")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -740,6 +718,7 @@ private struct CircleIconButton: View {
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsTab
     let topInset: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -753,7 +732,13 @@ private struct SettingsSidebar: View {
         }
         .padding(.horizontal, 10)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(SidebarMaterial().ignoresSafeArea())
+        .background(
+            SidebarMaterial()
+                // Light mode: wash the material toward white so the pane
+                // reads as paper and the selected row carries the contrast.
+                .overlay(Color.white.opacity(colorScheme == .dark ? 0 : 0.6))
+                .ignoresSafeArea()
+        )
     }
 }
 
@@ -763,6 +748,10 @@ private struct SettingsSidebarRow: View {
     let action: () -> Void
 
     @State private var hovering = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Light mode needs a heavier wash for the row to read as selected.
+    private var selectedOpacity: Double { colorScheme == .dark ? 0.09 : 0.14 }
 
     var body: some View {
         Button(action: action) {
@@ -781,7 +770,7 @@ private struct SettingsSidebarRow: View {
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.primary.opacity(isSelected ? 0.09 : hovering ? 0.04 : 0))
+                .fill(Color.primary.opacity(isSelected ? selectedOpacity : hovering ? 0.04 : 0))
         )
         .onHover { hovering = $0 }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
@@ -849,12 +838,12 @@ private struct ProfileNameField<Accessory: View>: View {
             HStack(alignment: .center, spacing: 12) {
                 TextField("Template name", text: $text)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.body.weight(.medium))
                     .focused($focused)
                     .accessibilityLabel("Template name")
                 accessory()
             }
-            .frame(minHeight: 30)
+            .frame(minHeight: 24)
             Rectangle()
                 .fill(Color.primary.opacity(focused ? 0.5 : 0.1))
                 .frame(height: 1)
