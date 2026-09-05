@@ -111,6 +111,9 @@ struct SettingsView: View {
         )
         .ignoresSafeArea()
         .overlayScrollers()
+        // Monochrome controls: an "on" toggle or selected segment takes the
+        // text colour; off states keep the system grey.
+        .tint(Color.primary.opacity(0.85))
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
     }
 
@@ -824,7 +827,7 @@ private struct ProfileChip: View {
                     .lineLimit(1)
                 if isDirty {
                     Circle()
-                        .fill(isSelected ? Color.white : Color.accentColor)
+                        .fill(Color.primary)
                         .frame(width: 5, height: 5)
                         .accessibilityLabel("Unsaved changes")
                 }
@@ -832,9 +835,9 @@ private struct ProfileChip: View {
             .padding(.horizontal, 11)
             .frame(height: 26)
             .background(
-                Capsule().fill(isSelected ? Color.accentColor : Color.primary.opacity(0.06))
+                Capsule().fill(Color.primary.opacity(isSelected ? 0.14 : 0.06))
             )
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -860,7 +863,7 @@ private struct ProfileNameField<Accessory: View>: View {
             }
             .frame(minHeight: 30)
             Rectangle()
-                .fill(focused ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.1))
+                .fill(Color.primary.opacity(focused ? 0.5 : 0.1))
                 .frame(height: 1)
         }
         .padding(.horizontal, 2)

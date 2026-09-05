@@ -143,17 +143,12 @@ struct SettingsCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        // Experiment: no card chrome. Rows sit on the window background and
+        // line up with the section captions.
         VStack(spacing: 0) {
             content()
         }
-        .background(
-            RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-        )
+        .padding(.horizontal, -SettingsMetrics.rowInset)
     }
 }
 
@@ -233,22 +228,29 @@ struct SettingsToggleRow: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                // Green reads as "on" at a glance; it is the same green as
+                // a granted permission.
+                .tint(.green)
         }
     }
 }
 
-/// The tinted glyph tile at the leading edge of a row.
+/// The monochrome glyph tile at the leading edge of a row: a faint fill,
+/// a hairline rim, and a glyph in the text colour.
 struct SettingsIcon: View {
     let name: String
 
     init(_ name: String) { self.name = name }
 
+    private let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
     var body: some View {
         Image(systemName: name)
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(.tint)
+            .foregroundStyle(Color.primary)
             .frame(width: SettingsMetrics.iconSize, height: SettingsMetrics.iconSize)
-            .background(.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(shape.fill(Color.primary.opacity(0.07)))
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75))
             .accessibilityHidden(true)
     }
 }
