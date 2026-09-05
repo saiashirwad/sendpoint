@@ -1,67 +1,13 @@
 import Foundation
 
-/// Partial provenance values read from one system boundary.
-public struct ProvenanceFields: Equatable, Sendable {
-    public var windowTitle: String?
-    public var url: URL?
-    public var workingDirectory: URL?
-
-    public init(
-        windowTitle: String? = nil,
-        url: URL? = nil,
-        workingDirectory: URL? = nil
-    ) {
-        self.windowTitle = windowTitle
-        self.url = url
-        self.workingDirectory = workingDirectory
-    }
-
-    public func merging(_ enrichment: Self) -> Self {
-        Self(
-            windowTitle: enrichment.windowTitle ?? windowTitle,
-            url: enrichment.url ?? url,
-            workingDirectory: enrichment.workingDirectory ?? workingDirectory
-        )
-    }
-}
-
-/// Accepts only local absolute file locations without query or fragment data.
-public enum ProvenanceFileURLParser {
-    public static func absoluteFileURL(_ value: String) -> URL? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.contains("\0") else { return nil }
-
-        if trimmed.hasPrefix("/") {
-            guard !trimmed.contains("?"), !trimmed.contains("#") else { return nil }
-            return URL(fileURLWithPath: trimmed).standardizedFileURL
-        }
-
-        guard
-            let components = URLComponents(string: trimmed),
-            components.scheme?.lowercased() == "file",
-            components.user == nil,
-            components.password == nil,
-            components.port == nil,
-            components.query == nil,
-            components.fragment == nil,
-            components.host?.isEmpty != false,
-            let url = components.url,
-            url.isFileURL,
-            url.path.hasPrefix("/"),
-            !url.path.contains("\0")
-        else { return nil }
-        return url.standardizedFileURL
-    }
-}
-
 /// Parses the common focused-window format used by Code-OSS editor builds.
-public enum CodeEditorProvenance {
-    public static func fields(
+enum EditorProvenanceParser {
+    static func fields(
         windowTitle: String?,
         document: String?,
         isDirectory: (URL) -> Bool
     ) -> ProvenanceFields {
-        let documentURL = document.flatMap(ProvenanceFileURLParser.absoluteFileURL)
+        let documentURL = document.flatMap { LocalFileLocation.documentURL($0, localHosts: []) }
         let title = ParsedCodeEditorTitle(windowTitle)
 
         var url: URL?
@@ -86,12 +32,6 @@ public enum CodeEditorProvenance {
             workingDirectory = title.directoryHint
         }
         return ProvenanceFields(url: url, workingDirectory: workingDirectory)
-    }
-
-    public static func isDirectoryOnDisk(_ url: URL) -> Bool {
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-            && isDirectory.boolValue
     }
 
     private static func workspaceDirectory(
@@ -127,7 +67,7 @@ private struct ParsedCodeEditorTitle {
         remainder = Self.stripTrailingAppName(remainder)
         let segments = Self.stripTrailingProfile(Self.split(remainder))
         for segment in segments {
-            guard let url = ProvenanceFileURLParser.absoluteFileURL(segment) else {
+            guard let url = LocalFileLocation.documentURL(segment, localHosts: []) else {
                 labels.append(segment)
                 continue
             }

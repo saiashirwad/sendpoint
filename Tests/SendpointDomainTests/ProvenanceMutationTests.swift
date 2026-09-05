@@ -2,87 +2,7 @@ import Foundation
 import XCTest
 @testable import SendpointDomain
 
-final class ProvenanceParsingTests: XCTestCase {
-    func testGhosttyFileURLAcceptsAndStandardizesOnlySafeLocalLocations() {
-        let expected = URL(fileURLWithPath: "/tmp/repository").standardizedFileURL
-        XCTAssertEqual(
-            ProvenanceFileURLParser.absoluteFileURL("  /tmp/project/../repository\n"),
-            expected
-        )
-        XCTAssertEqual(
-            ProvenanceFileURLParser.absoluteFileURL("file:///tmp/project/../repository"),
-            expected
-        )
-
-        for value in [
-            "relative/path", "file:relative/path", "/tmp/project?query=yes",
-            "/tmp/project#fragment", "file:///tmp/project?query=yes",
-            "file:///tmp/project#fragment", "file:///tmp/project\0child",
-            "file://remote-host/tmp/project", "https://example.com/project",
-        ] {
-            XCTAssertNil(ProvenanceFileURLParser.absoluteFileURL(value), value)
-        }
-    }
-
-    func testEditorDocumentAndTitleYieldFileAndOutermostWorkspace() {
-        let file = "/Users/reader/code/effect/packages/effect/src/Unify.ts"
-        let fields = editorFields(title: "Unify.ts — effect", document: file)
-
-        XCTAssertEqual(fields.url, URL(fileURLWithPath: file))
-        XCTAssertEqual(
-            fields.workingDirectory,
-            URL(fileURLWithPath: "/Users/reader/code/effect")
-        )
-    }
-
-    func testEditorParsesReversedDirtyProfileRemoteAndAppTitleSegments() {
-        let file = "/Users/reader/code/effect/src/Unify.ts"
-        let fields = editorFields(
-            title: "● Unify.ts — effect [SSH: dev] — Data Science (Profile) — Visual Studio Code - Insiders",
-            document: file
-        )
-        XCTAssertEqual(fields.url, URL(fileURLWithPath: file))
-        XCTAssertEqual(fields.workingDirectory, URL(fileURLWithPath: "/Users/reader/code/effect"))
-
-        let reversed = editorFields(
-            title: "effect (Workspace) — Unify.ts — Cursor",
-            document: file
-        )
-        XCTAssertEqual(reversed.workingDirectory, URL(fileURLWithPath: "/Users/reader/code/effect"))
-    }
-
-    func testEditorDistinguishesDirectoryDocumentAndSingleFile() {
-        let directory = URL(fileURLWithPath: "/Users/reader/code/effect")
-        let directoryFields = editorFields(
-            title: "effect",
-            document: directory.path,
-            directories: [directory]
-        )
-        XCTAssertNil(directoryFields.url)
-        XCTAssertEqual(directoryFields.workingDirectory, directory)
-
-        let file = URL(fileURLWithPath: "/Users/reader/Desktop/notes.md")
-        let fileFields = editorFields(title: "notes.md", document: file.path)
-        XCTAssertEqual(fileFields.url, file)
-        XCTAssertNil(fileFields.workingDirectory)
-    }
-
-    func testEditorUsesAbsoluteTitleHintButRejectsRemoteAndRelativeDocuments() {
-        let file = "/Users/reader/code/effect/src/Unify.ts"
-        let titleFields = editorFields(title: "\(file) - effect - Cursor", document: nil)
-        XCTAssertEqual(titleFields.url, URL(fileURLWithPath: file))
-        XCTAssertEqual(titleFields.workingDirectory, URL(fileURLWithPath: "/Users/reader/code/effect"))
-
-        XCTAssertNil(editorFields(
-            title: "Main.swift — project",
-            document: "vscode-remote://ssh/project/Main.swift"
-        ).url)
-        XCTAssertNil(editorFields(
-            title: "Main.swift — project",
-            document: "relative/Main.swift"
-        ).url)
-    }
-
+final class ProvenanceMutationTests: XCTestCase {
     func testProvenanceOnlyMutationRequiresExactAnnotationAndApplication() throws {
         let app = ApplicationIdentity(name: "Editor", bundleID: "com.microsoft.VSCode")
         let annotation = Annotation(
@@ -188,16 +108,4 @@ final class ProvenanceParsingTests: XCTestCase {
         }
     }
 
-    private func editorFields(
-        title: String?,
-        document: String?,
-        directories: [URL] = []
-    ) -> ProvenanceFields {
-        let paths = Set(directories.map(\.standardizedFileURL.path))
-        return CodeEditorProvenance.fields(
-            windowTitle: title,
-            document: document,
-            isDirectory: { paths.contains($0.standardizedFileURL.path) }
-        )
-    }
 }

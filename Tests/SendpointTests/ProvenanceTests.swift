@@ -9,16 +9,14 @@ final class ProvenanceProbeTests: XCTestCase {
         processIdentifier: 42
     )
 
-    func testUnknownApplicationReturnsGenericBaselineWithoutCallingEnricher() async {
+    func testUnknownApplicationReturnsGenericBaselineWithoutCallingProvider() async {
         let calls = Counter()
         let probe = ProvenanceProbe(
             genericLookup: { _ in ProvenanceFields(windowTitle: "Generic window") },
-            enrichers: [
-                "com.other.app": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.other.app"], lookup: { _ in
                     await calls.increment()
                     return ProvenanceFields(url: URL(string: "https://example.com"))
-                },
-            ]
+                })]
         )
 
         let result = await probe.probe(application)
@@ -38,11 +36,9 @@ final class ProvenanceProbeTests: XCTestCase {
             genericLookup: { _ in
                 ProvenanceFields(windowTitle: "Generic window", workingDirectory: directory)
             },
-            enrichers: [
-                "com.example.app": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.example.app"], lookup: { _ in
                     ProvenanceFields(windowTitle: "Active tab", url: page)
-                },
-            ]
+                })]
         )
         let mergedResult = await merged.probe(application)
         XCTAssertEqual(
@@ -57,7 +53,7 @@ final class ProvenanceProbeTests: XCTestCase {
 
         let failing = ProvenanceProbe(
             genericLookup: { _ in ProvenanceFields(windowTitle: "Generic window") },
-            enrichers: ["com.example.app": { _ in throw TestError.denied }]
+            providers: [ProvenanceProvider(bundleIDs: ["com.example.app"], lookup: { _ in throw TestError.denied })]
         )
         let failingResult = await failing.probe(application)
         XCTAssertEqual(
@@ -73,12 +69,10 @@ final class ProvenanceProbeTests: XCTestCase {
                 withUnsafeCurrentTask { $0?.cancel() }
                 return ProvenanceFields(windowTitle: "Generic window")
             },
-            enrichers: [
-                "com.example.app": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.example.app"], lookup: { _ in
                     await calls.increment()
                     return ProvenanceFields(windowTitle: "Should not run")
-                },
-            ]
+                })]
         )
 
         let result = await probe.probe(application)
@@ -108,12 +102,10 @@ final class ProvenanceProbeTests: XCTestCase {
         let enrichmentProbe = ProvenanceProbe(
             validateApplication: { _ in await recycledDuringEnrichment.next() },
             genericLookup: { _ in ProvenanceFields(windowTitle: "Generic window") },
-            enrichers: [
-                "com.example.app": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.example.app"], lookup: { _ in
                     await enrichmentCalls.increment()
                     return ProvenanceFields(windowTitle: "Wrong enrichment")
-                },
-            ]
+                })]
         )
         let enrichmentResult = await enrichmentProbe.probe(application)
         XCTAssertEqual(
@@ -125,7 +117,7 @@ final class ProvenanceProbeTests: XCTestCase {
     }
 
     func testEditorBundleRoutingCoversVSCodeCursorWindsurfVSCodiumZedAndCodeOSS() {
-        let identifiers = ProvenanceProbe.codeEditorBundleIDs
+        let identifiers = ProvenanceProvider.codeEditorBundleIDs
         for bundleID in [
             "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders",
             "com.todesktop.230313mzl4w4u92", "co.anysphere.cursor.nightly",
@@ -136,22 +128,20 @@ final class ProvenanceProbeTests: XCTestCase {
         }
     }
 
-    func testGhosttyPathParsingThroughInjectedEnricherKeepsGenericFallback() async {
+    func testGhosttyPathParsingThroughInjectedProviderKeepsGenericFallback() async {
         let ghostty = CapturedApplication(
             identity: ApplicationIdentity(name: "Ghostty", bundleID: "com.mitchellh.ghostty"),
             processIdentifier: 8
         )
         let valid = ProvenanceProbe(
             genericLookup: { _ in ProvenanceFields(windowTitle: "Terminal") },
-            enrichers: [
-                "com.mitchellh.ghostty": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.mitchellh.ghostty"], lookup: { _ in
                     ProvenanceFields(
-                        workingDirectory: ProvenanceFileURLParser.absoluteFileURL(
-                            "file:///tmp/project"
+                        workingDirectory: LocalFileLocation.documentURL(
+                            "file:///tmp/project", localHosts: []
                         )
                     )
-                },
-            ]
+                })]
         )
         let validResult = await valid.probe(ghostty)
         XCTAssertEqual(validResult.windowTitle, "Terminal")
@@ -159,15 +149,13 @@ final class ProvenanceProbeTests: XCTestCase {
 
         let unsafe = ProvenanceProbe(
             genericLookup: { _ in ProvenanceFields(windowTitle: "Terminal") },
-            enrichers: [
-                "com.mitchellh.ghostty": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["com.mitchellh.ghostty"], lookup: { _ in
                     ProvenanceFields(
-                        workingDirectory: ProvenanceFileURLParser.absoluteFileURL(
-                            "file://remote-host/tmp/private"
+                        workingDirectory: LocalFileLocation.documentURL(
+                            "file://remote-host/tmp/private", localHosts: []
                         )
                     )
-                },
-            ]
+                })]
         )
         let unsafeResult = await unsafe.probe(ghostty)
         XCTAssertEqual(
@@ -176,20 +164,18 @@ final class ProvenanceProbeTests: XCTestCase {
         )
     }
 
-    func testBrowserTabParsingThroughInjectedEnricherAcceptsOnlyWebURL() async {
+    func testBrowserTabParsingThroughInjectedProviderAcceptsOnlyWebURL() async {
         let helium = CapturedApplication(
             identity: ApplicationIdentity(name: "Helium", bundleID: "net.imput.helium"),
             processIdentifier: 7
         )
         let valid = ProvenanceProbe(
             genericLookup: { _ in ProvenanceFields(windowTitle: "Helium") },
-            enrichers: [
-                "net.imput.helium": { _ in
+            providers: [ProvenanceProvider(bundleIDs: ["net.imput.helium"], lookup: { _ in
                     BrowserActiveTabParser.fields(
-                        from: "Article title\nhttps://example.com/story?item=1"
+                        from: ["Article title", "https://example.com/story?item=1"]
                     )
-                },
-            ]
+                })]
         )
         let validResult = await valid.probe(helium)
         XCTAssertEqual(
@@ -207,7 +193,7 @@ final class ProvenanceProbeTests: XCTestCase {
             "relative/path",
             "https://user:password@example.com/private",
         ] {
-            let fields = BrowserActiveTabParser.fields(from: "Title\n\(unsafe)")
+            let fields = BrowserActiveTabParser.fields(from: ["Title", unsafe])
             XCTAssertEqual(fields.windowTitle, "Title")
             XCTAssertNil(fields.url, unsafe)
         }
