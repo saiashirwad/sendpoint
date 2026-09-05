@@ -119,7 +119,14 @@ enum SettingsMetrics {
     static let iconSize: CGFloat = 30
     /// Where a divider starts when the rows above and below carry an icon.
     static let iconDividerInset: CGFloat = rowInset + iconSize + rowInset
+    /// Corner radius of the template text editor.
     static let cardRadius: CGFloat = 10
+    /// Vertical padding inside every row.
+    static let rowPadding: CGFloat = 10
+    /// Gap between a caption and its content, and between loose items.
+    static let captionSpacing: CGFloat = 10
+    /// Gap between one section and the next, the same on every pane.
+    static let sectionSpacing: CGFloat = 28
 }
 
 /// Small uppercase label above a card.
@@ -145,10 +152,13 @@ struct SettingsCard<Content: View>: View {
     var body: some View {
         // Experiment: no card chrome. Rows sit on the window background and
         // line up with the section captions.
+        // Rows keep their own padding for the dividers between them; the
+        // group as a whole sits flush with captions and plain content.
         VStack(spacing: 0) {
             content()
         }
         .padding(.horizontal, -SettingsMetrics.rowInset)
+        .padding(.vertical, -SettingsMetrics.rowPadding)
     }
 }
 
@@ -173,7 +183,7 @@ struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SettingsMetrics.captionSpacing) {
             SettingsCaption(caption)
             content()
         }
@@ -207,7 +217,7 @@ struct SettingsRow<Trailing: View>: View {
             trailing()
         }
         .padding(.horizontal, SettingsMetrics.rowInset)
-        .padding(.vertical, subtitle == nil ? 9 : 11)
+        .padding(.vertical, SettingsMetrics.rowPadding)
     }
 }
 
@@ -277,7 +287,7 @@ struct SettingsIconRow<Trailing: View>: View {
             trailing()
         }
         .padding(.horizontal, SettingsMetrics.rowInset)
-        .padding(.vertical, 10)
+        .padding(.vertical, SettingsMetrics.rowPadding)
     }
 }
 

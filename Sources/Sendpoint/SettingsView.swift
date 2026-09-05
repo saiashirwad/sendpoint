@@ -78,14 +78,8 @@ struct SettingsView: View {
                 .frame(width: Self.sidebarWidth)
             Divider()
             VStack(spacing: 0) {
-                Text(tab.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .frame(height: Self.titleBarHeight)
-                Divider()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
                         if !settings.shortcutRegistrationIssues.isEmpty {
                             shortcutRegistrationIssues
                         }
@@ -97,6 +91,9 @@ struct SettingsView: View {
                         }
                     }
                     .padding(24)
+                    // The sidebar names the pane, so content starts level
+                    // with the first sidebar row instead of under a title.
+                    .padding(.top, Self.titleBarHeight - 24)
                     .frame(maxWidth: Self.contentMaxWidth, alignment: .topLeading)
                     .frame(maxWidth: .infinity)
                     .id(tab)
@@ -120,7 +117,7 @@ struct SettingsView: View {
     // MARK: - Profiles
 
     private var profilesTab: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             profileChips
             profileEditorPane
         }
@@ -281,9 +278,9 @@ struct SettingsView: View {
 
     private var microphoneFootnote: String {
         if settings.inputDeviceUID != nil, !selectedDeviceIsConnected {
-            return "\(settings.inputDeviceName ?? "That microphone") is not connected. Voice notes use the system default until it returns."
+            return "\(settings.inputDeviceName ?? "That microphone") is not connected, so the system default is used."
         }
-        return "The built-in microphone usually sounds better than AirPods, which switch to a low-quality mode while their mic is in use."
+        return "The built-in microphone usually sounds better than AirPods."
     }
 
     private var selectedDeviceIsConnected: Bool {
@@ -332,7 +329,7 @@ struct SettingsView: View {
     }
 
     private var shortcutsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Making notes") {
                 SettingsCard {
                     shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
@@ -377,9 +374,6 @@ struct SettingsView: View {
                 }
             }
             shortcutFeedbackView
-            Text("Click a shortcut, then press the keys you want. Press Escape to keep the old one. Some system shortcuts may not be available.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -422,7 +416,7 @@ struct SettingsView: View {
     // MARK: - Capture
 
     private var captureTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Voice") {
                 SettingsCard {
                     SettingsIconRow(
@@ -450,9 +444,8 @@ struct SettingsView: View {
             SettingsSection("Microphone") {
                 microphonePicker
                 InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
-                    .padding(.top, 2)
                 Text(microphoneFootnote)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -489,8 +482,8 @@ struct SettingsView: View {
     // MARK: - Permissions
 
     private var permissionsTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SettingsSection("What Sendpoint needs") {
+        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
+            SettingsSection("Permissions") {
                 PermissionCapabilityList(
                     permissionState: permissionState,
                     onShowAccessibilityHelper: onShowAccessibilityHelper
