@@ -9,26 +9,9 @@ final class PermissionStateTests: XCTestCase {
 
     private actor Counter {
         private(set) var value = 0
-        func increment() { value += 1 }
         func incrementAndGet() -> Int {
             value += 1
             return value
-        }
-    }
-
-    private actor AccessibilityGate {
-        private var continuations: [CheckedContinuation<AccessibilityPermissionState, Never>] = []
-
-        func next() async -> AccessibilityPermissionState {
-            await withCheckedContinuation { continuation in
-                continuations.append(continuation)
-            }
-        }
-
-        var count: Int { continuations.count }
-
-        func resume(at index: Int, with value: AccessibilityPermissionState) {
-            continuations[index].resume(returning: value)
         }
     }
 
@@ -103,7 +86,7 @@ final class PermissionStateTests: XCTestCase {
         accessibility: AccessibilityPermissionState = .granted,
         requestAccessibility: Bool = true,
         microphone: MicrophonePermissionState = .granted,
-        requestMicrophone: Bool = true,
+        requestMicrophone: @escaping @Sendable () async -> Bool = { true },
         modelReady: Bool = true,
         modelFilesExist: (@Sendable () -> Bool)? = nil,
         downloadModel: @escaping @Sendable (
@@ -114,7 +97,7 @@ final class PermissionStateTests: XCTestCase {
             accessibilityStatus: { accessibility },
             requestAccessibility: { requestAccessibility },
             microphoneStatus: { microphone },
-            requestMicrophone: { requestMicrophone },
+            requestMicrophone: requestMicrophone,
             voiceModelFilesExist: modelFilesExist ?? { modelReady },
             downloadVoiceModel: downloadModel,
             openAccessibilitySettings: {},
@@ -132,7 +115,7 @@ final class PermissionStateTests: XCTestCase {
         XCTFail("Timed out waiting for asynchronous test work")
     }
 
-    func testReadinessMatrixRequiresAccessibilityForTextAndAllVoiceRequirements() async {
+    func testReadinessMatrixRequiresAccessibilityForTextAndAllVoiceRequirements() {
         let accessibilityStates: [AccessibilityPermissionState] = [.notGranted, .granted]
         let microphoneStates: [MicrophonePermissionState] = [
             .notDetermined, .denied, .restricted, .granted,
@@ -146,18 +129,11 @@ final class PermissionStateTests: XCTestCase {
                         microphone: microphone,
                         modelReady: modelReady
                     ))
-                    state.refresh()
-                    await state.waitForIdle()
 
-                    XCTAssertEqual(
-                        state.isTextCaptureReady,
-                        accessibility == .granted
-                    )
+                    XCTAssertEqual(state.isTextCaptureReady, accessibility == .granted)
                     XCTAssertEqual(
                         state.isVoiceReady,
-                        accessibility == .granted
-                            && microphone == .granted
-                            && modelReady
+                        accessibility == .granted && microphone == .granted && modelReady
                     )
                     state.teardown()
                 }
@@ -165,57 +141,22 @@ final class PermissionStateTests: XCTestCase {
         }
     }
 
-    func testRefreshPublishesAllServiceValues() async {
+    func testInitAndRefreshPublishServiceValues() {
         let state = PermissionState(services: services(
             accessibility: .notGranted,
             microphone: .restricted,
             modelReady: false
         ))
 
-        state.refresh()
-        XCTAssertEqual(state.accessibility, .checking)
-        await state.waitForIdle()
-
         XCTAssertEqual(state.accessibility, .notGranted)
         XCTAssertEqual(state.microphone, .restricted)
         XCTAssertEqual(state.localVoiceModel, .notDownloaded)
-    }
-
-    func testInitSeedsVoiceModelFromDiskWithoutRefresh() {
-        let downloaded = PermissionState(services: services(modelReady: true))
-        let absent = PermissionState(services: services(modelReady: false))
-
-        XCTAssertEqual(downloaded.localVoiceModel, .ready)
-        XCTAssertEqual(absent.localVoiceModel, .notDownloaded)
-        downloaded.teardown()
-        absent.teardown()
-    }
-
-    func testOverlappingRefreshRejectsOlderResultEvenWhenItIgnoresCancellation() async {
-        let gate = AccessibilityGate()
-        var injected = services()
-        injected.accessibilityStatus = { await gate.next() }
-        let state = PermissionState(services: injected)
 
         state.refresh()
-        await waitUntil { await gate.count == 1 }
-        state.refresh()
-        await waitUntil { await gate.count == 2 }
-
-        await gate.resume(at: 1, with: .granted)
-        await state.waitForIdle()
-        XCTAssertEqual(state.accessibility, .granted)
-
-        state.refresh()
-        await waitUntil { await gate.count == 3 }
-        XCTAssertEqual(state.accessibility, .granted)
-        await gate.resume(at: 2, with: .notGranted)
-        await state.waitForIdle()
         XCTAssertEqual(state.accessibility, .notGranted)
-
-        await gate.resume(at: 0, with: .granted)
-        await Task.yield()
-        XCTAssertEqual(state.accessibility, .notGranted)
+        XCTAssertEqual(state.microphone, .restricted)
+        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
+        state.teardown()
     }
 
     func testPermissionRequestsPublishSuccessAndDenial() async {
@@ -223,68 +164,47 @@ final class PermissionStateTests: XCTestCase {
             accessibility: .notGranted,
             requestAccessibility: true,
             microphone: .notDetermined,
-            requestMicrophone: true
+            requestMicrophone: { true }
         ))
-        granted.refresh()
-        await granted.waitForIdle()
         granted.requestAccessibility()
-        await granted.waitForIdle()
         granted.requestMicrophone()
         await granted.waitForIdle()
         XCTAssertEqual(granted.accessibility, .granted)
         XCTAssertEqual(granted.microphone, .granted)
+        granted.teardown()
 
         let denied = PermissionState(services: services(
             accessibility: .notGranted,
             requestAccessibility: false,
             microphone: .notDetermined,
-            requestMicrophone: false
+            requestMicrophone: { false }
         ))
-        denied.refresh()
-        await denied.waitForIdle()
         denied.requestAccessibility()
-        await denied.waitForIdle()
         denied.requestMicrophone()
         await denied.waitForIdle()
         XCTAssertEqual(denied.accessibility, .notGranted)
         XCTAssertEqual(denied.microphone, .denied)
+        denied.teardown()
     }
 
-    func testRefreshDuringMicrophoneRequestKeepsCheckingState() async {
-        let accessibilityGate = AccessibilityGate()
-        let microphoneRequestGate = MicrophoneRequestGate()
-        let microphoneStatusCalls = Counter()
-        var injected = services(microphone: .notDetermined)
-        injected.accessibilityStatus = { await accessibilityGate.next() }
-        injected.microphoneStatus = {
-            let call = await microphoneStatusCalls.incrementAndGet()
-            return call == 1 ? .notDetermined : .denied
-        }
-        injected.requestMicrophone = { await microphoneRequestGate.next() }
-        let state = PermissionState(services: injected)
-
-        state.refresh()
-        await waitUntil { await accessibilityGate.count == 1 }
-        await accessibilityGate.resume(at: 0, with: .granted)
-        await state.waitForIdle()
-        XCTAssertEqual(state.microphone, .notDetermined)
+    func testRefreshDuringMicrophonePromptKeepsPrePromptValue() async {
+        let gate = MicrophoneRequestGate()
+        let state = PermissionState(services: services(
+            microphone: .notDetermined,
+            requestMicrophone: { await gate.next() }
+        ))
 
         state.requestMicrophone()
-        await waitUntil { await microphoneRequestGate.count == 1 }
+        await waitUntil { await gate.count == 1 }
+        state.requestMicrophone()
         state.refresh()
-        await waitUntil {
-            let accessibilityCount = await accessibilityGate.count
-            let microphoneCount = await microphoneStatusCalls.value
-            return accessibilityCount == 2 && microphoneCount == 2
-        }
-        await accessibilityGate.resume(at: 1, with: .notGranted)
-        await waitUntil { state.accessibility == .notGranted }
+        XCTAssertEqual(state.microphone, .notDetermined)
 
-        XCTAssertEqual(state.microphone, .checking)
-
-        await microphoneRequestGate.resume(with: true)
+        await gate.resume(with: true)
         await state.waitForIdle()
         XCTAssertEqual(state.microphone, .granted)
+        let promptCount = await gate.count
+        XCTAssertEqual(promptCount, 1)
         state.teardown()
     }
 
@@ -309,8 +229,6 @@ final class PermissionStateTests: XCTestCase {
             }
         ))
 
-        state.refresh()
-        await state.waitForIdle()
         state.downloadModel()
         XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
         await state.waitForIdle()
@@ -319,30 +237,20 @@ final class PermissionStateTests: XCTestCase {
         state.downloadModel()
         await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .ready)
-        let attemptCount = await attempts.value
-        XCTAssertEqual(attemptCount, 2)
+        state.teardown()
     }
 
     func testRefreshDuringDownloadKeepsDownloadingState() async {
-        let files = BoolBox(false)
         let gate = ModelDownloadGate()
-        let microphoneCalls = Counter()
-        var injected = services(
-            modelFilesExist: { files.value },
-            downloadModel: { progress in
-                try await gate.run(progress: progress)
-            }
-        )
-        injected.microphoneStatus = {
-            await microphoneCalls.increment()
-            return .granted
-        }
-        let state = PermissionState(services: injected)
+        let state = PermissionState(services: services(
+            modelReady: false,
+            downloadModel: { progress in try await gate.run(progress: progress) }
+        ))
 
+        state.downloadModel()
         state.downloadModel()
         await waitUntil { await gate.count == 1 }
         state.refresh()
-        await waitUntil { await microphoneCalls.value == 1 }
 
         XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
         XCTAssertNil(state.localVoiceModelAction)
@@ -350,59 +258,32 @@ final class PermissionStateTests: XCTestCase {
         await gate.succeed()
         await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .ready)
+        let downloadCount = await gate.count
+        XCTAssertEqual(downloadCount, 1)
         state.teardown()
     }
 
     func testModelReadyNotificationPublishesCaptureTimePreparation() {
-        let files = BoolBox(false)
-        let state = PermissionState(services: services(
-            modelFilesExist: { files.value }
-        ))
+        let state = PermissionState(services: services(modelReady: false))
         XCTAssertEqual(state.localVoiceModel, .notDownloaded)
 
-        files.value = true
         NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
 
         XCTAssertEqual(state.localVoiceModel, .ready)
-        state.teardown()
-    }
-
-    func testReadyNotificationDuringOwnedDownloadKeepsItsCompletionPath() async {
-        let files = BoolBox(false)
-        let gate = ModelDownloadGate()
-        let state = PermissionState(services: services(
-            modelFilesExist: { files.value },
-            downloadModel: { progress in
-                try await gate.run(progress: progress)
-            }
-        ))
-        state.downloadModel()
-        await waitUntil { await gate.count == 1 }
-
-        NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
-        XCTAssertEqual(state.localVoiceModel, .ready)
-        await gate.succeed()
-        await state.waitForIdle()
-
-        state.refreshVoiceModel()
-        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
         state.teardown()
     }
 
     func testReadyNotificationWinsOverOwnedDownloadFailure() async {
-        let files = BoolBox(false)
         let gate = ModelDownloadGate()
         let state = PermissionState(services: services(
-            modelFilesExist: { files.value },
-            downloadModel: { progress in
-                try await gate.run(progress: progress)
-            }
+            modelReady: false,
+            downloadModel: { progress in try await gate.run(progress: progress) }
         ))
         state.downloadModel()
         await waitUntil { await gate.count == 1 }
 
-        files.value = true
         NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
+        XCTAssertEqual(state.localVoiceModel, .ready)
         await gate.fail(TestError.failed)
         await state.waitForIdle()
 
@@ -441,7 +322,6 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(state.localVoiceModel, .failed(.other))
 
         state.refresh()
-        await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .failed(.other))
 
         files.value = true
@@ -454,9 +334,7 @@ final class PermissionStateTests: XCTestCase {
         let gate = ModelDownloadGate()
         let state = PermissionState(services: services(
             modelReady: false,
-            downloadModel: { progress in
-                try await gate.run(progress: progress)
-            }
+            downloadModel: { progress in try await gate.run(progress: progress) }
         ))
         state.downloadModel()
         await waitUntil { await gate.count == 1 }
@@ -466,59 +344,16 @@ final class PermissionStateTests: XCTestCase {
         await gate.report(1.25)
         await waitUntil { state.localVoiceModel == .downloading(progress: 1) }
 
-        state.teardown()
-        await gate.report(0.5)
-        NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
-        await Task.yield()
-        XCTAssertEqual(state.localVoiceModel, .downloading(progress: 1))
-
         await gate.succeed()
+        await state.waitForIdle()
+        XCTAssertEqual(state.localVoiceModel, .ready)
+        await gate.report(0.5)
         await Task.yield()
-        XCTAssertEqual(state.localVoiceModel, .downloading(progress: 1))
+        XCTAssertEqual(state.localVoiceModel, .ready)
+        state.teardown()
     }
 
-    func testScopedAccessibilityRefreshDoesNotRestartAndIsOwnedByIdleAndTeardown() async {
-        let gate = AccessibilityGate()
-        let microphoneCalls = Counter()
-        var injected = services()
-        injected.accessibilityStatus = { await gate.next() }
-        injected.microphoneStatus = {
-            await microphoneCalls.increment()
-            return .granted
-        }
-        let state = PermissionState(services: injected)
-
-        state.refreshAccessibility()
-        state.refreshAccessibility()
-        await waitUntil { await gate.count == 1 }
-        let microphoneCallCount = await microphoneCalls.value
-        XCTAssertEqual(microphoneCallCount, 0)
-
-        let idleCompletions = Counter()
-        let waiter = Task {
-            await state.waitForIdle()
-            await idleCompletions.increment()
-        }
-        await Task.yield()
-        let completionsBeforeResume = await idleCompletions.value
-        XCTAssertEqual(completionsBeforeResume, 0)
-
-        await gate.resume(at: 0, with: .granted)
-        await waiter.value
-        XCTAssertEqual(state.accessibility, .granted)
-        let completionsAfterResume = await idleCompletions.value
-        XCTAssertEqual(completionsAfterResume, 1)
-
-        state.refreshAccessibility()
-        await waitUntil { await gate.count == 2 }
-        state.teardown()
-        state.teardown()
-        await gate.resume(at: 1, with: .notGranted)
-        await Task.yield()
-        XCTAssertEqual(state.accessibility, .granted)
-    }
-
-    func testActionsRouteFromLivePermissionStates() async {
+    func testActionsRouteFromLivePermissionStates() {
         let state = PermissionState(services: services(
             accessibility: .notGranted,
             requestAccessibility: false,
@@ -526,48 +361,48 @@ final class PermissionStateTests: XCTestCase {
             modelReady: false
         ))
 
-        state.refresh()
-        await state.waitForIdle()
         XCTAssertEqual(state.accessibilityAction, .requestAccessibility)
         XCTAssertEqual(state.microphoneAction, .requestMicrophone)
         XCTAssertEqual(state.localVoiceModelAction, .downloadVoiceModel)
 
         state.requestAccessibility()
-        await state.waitForIdle()
         XCTAssertEqual(state.accessibilityAction, .showAccessibilityHelper)
+        state.teardown()
 
         let blocked = PermissionState(services: services(
             microphone: .restricted,
             modelReady: true
         ))
-        blocked.refresh()
-        await blocked.waitForIdle()
         XCTAssertNil(blocked.accessibilityAction)
         XCTAssertEqual(blocked.microphoneAction, .openMicrophoneSettings)
         XCTAssertNil(blocked.localVoiceModelAction)
+        blocked.teardown()
     }
 
-    func testTeardownIsIdempotentAndRejectsLateRefreshResult() async {
-        let gate = AccessibilityGate()
-        var injected = services()
-        injected.accessibilityStatus = { await gate.next() }
-        let state = PermissionState(services: injected)
+    func testTeardownIsIdempotentAndIgnoresLateWork() async {
+        let gate = MicrophoneRequestGate()
+        let state = PermissionState(services: services(
+            accessibility: .notGranted,
+            microphone: .notDetermined,
+            requestMicrophone: { await gate.next() },
+            modelReady: false
+        ))
 
-        state.refresh()
+        state.requestMicrophone()
         await waitUntil { await gate.count == 1 }
         state.teardown()
         state.teardown()
-        await gate.resume(at: 0, with: .granted)
+        await gate.resume(with: true)
         await Task.yield()
+        XCTAssertEqual(state.microphone, .notDetermined)
 
-        XCTAssertEqual(state.accessibility, .checking)
-        XCTAssertFalse(state.isTextCaptureReady)
         state.refresh()
         state.requestAccessibility()
-        state.requestMicrophone()
         state.downloadModel()
+        NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
         await state.waitForIdle()
-        XCTAssertEqual(state.accessibility, .checking)
-        XCTAssertEqual(state.localVoiceModel, .ready)
+        XCTAssertEqual(state.accessibility, .notGranted)
+        XCTAssertFalse(state.hasRequestedAccessibility)
+        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
     }
 }

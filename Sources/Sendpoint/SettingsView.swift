@@ -3,17 +3,15 @@ import SendpointDomain
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case voice
+    case capture
     case shortcuts
     case profiles
-    case capture
     case permissions
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .voice: "Voice"
         case .shortcuts: "Shortcuts"
         case .profiles: "Templates"
         case .capture: "General"
@@ -23,7 +21,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .voice: "mic.fill"
         case .shortcuts: "keyboard.fill"
         case .profiles: "text.quote"
         case .capture: "gearshape.fill"
@@ -33,7 +30,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
-        case .voice: Color(red: 0.95, green: 0.32, blue: 0.28)
         case .shortcuts: Color(red: 0.36, green: 0.36, blue: 0.40)
         case .profiles: Color(red: 0.55, green: 0.36, blue: 0.96)
         case .capture: Color(red: 0.20, green: 0.68, blue: 0.40)
@@ -50,7 +46,7 @@ struct SettingsView: View {
     let onShowAccessibilityHelper: () -> Void
     let onRunSetup: () -> Void
 
-    @State private var tab: SettingsTab = .voice
+    @State private var tab: SettingsTab = .capture
     @State private var newProfile: NewProfileDraft?
     @State private var shortcutFeedback: String?
     @State private var inputDevices = AudioInputDeviceList()
@@ -103,7 +99,6 @@ struct SettingsView: View {
                             shortcutRegistrationIssues
                         }
                         switch tab {
-                        case .voice: voiceTab
                         case .shortcuts: shortcutsTab
                         case .profiles: profilesTab
                         case .capture: captureTab
@@ -284,48 +279,6 @@ struct SettingsView: View {
         }
     }
 
-    private var voiceTab: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SettingsSection("How it works") {
-                SettingsCard {
-                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
-                    SettingsDivider()
-                    Picker("Recording mode", selection: Binding(
-                        get: { settings.voiceMode },
-                        set: { settings.setVoiceMode($0) }
-                    )) {
-                        ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(12)
-                    SettingsDivider()
-                    HowToRow(icon: "escape", lead: "Esc", sentence: "Discard the recording.")
-                }
-            }
-            shortcutFeedbackView
-            if !permissionState.isVoiceReady {
-                voiceNeedsAttention
-            }
-            SettingsSection("Microphone") {
-                microphonePicker
-                InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
-                    .padding(.top, 2)
-                Text(microphoneFootnote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .task { await permissionState.watchVoiceModel() }
-        .task(id: levelMonitorKey) {
-            guard windowIsVisible else { levelMonitor.stop(); return }
-            levelMonitor.start(preferredUID: settings.inputDeviceUID)
-        }
-        .onDisappear { levelMonitor.stop() }
-    }
-
     /// Restart the meter when the mic, the window's visibility, or the
     /// permission changes; stop it whenever the tab is not on screen.
     private var levelMonitorKey: String {
@@ -393,7 +346,7 @@ struct SettingsView: View {
                     shortcutRow(
                         icon: "square.and.pencil",
                         title: "Typed note",
-                        detail: "Opens a note box for the selected text. For when you can't talk.",
+                        detail: "A note box for the selected text.",
                         slot: .capture
                     )
                 }
@@ -417,14 +370,14 @@ struct SettingsView: View {
                     shortcutRow(
                         icon: "arrow.left.arrow.right",
                         title: "Switch stack",
-                        detail: "Jump between stacks, or make a new one by typing its name.",
+                        detail: "Jump to another stack, or name a new one.",
                         slot: .switchSession
                     )
                     SettingsDivider()
                     shortcutRow(
                         icon: "trash",
                         title: "Clear stack",
-                        detail: "Empties the current stack. Undo with ⌘Z in the stack window.",
+                        detail: "Empties the stack. Undo with ⌘Z.",
                         slot: .clear
                     )
                 }
@@ -475,45 +428,78 @@ struct SettingsView: View {
     // MARK: - Capture
 
     private var captureTab: some View {
-        SettingsSection("Behavior") {
-            SettingsCard {
-                SettingsToggleRow(
-                    "Paste straight into the app you are in",
-                    subtitle: "The Markdown lands where your cursor is, without a separate paste.",
-                    isOn: $settings.pasteDirectly
-                )
-                SettingsDivider(pastIcon: false)
-                SettingsToggleRow(
-                    "Return to the previous app after saving",
-                    subtitle: "Hands focus back to where you were reading.",
-                    isOn: $settings.restoreFocusAfterSave
-                )
-                SettingsDivider(pastIcon: false)
-                SettingsToggleRow(
-                    "Launch at login",
-                    subtitle: "Keeps the shortcuts ready as soon as you sign in.",
-                    isOn: $settings.launchAtLogin
-                )
+        VStack(alignment: .leading, spacing: 14) {
+            SettingsSection("Voice") {
+                SettingsCard {
+                    SettingsIconRow(
+                        icon: "hand.tap",
+                        title: "Recording mode",
+                        detail: "How the shortcut starts and stops a recording."
+                    ) {
+                        Picker("Recording mode", selection: Binding(
+                            get: { settings.voiceMode },
+                            set: { settings.setVoiceMode($0) }
+                        )) {
+                            ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+                if !permissionState.isVoiceReady {
+                    voiceNeedsAttention
+                }
+            }
+            SettingsSection("Microphone") {
+                microphonePicker
+                InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
+                    .padding(.top, 2)
+                Text(microphoneFootnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            SettingsSection("Behavior") {
+                SettingsCard {
+                    SettingsToggleRow(
+                        "Paste straight into the app you are in",
+                        subtitle: "The Markdown lands where your cursor is, without a separate paste.",
+                        isOn: $settings.pasteDirectly
+                    )
+                    SettingsDivider(pastIcon: false)
+                    SettingsToggleRow(
+                        "Return to the previous app after saving",
+                        subtitle: "Hands focus back to where you were reading.",
+                        isOn: $settings.restoreFocusAfterSave
+                    )
+                    SettingsDivider(pastIcon: false)
+                    SettingsToggleRow(
+                        "Launch at login",
+                        subtitle: "Keeps the shortcuts ready as soon as you sign in.",
+                        isOn: $settings.launchAtLogin
+                    )
+                }
             }
         }
+        .task { await permissionState.watchVoiceModel() }
+        .task(id: levelMonitorKey) {
+            guard windowIsVisible else { levelMonitor.stop(); return }
+            levelMonitor.start(preferredUID: settings.inputDeviceUID)
+        }
+        .onDisappear { levelMonitor.stop() }
     }
 
     // MARK: - Permissions
 
     private var permissionsTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SettingsSection("Needed for every note") {
+            SettingsSection("What Sendpoint needs") {
                 PermissionCapabilityList(
                     permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper,
-                    scope: .accessibility
-                )
-            }
-            SettingsSection("Needed for voice") {
-                PermissionCapabilityList(
-                    permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper,
-                    scope: .voice
+                    onShowAccessibilityHelper: onShowAccessibilityHelper
                 )
             }
             SettingsSection("Setup") {

@@ -21,8 +21,8 @@ enum StackExportMode: Equatable, Sendable {
 
     var shortcutDetail: String {
         switch self {
-        case .paste: "Formats the stack with the active template and pastes it where your cursor is."
-        case .copy: "Formats the stack with the active template and copies it to the clipboard."
+        case .paste: "Fills the template and pastes it at your cursor."
+        case .copy: "Fills the template and copies it to the clipboard."
         }
     }
 

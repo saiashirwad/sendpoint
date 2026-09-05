@@ -6,8 +6,8 @@ enum VoiceRecordingMode: String, CaseIterable, Sendable {
     var title: String { self == .hold ? "Hold" : "Tap" }
     var detail: String {
         switch self {
-        case .hold: "Hold to speak, then release to save to the stack."
-        case .tap: "Press once to speak, then press again to save to the stack."
+        case .hold: "Hold to speak, release to save."
+        case .tap: "Press to speak, press again to save."
         }
     }
 }

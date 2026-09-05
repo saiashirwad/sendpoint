@@ -9,7 +9,7 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(StackExportMode(pasteDirectly: true).shortcutTitle, "Paste stack as Markdown")
         XCTAssertEqual(
             StackExportMode(pasteDirectly: true).shortcutDetail,
-            "Formats the stack with the active template and pastes it where your cursor is."
+            "Fills the template and pastes it at your cursor."
         )
         XCTAssertEqual(StackExportMode(pasteDirectly: true).exportMomentCaption, "When you paste")
         XCTAssertEqual(StackExportMode(pasteDirectly: true).verb, "paste")
@@ -17,7 +17,7 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(StackExportMode(pasteDirectly: false).shortcutTitle, "Copy stack as Markdown")
         XCTAssertEqual(
             StackExportMode(pasteDirectly: false).shortcutDetail,
-            "Formats the stack with the active template and copies it to the clipboard."
+            "Fills the template and copies it to the clipboard."
         )
         XCTAssertEqual(StackExportMode(pasteDirectly: false).exportMomentCaption, "When you copy")
         XCTAssertEqual(StackExportMode(pasteDirectly: false).verb, "copy")

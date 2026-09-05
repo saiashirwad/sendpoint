@@ -1,33 +1,6 @@
 import AppKit
 import SwiftUI
 
-enum PermissionCapabilityScope: Equatable {
-    case setup
-    case voice
-    case accessibility
-
-    var showsAccessibility: Bool {
-        switch self {
-        case .setup, .accessibility: true
-        case .voice: false
-        }
-    }
-
-    var showsMicrophone: Bool {
-        switch self {
-        case .setup, .voice: true
-        case .accessibility: false
-        }
-    }
-
-    var showsVoiceModel: Bool {
-        switch self {
-        case .setup, .voice: true
-        case .accessibility: false
-        }
-    }
-}
-
 struct SetupView: View {
     @Bindable var settings: AppSettings
     @Bindable var permissionState: PermissionState
@@ -65,8 +38,7 @@ struct SetupView: View {
 
                 PermissionCapabilityList(
                     permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper,
-                    scope: .setup
+                    onShowAccessibilityHelper: onShowAccessibilityHelper
                 )
 
                 shortcutGuide
@@ -119,12 +91,6 @@ struct SetupView: View {
                 )
                 SettingsDivider()
                 HowToRow(
-                    icon: "escape",
-                    lead: "Esc",
-                    sentence: "Discard the recording."
-                )
-                SettingsDivider()
-                HowToRow(
                     icon: "square.and.pencil",
                     lead: "Type instead",
                     sentence: "For when you can't talk out loud.",
@@ -138,47 +104,25 @@ struct SetupView: View {
 struct PermissionCapabilityList: View {
     @Bindable var permissionState: PermissionState
     let onShowAccessibilityHelper: () -> Void
-    let scope: PermissionCapabilityScope
 
     init(
         permissionState: PermissionState,
-        onShowAccessibilityHelper: @escaping () -> Void,
-        scope: PermissionCapabilityScope = .setup
+        onShowAccessibilityHelper: @escaping () -> Void
     ) {
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
-        self.scope = scope
     }
 
     var body: some View {
-        if scope.showsVoiceModel {
-            capabilityRows
-                .task {
-                    await permissionState.watchVoiceModel()
-                }
-        } else {
-            capabilityRows
-        }
-    }
-
-    @ViewBuilder
-    private var capabilityRows: some View {
         SettingsCard {
-            if scope.showsAccessibility {
-                accessibilityRow
-            }
-            if scope.showsMicrophone {
-                if scope.showsAccessibility {
-                    SettingsDivider()
-                }
-                microphoneRow
-            }
-            if scope.showsVoiceModel {
-                if scope.showsAccessibility || scope.showsMicrophone {
-                    SettingsDivider()
-                }
-                voiceModelRow
-            }
+            accessibilityRow
+            SettingsDivider()
+            microphoneRow
+            SettingsDivider()
+            voiceModelRow
+        }
+        .task {
+            await permissionState.watchVoiceModel()
         }
     }
 
@@ -186,10 +130,10 @@ struct PermissionCapabilityList: View {
         CapabilityRow(
             icon: "text.viewfinder",
             title: "Accessibility",
-            reason: "Lets Sendpoint read the text you select. Needed for every note.",
+            reason: "Reads the text you select.",
             status: accessibilityStatus,
             actionTitle: accessibilityActionTitle,
-            showsProgress: permissionState.accessibility == .checking,
+            showsProgress: false,
             action: performAccessibilityAction
         )
     }
@@ -198,10 +142,10 @@ struct PermissionCapabilityList: View {
         CapabilityRow(
             icon: "mic",
             title: "Microphone",
-            reason: "Needed for voice notes. Sendpoint only listens while a voice note is open.",
+            reason: "Listens only while a voice note is open.",
             status: microphoneStatus,
             actionTitle: microphoneActionTitle,
-            showsProgress: permissionState.microphone == .checking,
+            showsProgress: false,
             action: performMicrophoneAction
         )
     }
@@ -220,14 +164,13 @@ struct PermissionCapabilityList: View {
 
     private var voiceModelReason: String {
         if case .ready = permissionState.localVoiceModel {
-            return "Speech to text with Parakeet v3, on this Mac."
+            return "Parakeet v3, speech to text on this Mac."
         }
-        return "Speech to text with Parakeet v3. One-time 460 MB download."
+        return "Parakeet v3, a one-time 460 MB download."
     }
 
     private var accessibilityStatus: CapabilityStatus {
         switch permissionState.accessibility {
-        case .checking: .neutral("Checking…")
         case .notGranted: .attention("Required")
         case .granted: .ready("Granted")
         }
@@ -235,7 +178,6 @@ struct PermissionCapabilityList: View {
 
     private var microphoneStatus: CapabilityStatus {
         switch permissionState.microphone {
-        case .checking: .neutral("Checking…")
         case .notDetermined: .neutral("Not enabled")
         case .denied: .attention("Denied")
         case .restricted: .attention("Restricted")
@@ -362,8 +304,12 @@ private struct CapabilityRow: View {
         }
     }
 
+    /// Text then icon, so the icons sit flush right in one column.
     private var statusLabel: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
+            Text(status.title)
+                .font(.callout)
+                .foregroundStyle(status.textColor)
             if showsProgress {
                 ProgressView()
                     .controlSize(.small)
@@ -376,9 +322,6 @@ private struct CapabilityRow: View {
                     .fill(status.color)
                     .frame(width: 7, height: 7)
             }
-            Text(status.title)
-                .font(.callout)
-                .foregroundStyle(status.textColor)
         }
         .accessibilityElement(children: .combine)
     }
