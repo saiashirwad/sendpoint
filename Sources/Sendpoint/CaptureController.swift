@@ -99,7 +99,7 @@ final class CaptureController {
 
     private func begin(_ mode: CaptureMode) {
         guard state != .tornDown else { return }
-        guard let store, !store.isTornDown else {
+        guard let store, store.state != .tornDown else {
             NSSound.beep()
             if mode == .voice { onVoiceCaptureEnded?() }
             return

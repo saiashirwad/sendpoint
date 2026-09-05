@@ -21,6 +21,13 @@ public enum AnnotationStoreMutationOutcome: Equatable, Sendable {
 @MainActor
 @Observable
 public final class AnnotationStore {
+    public enum State: Equatable, Sendable {
+        case idle
+        case processing
+        case halted
+        case tornDown
+    }
+
     private enum CommitOutcome {
         case committed
         case failed(String)
@@ -39,10 +46,9 @@ public final class AnnotationStore {
     private var queuedMutations: [QueuedMutation] = []
     @ObservationIgnored private var processingTask: Task<Void, Never>?
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
-    @ObservationIgnored private var isHalted = false
 
     public private(set) var error: AnnotationStoreError?
-    public private(set) var isTornDown = false
+    public private(set) var state: State = .idle
 
     public var sessions: [Session] {
         document.sessions
@@ -76,7 +82,9 @@ public final class AnnotationStore {
         defaultSession: Session = Session(name: "Default"),
         onChange: @escaping @MainActor @Sendable () -> Void = {}
     ) async throws {
+        try Task.checkCancellation()
         let loaded = try await persistence.load()
+        try Task.checkCancellation()
         let initialDocument: StoreDocument
         if let loaded {
             try SessionDocumentMutations.validate(loaded)
@@ -104,7 +112,7 @@ public final class AnnotationStore {
         _ mutation: SessionDocumentMutation,
         outcome: (@MainActor @Sendable (AnnotationStoreMutationOutcome) -> Void)? = nil
     ) {
-        guard !isTornDown else {
+        guard state != .tornDown else {
             error = .tornDown
             outcome?(.cancelled)
             return
@@ -116,18 +124,22 @@ public final class AnnotationStore {
 
     /// Resumes work retained after a commit failure.
     public func retryPendingMutations() {
-        guard !isTornDown else {
+        switch state {
+        case .tornDown:
             error = .tornDown
-            return
+        case .processing:
+            break
+        case .halted:
+            state = .idle
+            startProcessingIfNeeded()
+        case .idle:
+            startProcessingIfNeeded()
         }
-        guard processingTask == nil, hasPendingMutations else { return }
-        isHalted = false
-        startProcessingIfNeeded()
     }
 
     /// Returns when the active drain completes or halts.
     public func waitForIdle() async {
-        guard !isTornDown, processingTask != nil else { return }
+        guard state == .processing else { return }
         await withCheckedContinuation { continuation in
             idleWaiters.append(continuation)
         }
@@ -136,43 +148,45 @@ public final class AnnotationStore {
     /// Stops accepting changes, discards queued work, and cancels
     /// the one task owned by the store. Repeated calls have no further effect.
     public func teardown() {
-        guard !isTornDown else { return }
-        isTornDown = true
-        isHalted = false
+        guard state != .tornDown else { return }
+        state = .tornDown
         let outcomes = queuedMutations.compactMap(\.outcome)
         queuedMutations.removeAll()
         processingTask?.cancel()
+        processingTask = nil
         outcomes.forEach { $0(.cancelled) }
         resumeIdleWaiters()
     }
 
     private func startProcessingIfNeeded() {
-        guard processingTask == nil, !isHalted else { return }
+        guard state == .idle, hasPendingMutations else { return }
+        state = .processing
         processingTask = Task { [weak self] in
             await self?.processQueue()
         }
     }
 
     private func processQueue() async {
-        while !Task.isCancelled, let queuedMutation = queuedMutations.first {
+        while state == .processing, !Task.isCancelled, let queuedMutation = queuedMutations.first {
             switch SessionDocumentMutations.applying(queuedMutation.mutation, to: document) {
             case let .applied(candidate):
                 switch await commit(candidate) {
                 case .committed:
-                    guard !isTornDown, !Task.isCancelled else {
+                    guard state == .processing, !Task.isCancelled else {
                         finishProcessing()
                         return
                     }
                     queuedMutations.removeFirst()
                     queuedMutation.outcome?(.committed)
                 case let .failed(message):
-                    guard !isTornDown else {
+                    guard state != .tornDown else {
                         finishProcessing()
                         return
                     }
-                    isHalted = true
+                    // Release the failed drain before calling client code so
+                    // a retry from the callback can own a new processing task.
+                    finishProcessing(nextState: .halted)
                     queuedMutation.outcome?(.commitFailed(message))
-                    finishProcessing()
                     return
                 case .cancelled:
                     finishProcessing()
@@ -199,21 +213,23 @@ public final class AnnotationStore {
         } catch is CancellationError {
             return .cancelled
         } catch {
-            guard !isTornDown, !Task.isCancelled else { return .cancelled }
+            guard state == .processing, !Task.isCancelled else { return .cancelled }
             let message = String(describing: error)
             self.error = .commitFailed(message)
             return .failed(message)
         }
 
-        guard !isTornDown else { return .cancelled }
+        guard state != .tornDown else { return .cancelled }
         document = candidate
         error = nil
         onChange()
         return .committed
     }
 
-    private func finishProcessing() {
+    private func finishProcessing(nextState: State = .idle) {
+        guard state == .processing else { return }
         processingTask = nil
+        state = nextState
         resumeIdleWaiters()
     }
 

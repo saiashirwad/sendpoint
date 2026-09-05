@@ -1,7 +1,5 @@
 import Foundation
 
-/// An application family and its enrichment strategy. The probe owns execution,
-/// validation, cancellation and fallback; providers do not start independent tasks.
 struct ProvenanceProvider: Sendable {
     let bundleIDs: Set<String>
     let lookup: ProvenanceProbe.Lookup
