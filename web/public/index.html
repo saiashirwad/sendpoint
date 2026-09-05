@@ -218,16 +218,17 @@
     /* Badge pill has no side bearing, so wifi carries an extra 0.075em left
        to keep the badge/wifi/battery/toggles gaps optically equal. */
     .menubar .glyph.wifi { margin-left: 0.075em; }
-    .menubar .item { display: flex; align-items: center; gap: 0.4em; }
+    .menubar .item { display: flex; align-items: center; gap: 0.45em; }
     .menubar .item .sp { width: 1.3em; height: 1.3em; }
+    /* the count sits beside the icon like a real status item, and takes no
+       room at all while the stack is empty */
     .menubar .badge {
-      min-width: 1.5em; height: 1.5em; padding: 0 0.4em;
-      border-radius: 1em; background: #fff; color: #111;
-      font-weight: 600; font-size: 0.85em;
-      display: inline-flex; align-items: center; justify-content: center;
-      transform: scale(0); transition: transform 0.25s cubic-bezier(.2,1.4,.5,1);
+      display: none; font-weight: 500; font-size: 1em; line-height: 1;
+      transform-origin: left center;
+      animation: badge-in 0.25s cubic-bezier(.2,1.4,.5,1);
     }
-    .menubar .badge.on { transform: scale(1); }
+    .menubar .badge.on { display: inline; }
+    @keyframes badge-in { from { transform: scale(0.6); opacity: 0; } }
     .menubar .badge.bump { animation: bump 0.35s ease; }
     @keyframes bump { 40% { transform: scale(1.4); } }
 
