@@ -27,15 +27,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .permissions: "checkmark.shield.fill"
         }
     }
-
-    var tint: Color {
-        switch self {
-        case .shortcuts: Color(red: 0.36, green: 0.36, blue: 0.40)
-        case .profiles: Color(red: 0.55, green: 0.36, blue: 0.96)
-        case .capture: Color(red: 0.20, green: 0.68, blue: 0.40)
-        case .permissions: Color(red: 0.95, green: 0.55, blue: 0.16)
-        }
-    }
 }
 
 struct SettingsView: View {
@@ -780,7 +771,7 @@ private struct SettingsSidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 9) {
-                SidebarTile(icon: tab.icon, tint: tab.tint)
+                SidebarTile(icon: tab.icon, isSelected: isSelected)
                 Text(tab.title)
                     .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                 Spacer(minLength: 0)
@@ -791,55 +782,30 @@ private struct SettingsSidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isSelected ? Color.white : Color.primary)
+        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(isSelected
-                    ? Color.accentColor
-                    : Color.primary.opacity(hovering ? 0.05 : 0))
+                .fill(Color.primary.opacity(isSelected ? 0.09 : hovering ? 0.04 : 0))
         )
         .onHover { hovering = $0 }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
-/// A coloured tile in the System Settings idiom: a soft top-lit gradient
-/// over the tint, a hairline rim that catches the light, and a white glyph.
+/// A monochrome tile: a faint fill, a hairline rim, and a glyph that takes
+/// the row's text colour so every section reads as one set.
 private struct SidebarTile: View {
     let icon: String
-    let tint: Color
+    let isSelected: Bool
 
     private let shape = RoundedRectangle(cornerRadius: 6.5, style: .continuous)
 
     var body: some View {
         Image(systemName: icon)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.18), radius: 0.5, y: 0.5)
             .frame(width: 24, height: 24)
-            .background(
-                shape.fill(tint)
-                    .overlay(
-                        shape.fill(
-                            LinearGradient(
-                                colors: [.white.opacity(0.28), .white.opacity(0.0), .black.opacity(0.06)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                    )
-            )
-            .overlay(
-                shape.strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.55), .white.opacity(0.08)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.75
-                )
-            )
-            .clipShape(shape)
+            .background(shape.fill(Color.primary.opacity(isSelected ? 0.12 : 0.07)))
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75))
             .accessibilityHidden(true)
     }
 }
