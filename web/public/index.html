@@ -319,8 +319,8 @@
     .composer.flash { border-color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 
     /* voice capsule, matches the app's overlay: a low wordless pill whose
-       only moving part is a single ribbon of sound. A dim quote badge with
-       the word count appears beside it when the note is tied to a selection. */
+       only moving part is a single ribbon of sound. A dim word count appears
+       beside it when the note is tied to a selection. */
     .capsule {
       position: absolute; left: 50%; bottom: 3.2em; z-index: 10;
       transform: translate(-50%, 1.2em) scale(0.92);
@@ -328,21 +328,26 @@
       display: flex; align-items: center; gap: 0.75em;
       height: 2.6em; padding: 0 1.1em;
       border-radius: 3em;
+      --ink: 255, 255, 255;
       background: rgba(15, 15, 15, 0.94);
-      box-shadow: 0 6px 14px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.1);
-      color: #fff;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(var(--ink), 0.1);
+      color: rgb(var(--ink));
       transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.2,.9,.3,1.2);
       pointer-events: none;
     }
     .capsule.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    /* like the app, the capsule inverts against the scheme so it never sinks
+       into a same-coloured page: white paper and black ink in dark mode */
+    @media (prefers-color-scheme: dark) {
+      .capsule { --ink: 0, 0, 0; background: rgba(250, 250, 250, 0.9); box-shadow: 0 6px 14px rgba(0,0,0,0.45); }
+    }
     .capsule .tether {
-      display: none; align-items: center; gap: 0.38em;
+      display: none; align-items: center;
       font-size: 0.8em; font-weight: 500; font-variant-numeric: tabular-nums;
-      color: rgba(255,255,255,0.55); white-space: nowrap;
+      color: rgba(var(--ink), 0.55); white-space: nowrap;
       animation: tether-in 0.32s cubic-bezier(.2,.9,.3,1.1);
     }
-    .capsule .tether .q { font-size: 0.85em; font-weight: 700; color: rgba(255,255,255,0.35); }
-    .capsule .rule { display: none; width: 1px; height: 0.9em; background: rgba(255,255,255,0.12); flex: none; }
+    .capsule .rule { display: none; width: 1px; height: 0.9em; background: rgba(var(--ink), 0.12); flex: none; }
     .capsule.tethered .tether { display: flex; }
     .capsule.tethered .rule { display: block; }
     @keyframes tether-in { from { opacity: 0; transform: translateX(0.4em); } }
@@ -508,7 +513,7 @@
         <div class="subs" id="subs"><span class="line" id="subline"></span></div>
 
         <div class="capsule" id="capsule">
-          <span class="tether"><span class="q">&#10077;</span><span id="ct"></span></span>
+          <span class="tether" id="ct"></span>
           <span class="rule"></span>
           <canvas id="wave"></canvas>
         </div>
@@ -542,22 +547,14 @@
     /* ---------- ribbon (same shapes as the app: a mirrored envelope of loudness while
        live, a breathing hairline while idle, a passing light while transcribing) ---------- */
     const wctx = wave.getContext("2d");
+    const inkOf = () => getComputedStyle(capsule).getPropertyValue("--ink").trim() || "255, 255, 255";
+    let ink = inkOf();
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { ink = inkOf(); });
     let mode = "idle";          // idle | live | busy
     let energy = 0;             // target loudness while speaking
     const samples = new Array(48).fill(0);
     let lastPush = 0;
     let breath = 0;             // smoothed loudness the headline breathes with
-    // Siri-ish light: full strength on the outline, a third inside. One
-    // period of colour spans the ribbon and drifts slowly to the right.
-    const HUES = ["#9ad4f2", "#b3a6f2", "#eea6bf", "#f0c895", "#a4dcc0", "#9ad4f2"];
-    const rainbow = (w, t) => {
-      const phase = (t * 0.12) % 1;
-      const x0 = -w * (1 - phase);
-      const g = wctx.createLinearGradient(x0, 0, x0 + 2 * w, 0);
-      const n = HUES.length - 1;
-      for (let k = 0; k <= 2 * n; k++) g.addColorStop(k / (2 * n), HUES[k % n]);
-      return g;
-    };
     const hairline = (w, h, style, width) => {
       wctx.strokeStyle = style; wctx.lineWidth = width; wctx.lineCap = "round";
       wctx.beginPath(); wctx.moveTo(0, h / 2); wctx.lineTo(w, h / 2); wctx.stroke();
@@ -602,20 +599,18 @@
         wctx.lineTo(bottom[0].x, bottom[0].y);
         smoothCurve(bottom);
         wctx.closePath();
-        const light = rainbow(w, t);
-        wctx.globalAlpha = 0.24; wctx.fillStyle = light; wctx.fill();
-        wctx.globalAlpha = 0.9; wctx.strokeStyle = light; wctx.lineWidth = 1.15; wctx.lineJoin = "round"; wctx.stroke();
-        wctx.globalAlpha = 1;
+        wctx.fillStyle = `rgba(${ink},0.22)`; wctx.fill();
+        wctx.strokeStyle = `rgba(${ink},0.92)`; wctx.lineWidth = 1.1; wctx.lineJoin = "round"; wctx.stroke();
       } else if (mode === "busy") {
-        hairline(w, h, "rgba(255,255,255,0.18)", 1.4);
+        hairline(w, h, `rgba(${ink},0.18)`, 1.4);
         const sweep = (t * 0.85) % 1;
         const center = (-0.25 + 1.5 * sweep) * w;
         const g = wctx.createLinearGradient(center - 34, midY, center + 34, midY);
-        g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+        g.addColorStop(0, `rgba(${ink},0)`); g.addColorStop(0.5, `rgba(${ink},0.95)`); g.addColorStop(1, `rgba(${ink},0)`);
         hairline(w, h, g, 1.6);
       } else {
         const breath = 0.5 + 0.5 * Math.sin(t * 2.2);
-        hairline(w, h, `rgba(255,255,255,${(0.22 + 0.12 * breath).toFixed(3)})`, 1.4);
+        hairline(w, h, `rgba(${ink},${(0.22 + 0.12 * breath).toFixed(3)})`, 1.4);
       }
       requestAnimationFrame(draw);
     };

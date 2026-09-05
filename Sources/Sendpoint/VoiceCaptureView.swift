@@ -5,39 +5,38 @@ import SwiftUI
 /// language: it swells with the voice while listening, settles into a hairline
 /// with a passing light while the transcript is made, and turns amber only
 /// when something actually went wrong. When the note is tied to a selection,
-/// a dim quote badge with the word count sits beside the ribbon, so it is
-/// clear the words will attach to something without echoing it back.
+/// a dim word count sits beside the ribbon, so it is clear the words will
+/// attach to something without echoing it back. The capsule inverts against
+/// the system appearance so it never sinks into a same-coloured desktop.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
 
+    @Environment(\.colorScheme) private var systemScheme
     @State private var appeared = false
+
+    private var palette: OverlayPalette { .against(systemScheme) }
 
     var body: some View {
         HStack(spacing: 12) {
             if let tether {
-                HStack(spacing: 5) {
-                    Image(systemName: "quote.opening")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.35))
-                    Text(tether)
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(Color.white.opacity(0.55))
-                }
-                .lineLimit(1)
-                .fixedSize()
-                .transition(.opacity.combined(with: .offset(x: 6)))
+                Text(tether)
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(palette.ink.opacity(0.55))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .transition(.opacity.combined(with: .offset(x: 6)))
                 Rectangle()
-                    .fill(Color.white.opacity(0.12))
+                    .fill(palette.ink.opacity(0.12))
                     .frame(width: 1, height: 12)
                     .transition(.opacity)
             }
-            Ribbon(mode: ribbonMode, samples: meter.samples)
+            Ribbon(mode: ribbonMode, samples: meter.samples, ink: palette.ink, amber: palette.amber)
                 .frame(width: 112, height: 22)
             if let failureMessage {
                 Text(failureMessage)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Ribbon.amber)
+                    .foregroundStyle(palette.amber)
                     .lineLimit(1)
                     .fixedSize()
                     .transition(.opacity.combined(with: .offset(x: -6)))
@@ -45,11 +44,11 @@ struct VoiceCaptureView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 34)
-        .background(Capsule().fill(Color(white: 0.06).opacity(0.94)))
+        .background(Capsule().fill(palette.paper))
         .overlay(
             Capsule().strokeBorder(
                 LinearGradient(
-                    colors: [Color.white.opacity(0.14), Color.white.opacity(0.03)],
+                    colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -61,7 +60,7 @@ struct VoiceCaptureView: View {
         .opacity(appeared ? 1 : 0)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
         .animation(.easeOut(duration: 0.18), value: failureMessage)
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, palette.contentScheme)
         .padding(24)
         // The hosting panel is wider than the capsule so the tether and a
         // failure message can appear later without the window resizing.
@@ -109,6 +108,36 @@ struct VoiceCaptureView: View {
     }
 }
 
+/// Ink on paper for the capsule, chosen against the system appearance: a
+/// near-black capsule with white ink over light desktops, a translucent white
+/// capsule with black ink over dark ones.
+private struct OverlayPalette {
+    let ink: Color
+    let paper: Color
+    let amber: Color
+    /// What the capsule's own contents render as, the opposite of the system.
+    let contentScheme: ColorScheme
+
+    static func against(_ system: ColorScheme) -> OverlayPalette {
+        switch system {
+        case .dark:
+            OverlayPalette(
+                ink: .black,
+                paper: Color(white: 0.98).opacity(0.9),
+                amber: Color(red: 0.76, green: 0.42, blue: 0.0),
+                contentScheme: .light
+            )
+        default:
+            OverlayPalette(
+                ink: .white,
+                paper: Color(white: 0.06).opacity(0.94),
+                amber: Color(red: 1.0, green: 0.72, blue: 0.38),
+                contentScheme: .dark
+            )
+        }
+    }
+}
+
 /// Pure text shaping for the overlay.
 enum VoiceOverlayCopy {
     /// How much is selected, without repeating it. `nil` when nothing is.
@@ -130,10 +159,10 @@ private struct Ribbon: View {
         case flat
     }
 
-    static let amber = Color(red: 1.0, green: 0.72, blue: 0.38)
-
     let mode: Mode
     let samples: [Float]
+    let ink: Color
+    let amber: Color
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 60, paused: mode == .flat)) { context in
@@ -143,23 +172,23 @@ private struct Ribbon: View {
                 switch mode {
                 case .live:
                     let path = envelope(levels: smoothedLevels(), in: size)
-                    canvas.fill(path, with: .color(Color.white.opacity(0.22)))
+                    canvas.fill(path, with: .color(ink.opacity(0.22)))
                     canvas.stroke(
                         path,
-                        with: .color(Color.white.opacity(0.92)),
+                        with: .color(ink.opacity(0.92)),
                         style: StrokeStyle(lineWidth: 1.1, lineJoin: .round)
                     )
                 case .idle:
                     let breath = 0.5 + 0.5 * sin(time * 2.2)
                     canvas.stroke(
                         hairline(in: size),
-                        with: .color(Color.white.opacity(0.22 + 0.12 * breath)),
+                        with: .color(ink.opacity(0.22 + 0.12 * breath)),
                         style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                 case .thinking:
                     canvas.stroke(
                         hairline(in: size),
-                        with: .color(Color.white.opacity(0.18)),
+                        with: .color(ink.opacity(0.18)),
                         style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                     let sweep = (time * 0.85).truncatingRemainder(dividingBy: 1)
@@ -167,7 +196,7 @@ private struct Ribbon: View {
                     canvas.stroke(
                         hairline(in: size),
                         with: .linearGradient(
-                            Gradient(colors: [.clear, Color.white.opacity(0.95), .clear]),
+                            Gradient(colors: [.clear, ink.opacity(0.95), .clear]),
                             startPoint: CGPoint(x: center - 34, y: midY),
                             endPoint: CGPoint(x: center + 34, y: midY)
                         ),
@@ -176,7 +205,7 @@ private struct Ribbon: View {
                 case .flat:
                     canvas.stroke(
                         hairline(in: size),
-                        with: .color(Self.amber.opacity(0.85)),
+                        with: .color(amber.opacity(0.85)),
                         style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
                     )
                 }
