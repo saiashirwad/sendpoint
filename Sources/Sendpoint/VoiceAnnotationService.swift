@@ -36,10 +36,6 @@ final class VoiceAnnotationService {
 
     var isRecording: Bool { engine?.isRunning == true }
 
-    var isMicrophoneAuthorized: Bool {
-        PermissionCheck.isMicrophoneAuthorized
-    }
-
     func isVoiceModelReady() async -> Bool {
         await transcriber.isReady()
     }

@@ -265,7 +265,6 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
 
         let baseline = try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Note"))
         XCTAssertEqual(owner.annotationForSave(baseline, target: target), baseline)
-        owner.cancelBeforeSave(for: target) // successful UI teardown must not cancel saved work
         XCTAssertEqual(owner.pendingTaskCount, 1)
 
         let enriched = Provenance(
@@ -385,7 +384,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         let first = makeOwner(gate: firstGate) { firstUpdates.append($0) }
         let firstTarget = makeTarget()
         first.start(for: firstTarget)
-        first.cancelBeforeSave(for: firstTarget)
+        first.abandon(for: firstTarget)
         await firstGate.resolve(ProvenanceFields(windowTitle: "Late"))
         XCTAssertEqual(first.pendingCount, 0)
         XCTAssertTrue(firstUpdates.isEmpty)
@@ -428,7 +427,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
             owner.annotationForSave(staleAnnotation, target: staleTarget),
             staleAnnotation
         )
-        owner.cancelBeforeSave(for: staleTarget)
+        owner.abandon(for: staleTarget)
         XCTAssertEqual(owner.pendingCount, 1)
 
         await gate.resolve(ProvenanceFields(windowTitle: "Original"))

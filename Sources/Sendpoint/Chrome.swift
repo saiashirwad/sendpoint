@@ -49,27 +49,14 @@ struct ShortcutHint: View {
     }
 }
 
-/// Soft inset surface used for quotes and fields.
-struct InsetSurface: ViewModifier {
-    var radius: CGFloat = 8
-    var fill: Color = Color.primary.opacity(0.045)
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(fill)
-            )
+extension View {
+    /// Soft inset surface used for quotes and fields.
+    func insetSurface(radius: CGFloat = 8, fill: Color = Color.primary.opacity(0.045)) -> some View {
+        background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(fill))
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
             )
-    }
-}
-
-extension View {
-    func insetSurface(radius: CGFloat = 8, fill: Color = Color.primary.opacity(0.045)) -> some View {
-        modifier(InsetSurface(radius: radius, fill: fill))
     }
 }
 
@@ -289,36 +276,6 @@ struct SettingsIconRow<Trailing: View>: View {
         }
         .padding(.horizontal, SettingsMetrics.rowInset)
         .padding(.vertical, 10)
-    }
-}
-
-/// A shortcut that cannot be changed, drawn to the same size as `KeyRecorder`
-/// so the two sit level in one card.
-struct StaticKeycap: View {
-    let text: String
-
-    init(_ text: String) { self.text = text }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12.5, weight: .medium, design: .monospaced))
-            .tracking(1.2)
-            .foregroundStyle(.primary)
-            .frame(width: 124, height: 26)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.primary.opacity(0.16))
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
-                        .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color.primary.opacity(0.05)))
-                        .padding(.horizontal, 1)
-                        .padding(.top, 1)
-                        .padding(.bottom, 2)
-                }
-            )
-            .accessibilityLabel("Shortcut \(text)")
     }
 }
 

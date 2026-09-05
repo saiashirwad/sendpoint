@@ -47,7 +47,9 @@ enum CaptureAction {
     case teardown
 }
 
-enum CaptureEffect {
+enum CaptureSurface { case editor, voice }
+
+enum CaptureEffect: Equatable {
     case readSelection(AnnotationCaptureContext, CaptureMode)
     case startRecording(AnnotationCaptureContext)
     case transcribe(AnnotationCaptureContext)
@@ -56,8 +58,7 @@ enum CaptureEffect {
     case commit(CaptureSaveRequest)
     case retry
     case abandon(AnnotationCaptureTarget)
-    case showEditor
-    case showVoice
+    case show(CaptureSurface)
     case focusEditor
     case failureTimer(AnnotationCaptureContext)
     case close
@@ -89,7 +90,7 @@ enum CaptureState: Equatable {
             self = .active(CaptureSession(context: context, mode: mode, phase: mode == .text
                 ? .selectingText : .selectingVoice(recording: false, finishRequested: false)))
             return mode == .text ? [.readSelection(context, mode)]
-                : [.showVoice, .startRecording(context), .readSelection(context, mode)]
+                : [.show(.voice), .startRecording(context), .readSelection(context, mode)]
         }
         guard var session else { return [] }
         var effects: [CaptureEffect] = []
@@ -100,7 +101,7 @@ enum CaptureState: Equatable {
             switch session.phase {
             case .selectingText:
                 session.phase = .editing("")
-                effects = [.probe(target), .showEditor]
+                effects = [.probe(target), .show(.editor)]
             case let .selectingVoice(recording, finishRequested):
                 session.phase = recording ? (finishRequested ? .transcribing : .recording) : .startingVoice
                 effects = [.probe(target)]
@@ -193,7 +194,7 @@ enum CaptureState: Equatable {
                 session.phase = .saveFailed(request, message: "The note wasn’t saved.",
                     retryable: false, targetMissing: false)
             }
-            effects = [.showEditor]
+            effects = [.show(.editor)]
         case .retry:
             guard case let .saveFailed(request, _, true, _) = session.phase else { return [] }
             session.phase = .saving(request)
@@ -221,12 +222,5 @@ enum CaptureState: Equatable {
     private mutating func finish(_ session: CaptureSession, abandon: Bool = true) -> [CaptureEffect] {
         self = .idle
         return (abandon ? session.target.map { [CaptureEffect.abandon($0)] } ?? [] : []) + [.close]
-    }
-}
-
-extension AnnotationCaptureTarget {
-    var context: AnnotationCaptureContext {
-        AnnotationCaptureContext(sessionID: sessionID, captureID: captureID,
-            annotationID: annotationID, createdAt: createdAt)
     }
 }

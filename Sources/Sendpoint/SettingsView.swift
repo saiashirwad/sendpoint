@@ -317,7 +317,6 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            shortcutFeedbackView
         }
         .task { await permissionState.watchVoiceModel() }
         .task(id: levelMonitorKey) {
@@ -565,7 +564,6 @@ struct SettingsView: View {
     }
 }
 
-/// A small anchored prompt: type a name, press Return.
 /// A small anchored prompt: type a name, press Return.
 private struct NewProfilePopover: View {
     @Binding var name: String

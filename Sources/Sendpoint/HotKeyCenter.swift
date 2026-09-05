@@ -21,6 +21,7 @@ final class HotKeyCenter {
     }
     private var handlers: [UInt32: Handler] = [:]
     private var refs: [UInt32: EventHotKeyRef] = [:]
+    private var names: [String: UInt32] = [:]
     private var nextID: UInt32 = 1
     private var handlerInstalled = false
     private let registerEvent: RegisterEvent
@@ -63,10 +64,8 @@ final class HotKeyCenter {
 
         let id = nextID
         nextID += 1
-        var ref: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id) // 'CLAN'
-        let (status, registeredRef) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
-        ref = registeredRef
+        let (status, ref) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
         guard status == noErr, let ref else {
             Diag.log("hotkey FAILED name=\(name) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
             return .failed(status)
@@ -84,7 +83,6 @@ final class HotKeyCenter {
         handlers[id] = nil
     }
 
-    private var names: [String: UInt32] = [:]
 
     func fire(id: UInt32, released: Bool) {
         guard let handler = handlers[id] else { return }

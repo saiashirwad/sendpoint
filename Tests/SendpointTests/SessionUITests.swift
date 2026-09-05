@@ -188,7 +188,6 @@ extension SessionUITests {
 
         state.move(by: -1, in: rows)
         XCTAssertEqual(state.highlight, .create("New"), "moving up from the top wraps")
-        XCTAssertTrue(state.highlightsCreateRow)
         XCTAssertNil(state.selectedSessionID)
 
         state.move(by: 1, in: rows)

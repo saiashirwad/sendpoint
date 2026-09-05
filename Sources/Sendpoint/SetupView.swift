@@ -82,7 +82,7 @@ struct SetupView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                    Button(primaryButtonTitle) {
+                    Button("Start Using Sendpoint") {
                         settings.completeSetup()
                         onComplete()
                     }
@@ -104,10 +104,6 @@ struct SetupView: View {
         }
         .frame(width: 640, height: 620)
         .scrollIndicators(.automatic)
-    }
-
-    private var primaryButtonTitle: String {
-        "Start Using Sendpoint"
     }
 
     private var shortcutGuide: some View {

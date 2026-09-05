@@ -181,28 +181,22 @@ enum SelectionCapture {
         }
     }
 
-    private struct PasteboardItemSnapshot {
-        var contents: [NSPasteboard.PasteboardType: Data]
-    }
+    private typealias PasteboardSnapshot = [[NSPasteboard.PasteboardType: Data]]
 
-    private static func snapshot(_ pb: NSPasteboard) -> [PasteboardItemSnapshot] {
+    private static func snapshot(_ pb: NSPasteboard) -> PasteboardSnapshot {
         (pb.pasteboardItems ?? []).map { item in
-            var contents: [NSPasteboard.PasteboardType: Data] = [:]
-            for type in item.types {
-                if let data = item.data(forType: type) { contents[type] = data }
-            }
-            return PasteboardItemSnapshot(contents: contents)
+            Dictionary(item.types.compactMap { type in item.data(forType: type).map { (type, $0) } },
+                       uniquingKeysWith: { $1 })
         }
     }
 
-    private static func restore(_ snapshots: [PasteboardItemSnapshot], to pb: NSPasteboard) {
+    private static func restore(_ snapshot: PasteboardSnapshot, to pb: NSPasteboard) {
         pb.clearContents()
-        guard !snapshots.isEmpty else { return }
-        let items = snapshots.map { snap -> NSPasteboardItem in
+        guard !snapshot.isEmpty else { return }
+        pb.writeObjects(snapshot.map { contents in
             let item = NSPasteboardItem()
-            for (type, data) in snap.contents { item.setData(data, forType: type) }
+            for (type, data) in contents { item.setData(data, forType: type) }
             return item
-        }
-        pb.writeObjects(items)
+        })
     }
 }

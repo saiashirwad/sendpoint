@@ -134,13 +134,8 @@ final class AppSettings {
     private enum Key {
         static let profiles = "profiles"
         static let activeProfileID = "activeProfileID"
-        static let voiceCaptureCombo = "voiceCaptureCombo"
         static let voiceMode = "voiceMode"
-        static let captureCombo = "captureCombo"
-        static let copyCombo = "copyCombo"
-        static let stackCombo = "stackCombo"
-        static let switchSessionCombo = "switchSessionCombo"
-        static let clearCombo = "clearCombo"
+        static func combo(_ slot: ShortcutSlot) -> String { slot.rawValue + "Combo" }
         static let pasteDirectly = "pasteDirectly"
         static let restoreFocusAfterSave = "restoreFocusAfterSave"
         static let hasCompletedSetup = "hasCompletedSetup"
@@ -148,9 +143,26 @@ final class AppSettings {
         static let inputDeviceName = "inputDeviceName"
     }
 
+    private static let defaultCombos: [ShortcutSlot: KeyCombo] = [
+        .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command]),
+        .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
+        .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
+        .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
+        .switchSession: KeyCombo(keyCode: UInt16(kVK_ANSI_K), modifiers: [.control, .command]),
+        .clear: KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command]),
+    ]
+
     private let defaults: UserDefaults
 
-    private(set) var voiceCaptureCombo: KeyCombo { didSet { persist(voiceCaptureCombo, key: Key.voiceCaptureCombo); onHotKeysChanged?() } }
+    /// One combo per slot, filled in by `init`.
+    private var combos: [ShortcutSlot: KeyCombo]
+    var voiceCaptureCombo: KeyCombo { combo(for: .voiceCapture) }
+    var captureCombo: KeyCombo { combo(for: .capture) }
+    var copyCombo: KeyCombo { combo(for: .copy) }
+    var stackCombo: KeyCombo { combo(for: .stack) }
+    var switchSessionCombo: KeyCombo { combo(for: .switchSession) }
+    var clearCombo: KeyCombo { combo(for: .clear) }
+
     private(set) var voiceMode: VoiceRecordingMode
 
     func setVoiceMode(_ mode: VoiceRecordingMode) {
@@ -159,12 +171,6 @@ final class AppSettings {
         defaults.set(mode.rawValue, forKey: Key.voiceMode)
         onHotKeysChanged?()
     }
-
-    private(set) var captureCombo: KeyCombo { didSet { persist(captureCombo, key: Key.captureCombo); onHotKeysChanged?() } }
-    private(set) var copyCombo: KeyCombo { didSet { persist(copyCombo, key: Key.copyCombo); onHotKeysChanged?() } }
-    private(set) var stackCombo: KeyCombo { didSet { persist(stackCombo, key: Key.stackCombo); onHotKeysChanged?() } }
-    private(set) var switchSessionCombo: KeyCombo { didSet { persist(switchSessionCombo, key: Key.switchSessionCombo); onHotKeysChanged?() } }
-    private(set) var clearCombo: KeyCombo { didSet { persist(clearCombo, key: Key.clearCombo); onHotKeysChanged?() } }
 
     private(set) var shortcutRegistrationIssues: [ShortcutRegistrationIssue] = []
 
@@ -217,19 +223,13 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        voiceCaptureCombo = AppSettings.read(Key.voiceCaptureCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command])
+        combos = Self.defaultCombos.merging(
+            ShortcutSlot.allCases.compactMap { slot in
+                AppSettings.read(Key.combo(slot), from: defaults).map { (slot, $0) }
+            },
+            uniquingKeysWith: { _, stored in stored }
+        )
         voiceMode = defaults.string(forKey: Key.voiceMode).flatMap(VoiceRecordingMode.init(rawValue:)) ?? .hold
-        captureCombo = AppSettings.read(Key.captureCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command])
-        copyCombo = AppSettings.read(Key.copyCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command])
-        stackCombo = AppSettings.read(Key.stackCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command])
-        switchSessionCombo = AppSettings.read(Key.switchSessionCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_ANSI_K), modifiers: [.control, .command])
-        clearCombo = AppSettings.read(Key.clearCombo, from: defaults)
-            ?? KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command])
 
         let decoded = defaults.data(forKey: Key.profiles)
             .flatMap { try? JSONDecoder().decode([Profile].self, from: $0) }
@@ -275,16 +275,7 @@ final class AppSettings {
         defaults.set(true, forKey: Key.hasCompletedSetup)
     }
 
-    func combo(for slot: ShortcutSlot) -> KeyCombo {
-        switch slot {
-        case .voiceCapture: voiceCaptureCombo
-        case .capture: captureCombo
-        case .copy: copyCombo
-        case .stack: stackCombo
-        case .switchSession: switchSessionCombo
-        case .clear: clearCombo
-        }
-    }
+    func combo(for slot: ShortcutSlot) -> KeyCombo { combos[slot]! }
 
     func shortcutConflict(for proposed: KeyCombo, excluding slot: ShortcutSlot) -> ShortcutConflict? {
         guard proposed.isValid else { return .invalid }
@@ -308,14 +299,9 @@ final class AppSettings {
         if let conflict = shortcutConflict(for: proposed, excluding: slot) {
             throw conflict
         }
-        switch slot {
-        case .voiceCapture: voiceCaptureCombo = proposed
-        case .capture: captureCombo = proposed
-        case .copy: copyCombo = proposed
-        case .stack: stackCombo = proposed
-        case .switchSession: switchSessionCombo = proposed
-        case .clear: clearCombo = proposed
-        }
+        combos[slot] = proposed
+        persist(proposed, key: Key.combo(slot))
+        onHotKeysChanged?()
     }
 
     func updateShortcutRegistrationIssues(_ issues: [ShortcutRegistrationIssue]) {

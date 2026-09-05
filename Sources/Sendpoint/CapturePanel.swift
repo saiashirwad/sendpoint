@@ -117,9 +117,7 @@ final class CaptureWindows {
 
         self.panel = panel
 
-        // Synchronous: the stack window must be out of the way before we
-        // activate, or activating drags it forward with the panel.
-        NotificationCenter.default.post(name: .captureWillPresent, object: nil)
+        model.onWillPresentEditor?()
 
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -225,9 +223,4 @@ final class CaptureWindows {
     private func screenContaining(point: NSPoint) -> NSScreen? {
         NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
     }
-
-}
-
-extension Notification.Name {
-    static let captureWillPresent = Notification.Name("Sendpoint.captureWillPresent")
 }

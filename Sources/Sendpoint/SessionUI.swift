@@ -130,15 +130,9 @@ struct QuickSwitchListing: Equatable {
 
     init(facts: SessionUIFacts, query: String) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedQuery = SessionDocumentMutations.normalizedSessionName(trimmed)
-        sessions = facts.sessions.filter { session in
-            guard let normalizedQuery else { return true }
-            let name = SessionDocumentMutations.normalizedSessionName(session.name) ?? ""
-            return name.contains(normalizedQuery)
-        }
-        let taken = facts.sessions.contains {
-            SessionDocumentMutations.normalizedSessionName($0.name) == normalizedQuery
-        }
+        let normalizedQuery = trimmed.normalizedSessionName
+        sessions = facts.sessions.matching(query, text: \.name)
+        let taken = facts.sessions.contains { $0.name.normalizedSessionName == normalizedQuery }
         creatableName = normalizedQuery != nil && !taken ? trimmed : nil
     }
 
@@ -154,18 +148,9 @@ struct QuickSwitchListing: Equatable {
 struct QuickSwitchState: Equatable {
     private(set) var highlight: QuickSwitchRow?
 
-    init(selectedSessionID: UUID? = nil) {
-        highlight = selectedSessionID.map(QuickSwitchRow.session)
-    }
-
     var selectedSessionID: UUID? {
         if case let .session(id) = highlight { return id }
         return nil
-    }
-
-    var highlightsCreateRow: Bool {
-        if case .create = highlight { return true }
-        return false
     }
 
     /// Keeps an explicit session choice while that session exists, and
@@ -214,11 +199,6 @@ struct QuickSwitchState: Equatable {
         } else {
             highlight = rows.first
         }
-    }
-
-    func selectedSession(in facts: SessionUIFacts) -> SessionItemFacts? {
-        guard let selectedSessionID else { return nil }
-        return facts.session(id: selectedSessionID)
     }
 }
 
@@ -279,22 +259,6 @@ enum SessionDialogs {
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
-    }
-
-    static func validateForEnqueue(
-        _ name: String,
-        excluding sessionID: UUID?,
-        sessions: [Session]
-    ) -> String? {
-        switch SessionNameDraft(text: name, excludedSessionID: sessionID)
-            .validation(sessions: sessions)
-        {
-        case let .valid(trimmed):
-            return trimmed
-        case let .invalid(message):
-            showMessage(message)
-            return nil
-        }
     }
 
     static func showMessage(_ message: String) {

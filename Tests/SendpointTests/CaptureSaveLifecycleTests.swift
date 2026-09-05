@@ -3,289 +3,139 @@ import Foundation
 import XCTest
 @testable import Sendpoint
 
-@MainActor
+/// The save half of the capture reducer: a typed note becomes one exact
+/// request, and only that request's outcome can move the capture on.
 final class CaptureSaveLifecycleTests: XCTestCase {
-    func testFailureFreezesDraftAndRetryUsesTheExactQueuedCommit() throws {
-        let model = makeModel()
-        model.note = "Keep this draft"
-        let annotation = try makeAnnotation(model)
-        let request = try XCTUnwrap(model.beginCommit(
-            annotation: annotation,
-            destinationSessionID: model.target.sessionID
+    private let context = AnnotationCaptureContext(
+        sessionID: UUID(), createdAt: Date(timeIntervalSince1970: 123)
+    )
+    private let selection = CapturedSelection(
+        text: "Selection", appName: "Reader", appBundleID: "com.example.reader",
+        processIdentifier: 42, screenRect: nil
+    )
+
+    func testSaveFreezesTheNoteAndRetryReusesTheExactRequest() throws {
+        var state = try editing(note: "Keep this draft")
+        let target = try XCTUnwrap(state.session?.target)
+
+        let effects = state.update(.save)
+        let request = CaptureSaveRequest(
+            target: target, destinationSessionID: context.sessionID,
+            annotation: try XCTUnwrap(CaptureAnnotationPolicy.annotation(for: target, note: "Keep this draft"))
+        )
+        XCTAssertEqual(effects, [.save(request)])
+        XCTAssertEqual(state.update(.changeNote("A late edit")), [])
+        XCTAssertEqual(state.session?.phase, .saving(request))
+
+        XCTAssertEqual(state.update(.prepared(request, request.annotation)), [.commit(request)])
+        XCTAssertEqual(
+            state.update(.saved(request, .commitFailed("disk full"), destinationExists: true)),
+            [.show(.editor)]
+        )
+        XCTAssertEqual(state.session?.phase, .saveFailed(
+            request, message: "Couldn’t save the note: disk full", retryable: true, targetMissing: false
         ))
+        XCTAssertEqual(state.update(.retarget(UUID())), [], "a retryable failure keeps its destination")
 
-        model.note = "A late edit"
-        XCTAssertEqual(model.note, "Keep this draft")
-        XCTAssertTrue(model.isNoteFrozen)
-        XCTAssertNil(model.beginCommit(
-            annotation: annotation,
-            destinationSessionID: model.target.sessionID
-        ))
-
-        XCTAssertEqual(
-            model.receive(
-                .commitFailed("disk full"),
-                for: request.identity,
-                destinationStillExists: true
-            ),
-            .none
-        )
-        XCTAssertEqual(
-            model.savePhase,
-            .retryableCommitFailure(
-                identity: request.identity,
-                message: "Couldn’t save the note: disk full"
-            )
-        )
-        XCTAssertEqual(model.note, "Keep this draft")
-
-        XCTAssertTrue(model.retryPendingCommit())
-        XCTAssertEqual(model.savePhase, .pendingCommit(request.identity))
-        XCTAssertEqual(
-            model.receive(
-                .committed,
-                for: request.identity,
-                destinationStillExists: true
-            ),
-            .dismiss
-        )
-        XCTAssertEqual(model.savePhase, .committed)
-        XCTAssertEqual(model.dismiss(), .none)
-        XCTAssertEqual(model.savePhase, .dismissed)
+        XCTAssertEqual(state.update(.retry), [.retry])
+        XCTAssertEqual(state.session?.phase, .saving(request))
+        XCTAssertEqual(state.update(.saved(request, .committed, destinationExists: true)), [.close])
+        XCTAssertEqual(state, .idle)
     }
 
-    func testGlobalRetryOutcomeCanFinishTheSameQueuedCommitWhileFailureIsVisible() throws {
-        let model = makeModel()
-        model.note = "Draft"
-        let request = try XCTUnwrap(model.beginCommit(
-            annotation: makeAnnotation(model),
-            destinationSessionID: model.target.sessionID
-        ))
-        _ = model.receive(
-            .commitFailed("offline"),
-            for: request.identity,
-            destinationStillExists: true
-        )
-
+    func testMissingDestinationKeepsTheAnnotationForAnExplicitRetarget() throws {
+        var (state, request) = try saving()
         XCTAssertEqual(
-            model.receive(
-                .committed,
-                for: request.identity,
-                destinationStillExists: true
-            ),
-            .dismiss
+            state.update(.saved(request, .rejected("The target session no longer exists."), destinationExists: false)),
+            [.show(.editor)]
         )
-        XCTAssertEqual(model.savePhase, .committed)
+        XCTAssertEqual(state.session?.phase, .saveFailed(
+            request, message: "That stack was deleted.", retryable: false, targetMissing: true
+        ))
+        XCTAssertEqual(state.update(.retry), [])
+
+        let destination = UUID()
+        let retargeted = CaptureSaveRequest(
+            target: request.target, destinationSessionID: destination, annotation: request.annotation
+        )
+        XCTAssertEqual(state.update(.retarget(destination)), [.abandon(request.target), .save(retargeted)])
+        XCTAssertEqual(state.session?.phase, .saving(retargeted))
+        XCTAssertEqual(state.update(.prepared(retargeted, retargeted.annotation)), [.commit(retargeted)])
+        XCTAssertEqual(state.update(.saved(retargeted, .committed, destinationExists: true)), [.close])
     }
 
-    func testMissingOriginalTargetRetainsFrozenAnnotationForExplicitRetarget() throws {
-        let model = makeModel()
-        model.note = "Draft"
-        var annotation = try makeAnnotation(model)
-        annotation.provenance.windowTitle = "Best provenance available before save"
-        let original = try XCTUnwrap(model.beginCommit(
-            annotation: annotation,
-            destinationSessionID: model.target.sessionID
+    func testRejectedExistingDestinationCannotRetargetAndDismissAbandonsProvenance() throws {
+        var (state, request) = try saving()
+        _ = state.update(.saved(request, .rejected("The annotation already exists."), destinationExists: true))
+        XCTAssertEqual(state.session?.phase, .saveFailed(
+            request, message: "The annotation already exists.", retryable: false, targetMissing: false
         ))
-
-        XCTAssertEqual(
-            model.receive(
-                .rejected("The target session no longer exists."),
-                for: original.identity,
-                destinationStillExists: false
-            ),
-            .none
-        )
-        XCTAssertEqual(
-            model.savePhase,
-            .targetUnavailable(message: "That stack was deleted.")
-        )
-        XCTAssertEqual(model.note, "Draft")
-        XCTAssertEqual(model.annotation, annotation)
-
-        let currentSessionID = UUID()
-        let retargeted = try XCTUnwrap(
-            model.beginRetarget(destinationSessionID: currentSessionID)
-        )
-        XCTAssertEqual(retargeted.annotation, annotation)
-        XCTAssertEqual(retargeted.annotation.id, original.annotation.id)
-        XCTAssertEqual(retargeted.identity.captureID, original.identity.captureID)
-        XCTAssertEqual(retargeted.identity.annotationID, original.identity.annotationID)
-        XCTAssertEqual(retargeted.identity.destinationSessionID, currentSessionID)
-
-        XCTAssertEqual(
-            model.receive(
-                .rejected("The target session no longer exists."),
-                for: retargeted.identity,
-                destinationStillExists: false
-            ),
-            .none
-        )
-        XCTAssertEqual(
-            model.savePhase,
-            .targetUnavailable(message: "That stack was deleted.")
-        )
+        XCTAssertEqual(state.update(.retarget(UUID())), [])
+        XCTAssertEqual(state.update(.dismiss), [.abandon(request.target), .close])
     }
 
-    func testRejectedExistingDestinationCannotRetarget() throws {
-        let model = makeModel()
-        model.note = "Draft"
-        let request = try XCTUnwrap(model.beginCommit(
-            annotation: makeAnnotation(model),
-            destinationSessionID: model.target.sessionID
-        ))
-
-        XCTAssertEqual(
-            model.receive(
-                .rejected("The annotation already exists."),
-                for: request.identity,
-                destinationStillExists: true
-            ),
-            .none
+    func testStaleOutcomesAreIgnored() throws {
+        var (state, request) = try saving()
+        let otherAnnotation = Annotation(
+            subject: .standalone, note: "Other", provenance: request.annotation.provenance
         )
-        XCTAssertEqual(
-            model.savePhase,
-            .terminalSaveFailure(
-                message: "Couldn’t save the note: The annotation already exists."
-            )
-        )
-        XCTAssertNil(model.beginRetarget(destinationSessionID: UUID()))
-        XCTAssertEqual(model.note, "Draft")
-        XCTAssertEqual(model.discard(), .abandonProvenance)
-    }
-
-    func testStaleCaptureAnnotationAndDestinationOutcomesAreIgnored() throws {
-        for changedField in 0..<3 {
-            let model = makeModel()
-            model.note = "Draft"
-            let request = try XCTUnwrap(model.beginCommit(
-                annotation: makeAnnotation(model),
-                destinationSessionID: model.target.sessionID
-            ))
-            let stale = CaptureSaveIdentity(
-                captureID: changedField == 0 ? UUID() : request.identity.captureID,
-                annotationID: changedField == 1 ? UUID() : request.identity.annotationID,
-                destinationSessionID: changedField == 2
-                    ? UUID()
-                    : request.identity.destinationSessionID
-            )
-
-            XCTAssertEqual(
-                model.receive(
-                    .committed,
-                    for: stale,
-                    destinationStillExists: true
-                ),
-                .none
-            )
-            XCTAssertEqual(model.savePhase, .pendingCommit(request.identity))
+        for stale in [
+            CaptureSaveRequest(target: request.target, destinationSessionID: UUID(), annotation: request.annotation),
+            CaptureSaveRequest(target: request.target, destinationSessionID: request.destinationSessionID,
+                annotation: otherAnnotation),
+        ] {
+            XCTAssertEqual(state.update(.prepared(stale, stale.annotation)), [])
+            XCTAssertEqual(state.update(.saved(stale, .committed, destinationExists: true)), [])
+            XCTAssertEqual(state.session?.phase, .saving(request))
         }
+        XCTAssertEqual(state.update(.prepared(request, otherAnnotation)), [], "the prepared annotation must keep its id")
     }
 
     func testNoOpAndCancellationNeverClaimSuccess() throws {
-        for outcome in [
-            AnnotationStoreMutationOutcome.noOp,
-            AnnotationStoreMutationOutcome.cancelled,
-        ] {
-            let model = makeModel()
-            model.note = "Draft"
-            let request = try XCTUnwrap(model.beginCommit(
-                annotation: makeAnnotation(model),
-                destinationSessionID: model.target.sessionID
+        for outcome in [AnnotationStoreMutationOutcome.noOp, .cancelled] {
+            var (state, request) = try saving()
+            XCTAssertEqual(state.update(.saved(request, outcome, destinationExists: true)), [.show(.editor)])
+            XCTAssertEqual(state.session?.phase, .saveFailed(
+                request, message: "The note wasn’t saved.", retryable: false, targetMissing: false
             ))
-
-            XCTAssertEqual(
-                model.receive(
-                    outcome,
-                    for: request.identity,
-                    destinationStillExists: true
-                ),
-                .none
-            )
-            XCTAssertNotEqual(model.savePhase, .committed)
-            guard case .terminalSaveFailure = model.savePhase else {
-                return XCTFail("Expected a terminal not-saved state")
-            }
-            XCTAssertNil(model.beginRetarget(destinationSessionID: UUID()))
-            XCTAssertEqual(model.note, "Draft")
+            XCTAssertEqual(state.update(.retarget(UUID())), [])
+            XCTAssertEqual(state.update(.retry), [])
         }
     }
 
-    func testTerminalStoreOutcomesShareOneProvenanceRoutingRule() {
-        XCTAssertFalse(CaptureSaveOutcomeRouting.abandonsProvenance(after: .committed))
-        XCTAssertFalse(
-            CaptureSaveOutcomeRouting.abandonsProvenance(after: .commitFailed("offline"))
-        )
-        XCTAssertTrue(CaptureSaveOutcomeRouting.abandonsProvenance(after: .noOp))
-        XCTAssertTrue(
-            CaptureSaveOutcomeRouting.abandonsProvenance(after: .rejected("missing"))
-        )
-        XCTAssertTrue(CaptureSaveOutcomeRouting.abandonsProvenance(after: .cancelled))
+    func testDismissAbandonsOnlyUnsavedWorkAndLateOutcomesAreDropped() throws {
+        var editing = try editing(note: "")
+        let target = try XCTUnwrap(editing.session?.target)
+        XCTAssertEqual(editing.update(.save), [.beep], "a blank note cannot be saved")
+        XCTAssertEqual(editing.update(.begin(.text, context)), [.focusEditor])
+        XCTAssertEqual(editing.update(.dismiss), [.abandon(target), .close])
+
+        var (queued, request) = try saving()
+        XCTAssertEqual(queued.update(.begin(.text, context)), [.beep])
+        XCTAssertEqual(queued.update(.dismiss), [.close], "a queued save keeps its provenance work")
+        XCTAssertEqual(queued.update(.saved(request, .committed, destinationExists: true)), [])
+        XCTAssertEqual(queued, .idle)
+
+        var (failed, failedRequest) = try saving()
+        _ = failed.update(.saved(failedRequest, .commitFailed("offline"), destinationExists: true))
+        XCTAssertEqual(failed.update(.dismiss), [.close])
     }
 
-    func testDismissAbandonsOnlyEditingOrRejectedWorkAndRejectsLateOutcome() throws {
-        let editing = makeModel()
-        XCTAssertEqual(editing.dismiss(), .abandonProvenance)
-        XCTAssertEqual(editing.savePhase, .dismissed)
-        XCTAssertEqual(editing.dismiss(), .none)
-        XCTAssertEqual(editing.savePhase, .dismissed)
-
-        let failed = makeModel()
-        failed.note = "Draft"
-        let request = try XCTUnwrap(failed.beginCommit(
-            annotation: makeAnnotation(failed),
-            destinationSessionID: failed.target.sessionID
-        ))
-        _ = failed.receive(
-            .commitFailed("offline"),
-            for: request.identity,
-            destinationStillExists: true
-        )
-        XCTAssertEqual(failed.dismiss(), .none)
-        XCTAssertEqual(
-            failed.receive(
-                .committed,
-                for: request.identity,
-                destinationStillExists: true
-            ),
-            .none
-        )
-        XCTAssertEqual(failed.savePhase, .dismissed)
-
-        let rejected = makeModel()
-        rejected.note = "Draft"
-        let rejectedRequest = try XCTUnwrap(rejected.beginCommit(
-            annotation: makeAnnotation(rejected),
-            destinationSessionID: rejected.target.sessionID
-        ))
-        _ = rejected.receive(
-            .rejected("missing"),
-            for: rejectedRequest.identity,
-            destinationStillExists: false
-        )
-        XCTAssertEqual(rejected.discard(), .abandonProvenance)
-        XCTAssertEqual(rejected.savePhase, .dismissed)
+    private func editing(note: String) throws -> CaptureState {
+        var state = CaptureState.idle
+        XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
+        let target = context.target(captured: selection)
+        XCTAssertEqual(state.update(.selection(context, selection)), [.probe(target), .show(.editor)])
+        XCTAssertEqual(state.update(.changeNote(note)), [])
+        return state
     }
 
-    private func makeModel() -> CaptureModel {
-        let target = AnnotationCaptureContext(
-            sessionID: UUID(),
-            captureID: UUID(),
-            annotationID: UUID(),
-            createdAt: Date(timeIntervalSince1970: 123)
-        ).target(captured: CapturedSelection(
-            text: "Selection",
-            appName: "Reader",
-            appBundleID: "com.example.reader",
-            processIdentifier: 42,
-            screenRect: nil
-        ))
-        return CaptureModel(target: target)
-    }
-
-    private func makeAnnotation(_ model: CaptureModel) throws -> Annotation {
-        try XCTUnwrap(
-            CaptureAnnotationPolicy.annotation(for: model.target, note: model.note)
-        )
+    private func saving() throws -> (CaptureState, CaptureSaveRequest) {
+        var state = try editing(note: "Draft")
+        let effects = state.update(.save)
+        guard case let .save(request)? = effects.first else {
+            throw XCTSkip("Expected a save effect, got \(effects)")
+        }
+        return (state, request)
     }
 }

@@ -18,3 +18,12 @@ public extension String {
         return normalized.isEmpty ? nil : normalized
     }
 }
+
+public extension Sequence {
+    /// The elements whose `text` contains `query`, compared case-, diacritic-,
+    /// and width-insensitively. A blank query keeps everything.
+    func matching(_ query: String, text: (Element) -> String) -> [Element] {
+        guard let needle = query.normalizedSessionName else { return Array(self) }
+        return filter { text($0).normalizedSessionName?.contains(needle) == true }
+    }
+}

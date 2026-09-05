@@ -19,7 +19,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var storeState: StoreState = .loading
     private var bootstrapTask: Task<Void, Never>?
     private let exportController = ExportController()
-    private var captureObserver: NSObjectProtocol?
 
     private var flashToken = 0
     private var flashing = false
@@ -51,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureController.onVoiceEscape = { [weak self] in
             self?.handleVoiceTrigger(.escape)
         }
+        captureController.onWillPresentEditor = { [weak self] in
+            self?.hideAuxiliaryWindows()
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -68,15 +70,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutomaticSelectionMonitor.shared.start()
 
         bootstrapStore()
-
-        // The capture panel needs the app frontmost to take keystrokes, and
-        // activating brings every window forward. Get the others out of the way.
-        captureObserver = NotificationCenter.default.addObserver(
-            forName: .captureWillPresent, object: nil, queue: nil
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.hideAuxiliaryWindows() }
-        }
-
         if !settings.hasCompletedSetup {
             presentSetup()
         }
@@ -124,8 +117,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return store
     }
 
-    private var isStoreAvailable: Bool { store != nil }
-
     private var unavailableMenuTitle: String {
         switch storeState {
         case .loading:
@@ -162,14 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionState.teardown()
         AutomaticSelectionMonitor.shared.teardown()
         store?.teardown()
-        if let captureObserver {
-            NotificationCenter.default.removeObserver(captureObserver)
-            self.captureObserver = nil
-        }
         settings.onHotKeysChanged = nil
         settings.onProfilesChanged = nil
         settings.onInputDeviceChanged = nil
-        for name in ["voiceCapture", "capture", "voiceEscape", "copy", "stack", "switchSession", "clear"] {
+        for name in ShortcutSlot.allCases.map(\.rawValue) + ["voiceEscape"] {
             HotKeyCenter.shared.unregister(name: name)
         }
     }
@@ -257,252 +244,132 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuildMenu() {
         let menu = NSMenu()
+        let ready = store != nil
 
-        let voice = NSMenuItem(
-            title: "Voice Note (\(settings.voiceCaptureCombo.displayString))",
-            action: isStoreAvailable ? #selector(captureVoiceSelection) : nil,
-            keyEquivalent: ""
-        )
-        voice.target = self
+        let voice = item("Voice Note (\(settings.voiceCaptureCombo.displayString))",
+            action: ready ? #selector(captureVoiceSelection) : nil)
         voice.toolTip = settings.voiceCaptureCombo.displayString
         menu.addItem(voice)
-
-        let capture = NSMenuItem(
-            title: "Typed Note",
-            action: isStoreAvailable ? #selector(captureSelection) : nil,
-            keyEquivalent: ""
-        )
-        capture.target = self
-        apply(settings.captureCombo, to: capture)
-        menu.addItem(capture)
-
-        let show = NSMenuItem(
-            title: "Show Stack…",
-            action: isStoreAvailable ? #selector(showStack) : nil,
-            keyEquivalent: ""
-        )
-        show.target = self
-        apply(settings.stackCombo, to: show)
-        menu.addItem(show)
+        menu.addItem(item("Typed Note", action: ready ? #selector(captureSelection) : nil,
+            combo: settings.captureCombo))
+        menu.addItem(item("Show Stack…", action: ready ? #selector(showStack) : nil,
+            combo: settings.stackCombo))
 
         let facts = store.map {
-            SessionUIFacts(
-                sessions: $0.sessions,
-                currentSessionID: $0.currentSessionID,
-                lastCleared: $0.lastCleared
-            )
+            SessionUIFacts(sessions: $0.sessions, currentSessionID: $0.currentSessionID, lastCleared: $0.lastCleared)
         }
         if let facts, let current = facts.current {
-            let summary = NSMenuItem(title: facts.currentTitle, action: nil, keyEquivalent: "")
-            menu.addItem(summary)
-
+            menu.addItem(item(facts.currentTitle))
             let sessionMenu = NSMenu(title: "Stack")
             for session in facts.sessions {
-                let item = NSMenuItem(
-                    title: "\(session.name) — \(session.annotationCount) note\(session.annotationCount == 1 ? "" : "s")",
-                    action: #selector(switchToSession(_:)),
-                    keyEquivalent: ""
-                )
-                item.target = self
-                item.representedObject = session.id as NSUUID
-                item.state = session.isCurrent ? .on : .off
-                sessionMenu.addItem(item)
+                sessionMenu.addItem(item("\(session.name) — \(session.countLabel)",
+                    action: #selector(switchToSession(_:)), represents: session.id, checked: session.isCurrent))
             }
             sessionMenu.addItem(.separator())
-
-            let quickSwitch = NSMenuItem(
-                title: "Switch Stack…",
-                action: #selector(showQuickSwitcher),
-                keyEquivalent: ""
-            )
-            quickSwitch.target = self
-            apply(settings.switchSessionCombo, to: quickSwitch)
-            sessionMenu.addItem(quickSwitch)
+            sessionMenu.addItem(item("Switch Stack…", action: #selector(showQuickSwitcher),
+                combo: settings.switchSessionCombo))
             sessionMenu.addItem(.separator())
-
-            let newSession = NSMenuItem(
-                title: "New Stack…",
-                action: #selector(newSession(_:)),
-                keyEquivalent: ""
-            )
-            newSession.target = self
-            sessionMenu.addItem(newSession)
-
-            let rename = NSMenuItem(
-                title: "Rename Current Stack…",
-                action: #selector(renameSession(_:)),
-                keyEquivalent: ""
-            )
-            rename.target = self
-            rename.representedObject = current.id as NSUUID
-            sessionMenu.addItem(rename)
-
-            let delete = NSMenuItem(
-                title: "Delete Current Stack…",
-                action: facts.canDelete ? #selector(deleteSession(_:)) : nil,
-                keyEquivalent: ""
-            )
-            delete.target = self
-            delete.representedObject = current.id as NSUUID
-            sessionMenu.addItem(delete)
-
-            let sessionRoot = NSMenuItem(title: "Stack", action: nil, keyEquivalent: "")
+            sessionMenu.addItem(item("New Stack…", action: #selector(newSession(_:))))
+            sessionMenu.addItem(item("Rename Current Stack…", action: #selector(renameSession(_:)),
+                represents: current.id))
+            sessionMenu.addItem(item("Delete Current Stack…",
+                action: facts.canDelete ? #selector(deleteSession(_:)) : nil, represents: current.id))
+            let sessionRoot = item("Stack")
             sessionRoot.submenu = sessionMenu
             menu.addItem(sessionRoot)
         }
 
         let profileMenu = NSMenu(title: "Template")
         for profile in settings.profiles {
-            let item = NSMenuItem(
-                title: profile.name,
-                action: #selector(selectProfile(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = profile.id as NSUUID
-            item.state = profile.id == settings.activeProfileID ? .on : .off
-            profileMenu.addItem(item)
+            profileMenu.addItem(item(profile.name, action: #selector(selectProfile(_:)),
+                represents: profile.id, checked: profile.id == settings.activeProfileID))
         }
-        let profileRoot = NSMenuItem(title: "Template", action: nil, keyEquivalent: "")
+        let profileRoot = item("Template")
         profileRoot.submenu = profileMenu
         menu.addItem(profileRoot)
-
         menu.addItem(.separator())
 
         let count = facts?.current?.annotationCount ?? 0
         let verb = settings.pasteDirectly ? "Paste" : "Copy"
-        let copy = NSMenuItem(
-            title: count > 0
-                ? "\(verb) \(count) Note\(count == 1 ? "" : "s") as Markdown"
-                : unavailableMenuTitle,
-            action: count > 0 ? #selector(copyMarkdown) : nil,
-            keyEquivalent: ""
-        )
-        copy.target = self
-        apply(settings.copyCombo, to: copy)
-        menu.addItem(copy)
-
-        let clear = NSMenuItem(
-            title: facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
-            action: count > 0 ? #selector(clearSession(_:)) : nil,
-            keyEquivalent: ""
-        )
-        clear.target = self
-        clear.representedObject = facts?.current?.id as NSUUID?
-        apply(settings.clearCombo, to: clear)
-        menu.addItem(clear)
-
+        menu.addItem(item(
+            count > 0 ? "\(verb) \(count) Note\(count == 1 ? "" : "s") as Markdown" : unavailableMenuTitle,
+            action: count > 0 ? #selector(copyMarkdown) : nil, combo: settings.copyCombo))
+        menu.addItem(item(facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
+            action: count > 0 ? #selector(clearSession(_:)) : nil, represents: facts?.current?.id,
+            combo: settings.clearCombo))
         if let undo = facts?.undo {
-            let item = NSMenuItem(
-                title: undo.title,
-                action: #selector(undoClear),
-                keyEquivalent: "z"
-            )
-            item.keyEquivalentModifierMask = [.command]
-            item.target = self
-            menu.addItem(item)
+            let undoItem = item(undo.title, action: #selector(undoClear))
+            undoItem.keyEquivalent = "z"
+            menu.addItem(undoItem)
         }
 
         if let error = store?.error {
             menu.addItem(.separator())
-            let errorItem = NSMenuItem(
-                title: annotationStoreErrorMessage(error),
-                action: nil,
-                keyEquivalent: ""
-            )
-            menu.addItem(errorItem)
+            menu.addItem(item(annotationStoreErrorMessage(error)))
             if store?.hasPendingMutations == true {
-                let retry = NSMenuItem(
-                    title: "Retry Pending Stack Changes",
-                    action: #selector(retryPendingMutations),
-                    keyEquivalent: ""
-                )
-                retry.target = self
-                menu.addItem(retry)
+                menu.addItem(item("Retry Pending Stack Changes", action: #selector(retryPendingMutations)))
             }
         }
 
         menu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
-        settingsItem.target = self
+        let settingsItem = item("Settings…", action: #selector(showSettings))
+        settingsItem.keyEquivalent = ","
         menu.addItem(settingsItem)
-
-        let quit = NSMenuItem(title: "Quit Sendpoint", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
+        let quit = item("Quit Sendpoint", action: #selector(quit))
+        quit.keyEquivalent = "q"
         menu.addItem(quit)
 
         statusItem.menu = menu
     }
 
-    /// Show the global shortcut beside the menu item so it is discoverable.
-    /// The Carbon hotkey swallows the event first, so this never double-fires.
-    private func apply(_ combo: KeyCombo, to item: NSMenuItem) {
-        guard combo.isValid else { return }
-        if let equivalent = combo.menuKeyEquivalent {
-            item.keyEquivalent = equivalent
-            item.keyEquivalentModifierMask = combo.modifiers
-        } else {
-            item.toolTip = combo.displayString
+    /// A menu item targeting this delegate. A valid global shortcut is shown
+    /// beside it so it is discoverable; the Carbon hotkey swallows the event
+    /// first, so it never double-fires.
+    private func item(_ title: String, action: Selector? = nil, represents id: UUID? = nil,
+                      checked: Bool = false, combo: KeyCombo? = nil) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = id
+        item.state = checked ? .on : .off
+        if let combo, combo.isValid {
+            if let equivalent = combo.menuKeyEquivalent {
+                item.keyEquivalent = equivalent
+                item.keyEquivalentModifierMask = combo.modifiers
+            } else {
+                item.toolTip = combo.displayString
+            }
         }
+        return item
     }
 
     // MARK: - Hot keys
 
     private func registerHotKeys() {
         handleVoiceTrigger(.configurationChanged(settings.voiceMode))
+        let actions: [ShortcutSlot: () -> Void] = [
+            .voiceCapture: { [weak self] in self?.handleVoiceTrigger(.pressed) },
+            .capture: { [weak self] in self?.captureSelection() },
+            .copy: { [weak self] in self?.copyMarkdown() },
+            .stack: { [weak self] in self?.showStack() },
+            .switchSession: { [weak self] in self?.showQuickSwitcher() },
+            .clear: { [weak self] in self?.clearStack() },
+        ]
         var issues: [ShortcutRegistrationIssue] = []
-
-        func register(
-            _ slot: ShortcutSlot,
-            combo: KeyCombo,
-            operation: () -> HotKeyRegistrationResult
-        ) {
+        for slot in ShortcutSlot.allCases {
+            let combo = settings.combo(for: slot)
             // A rejected replacement must not leave the previous binding live.
             HotKeyCenter.shared.unregister(name: slot.rawValue)
             if let conflict = settings.shortcutConflict(for: combo, excluding: slot) {
                 issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
-                return
+                continue
             }
-            switch operation() {
-            case .registered:
-                break
-            case .invalid:
-                issues.append(.invalid(slot: slot, combo: combo))
-            case let .failed(status):
-                issues.append(.unavailable(slot: slot, combo: combo, status: status))
-            }
-        }
-
-        register(.voiceCapture, combo: settings.voiceCaptureCombo) {
-            HotKeyCenter.shared.register(
-                name: "voiceCapture", combo: settings.voiceCaptureCombo,
-                released: { [weak self] in self?.handleVoiceTrigger(.released) }
-            ) { [weak self] in self?.handleVoiceTrigger(.pressed) }
-        }
-        register(.capture, combo: settings.captureCombo) {
-            HotKeyCenter.shared.register(name: "capture", combo: settings.captureCombo) { [weak self] in
-                self?.captureSelection()
-            }
-        }
-        register(.copy, combo: settings.copyCombo) {
-            HotKeyCenter.shared.register(name: "copy", combo: settings.copyCombo) { [weak self] in
-                self?.copyMarkdown()
-            }
-        }
-        register(.stack, combo: settings.stackCombo) {
-            HotKeyCenter.shared.register(name: "stack", combo: settings.stackCombo) { [weak self] in
-                self?.showStack()
-            }
-        }
-        register(.switchSession, combo: settings.switchSessionCombo) {
-            HotKeyCenter.shared.register(name: "switchSession", combo: settings.switchSessionCombo) { [weak self] in
-                self?.showQuickSwitcher()
-            }
-        }
-        register(.clear, combo: settings.clearCombo) {
-            HotKeyCenter.shared.register(name: "clear", combo: settings.clearCombo) { [weak self] in
-                self?.clearStack()
+            let released: (() -> Void)? = slot == .voiceCapture
+                ? { [weak self] in self?.handleVoiceTrigger(.released) } : nil
+            switch HotKeyCenter.shared.register(name: slot.rawValue, combo: combo, released: released,
+                                                action: actions[slot]!) {
+            case .registered: break
+            case .invalid: issues.append(.invalid(slot: slot, combo: combo))
+            case let .failed(status): issues.append(.unavailable(slot: slot, combo: combo, status: status))
             }
         }
         settings.updateShortcutRegistrationIssues(issues)
@@ -559,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func clearSession(_ sender: NSMenuItem) {
-        guard let sessionID = capturedSessionID(from: sender) else { NSSound.beep(); return }
+        guard let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
         enqueueMenuMutation(.clearSession(sessionID: sessionID))
     }
 
@@ -569,12 +436,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func switchToSession(_ sender: NSMenuItem) {
-        guard let sessionID = capturedSessionID(from: sender) else { NSSound.beep(); return }
+        guard let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
         enqueueMenuMutation(.switchSession(sessionID: sessionID))
     }
 
     @objc private func selectProfile(_ sender: NSMenuItem) {
-        guard let profileID = capturedSessionID(from: sender) else { NSSound.beep(); return }
+        guard let profileID = sender.representedObject as? UUID else { NSSound.beep(); return }
         requestProfileSelection(profileID)
     }
 
@@ -599,52 +466,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func newSession(_ sender: NSMenuItem) {
         guard let store else { NSSound.beep(); return }
-        let sessions = store.sessions
-        guard
-            let draft = SessionDialogs.requestNewSessionName(sessions: sessions),
-            let name = SessionDialogs.validateForEnqueue(
-                draft,
-                excluding: nil,
-                sessions: store.sessions
-            )
-        else { return }
+        guard let name = SessionDialogs.requestNewSessionName(sessions: store.sessions) else { return }
         enqueueMenuMutation(.createSession(Session(name: name)), presentsError: true)
     }
 
     @objc private func renameSession(_ sender: NSMenuItem) {
-        guard let store, let sessionID = capturedSessionID(from: sender) else {
-            NSSound.beep()
-            return
-        }
-        let sessions = store.sessions
-        guard
-            let draft = SessionDialogs.requestRenamedSessionName(
-                sessionID: sessionID,
-                sessions: sessions
-            ),
-            let name = SessionDialogs.validateForEnqueue(
-                draft,
-                excluding: sessionID,
-                sessions: store.sessions
-            )
+        guard let store, let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
+        guard let name = SessionDialogs.requestRenamedSessionName(sessionID: sessionID, sessions: store.sessions)
         else { return }
-        enqueueMenuMutation(
-            .renameSession(sessionID: sessionID, name: name),
-            presentsError: true
-        )
+        enqueueMenuMutation(.renameSession(sessionID: sessionID, name: name), presentsError: true)
     }
 
     @objc private func deleteSession(_ sender: NSMenuItem) {
-        guard let store, let sessionID = capturedSessionID(from: sender) else {
-            NSSound.beep()
-            return
-        }
-        let sessions = store.sessions
-        guard SessionDialogs.confirmsDelete(
-            sessionID: sessionID,
-            sessions: sessions,
-            lastCleared: store.lastCleared
-        ) else { return }
+        guard let store, let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
+        guard SessionDialogs.confirmsDelete(sessionID: sessionID, sessions: store.sessions,
+                                            lastCleared: store.lastCleared)
+        else { return }
         enqueueMenuMutation(.deleteSession(sessionID: sessionID), presentsError: true)
     }
 
@@ -653,12 +490,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.retryPendingMutations()
         exportController.send(.retry)
         refreshStatusItem()
-    }
-
-    private func capturedSessionID(from sender: NSMenuItem) -> UUID? {
-        if let id = sender.representedObject as? UUID { return id }
-        if let id = sender.representedObject as? NSUUID { return id as UUID }
-        return nil
     }
 
     private func enqueueMenuMutation(

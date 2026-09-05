@@ -18,23 +18,16 @@ struct NoteListing: Equatable {
     let entries: [Annotation]
 
     init(entries: [Annotation], query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let needle = SessionDocumentMutations.normalizedSessionName(trimmed) else {
-            self.entries = entries
-            return
+        self.entries = entries.matching(query) { entry in
+            var parts = [entry.note, entry.provenance.application.name]
+            if case let .selection(quote) = entry.subject { parts.append(quote) }
+            if let window = entry.provenance.windowTitle { parts.append(window) }
+            return parts.joined(separator: "\n")
         }
-        self.entries = entries.filter { NoteListing.searchText($0).contains(needle) }
     }
 
     var ids: [UUID] { entries.map(\.id) }
     var isEmpty: Bool { entries.isEmpty }
-
-    static func searchText(_ entry: Annotation) -> String {
-        var parts = [entry.note, entry.provenance.application.name]
-        if case let .selection(quote) = entry.subject { parts.append(quote) }
-        if let window = entry.provenance.windowTitle { parts.append(window) }
-        return SessionDocumentMutations.normalizedSessionName(parts.joined(separator: "\n")) ?? ""
-    }
 }
 
 /// Which note carries the keyboard highlight inside a stack.
@@ -98,7 +91,7 @@ struct PaletteActionItem: Equatable, Identifiable {
 /// What the palette is looking at, reduced to what decides the action list.
 struct PaletteActionContext: Equatable {
     enum Focus: Equatable {
-        case stack(id: UUID, name: String, isCurrent: Bool, noteCount: Int)
+        case stack(SessionItemFacts)
         case createStack(name: String)
         case note(id: UUID, index: Int, count: Int, sourceURL: URL?)
         case nothing
@@ -107,20 +100,10 @@ struct PaletteActionContext: Equatable {
     var level: PaletteLevel
     var focus: Focus
     /// The stack the notes level is inside, when it is.
-    var openStack: (id: UUID, name: String, isCurrent: Bool, noteCount: Int)?
+    var openStack: SessionItemFacts?
     var canDeleteStack: Bool
     var undo: SessionUndoFacts?
     var templateName: String
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.level == rhs.level && lhs.focus == rhs.focus
-            && lhs.openStack?.id == rhs.openStack?.id
-            && lhs.openStack?.name == rhs.openStack?.name
-            && lhs.openStack?.isCurrent == rhs.openStack?.isCurrent
-            && lhs.openStack?.noteCount == rhs.openStack?.noteCount
-            && lhs.canDeleteStack == rhs.canDeleteStack && lhs.undo == rhs.undo
-            && lhs.templateName == rhs.templateName
-    }
 }
 
 /// The ⌘K menu, derived from context so the footer, the menu, and the key
@@ -128,139 +111,76 @@ struct PaletteActionContext: Equatable {
 enum PaletteActionCatalog {
     static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
-        let template = PaletteActionItem(
-            action: .chooseTemplate,
-            title: "Template: \(context.templateName)",
-            keys: "⌘P"
-        )
+        func add(_ action: PaletteAction, _ title: String, _ keys: String,
+                 subtitle: String? = nil, destructive: Bool = false) {
+            items.append(PaletteActionItem(action: action, title: title, keys: keys,
+                subtitle: subtitle, isDestructive: destructive))
+        }
+        func template() { add(.chooseTemplate, "Template: \(context.templateName)", "⌘P") }
+        func undo() { if let undo = context.undo { add(.undoClear, undo.title, "⌘Z") } }
+        func copy(_ stack: SessionItemFacts, keys: String) {
+            guard stack.annotationCount > 0 else { return }
+            add(.copyStack(stack.id), "Copy “\(stack.name)” as Markdown", keys,
+                subtitle: "Shaped by the \(context.templateName) template")
+        }
+        func clear(_ stack: SessionItemFacts) {
+            guard stack.annotationCount > 0 else { return }
+            add(.clearStack(stack.id), "Clear “\(stack.name)”", "⇧⌘⌫",
+                subtitle: "Sets the notes aside; undo with ⌘Z", destructive: true)
+        }
 
         switch context.level {
         case .stacks:
             switch context.focus {
-            case let .stack(id, name, isCurrent, noteCount):
-                items.append(PaletteActionItem(
-                    action: .switchToStack(id),
-                    title: isCurrent ? "Keep “\(name)” current" : "Switch to “\(name)”",
-                    keys: "↩"
-                ))
-                items.append(PaletteActionItem(
-                    action: .openStack(id), title: "Open “\(name)”", keys: "→"
-                ))
-                if noteCount > 0 {
-                    items.append(PaletteActionItem(
-                        action: .copyStack(id),
-                        title: "Copy “\(name)” as Markdown",
-                        keys: "⌘C",
-                        subtitle: "Shaped by the \(context.templateName) template"
-                    ))
-                }
-                items.append(PaletteActionItem(
-                    action: .renameStack(id), title: "Rename “\(name)”", keys: "⌘R"
-                ))
-                items.append(PaletteActionItem(action: .newStack, title: "New Stack", keys: "⌘N"))
-                items.append(template)
-                if let undo = context.undo {
-                    items.append(PaletteActionItem(action: .undoClear, title: undo.title, keys: "⌘Z"))
-                }
-                if noteCount > 0 {
-                    items.append(PaletteActionItem(
-                        action: .clearStack(id),
-                        title: "Clear “\(name)”",
-                        keys: "⇧⌘⌫",
-                        subtitle: "Sets the notes aside; undo with ⌘Z",
-                        isDestructive: true
-                    ))
-                }
+            case let .stack(stack):
+                add(.switchToStack(stack.id),
+                    stack.isCurrent ? "Keep “\(stack.name)” current" : "Switch to “\(stack.name)”", "↩")
+                add(.openStack(stack.id), "Open “\(stack.name)”", "→")
+                copy(stack, keys: "⌘C")
+                add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
+                add(.newStack, "New Stack", "⌘N")
+                template()
+                undo()
+                clear(stack)
                 if context.canDeleteStack {
-                    items.append(PaletteActionItem(
-                        action: .deleteStack(id),
-                        title: "Delete “\(name)”",
-                        keys: "⌘⌫",
-                        isDestructive: true
-                    ))
+                    add(.deleteStack(stack.id), "Delete “\(stack.name)”", "⌘⌫", destructive: true)
                 }
             case let .createStack(name):
-                items.append(PaletteActionItem(
-                    action: .createStack(name), title: "Create “\(name)”", keys: "↩"
-                ))
-                items.append(template)
+                add(.createStack(name), "Create “\(name)”", "↩")
+                template()
             case .note, .nothing:
-                items.append(PaletteActionItem(action: .newStack, title: "New Stack", keys: "⌘N"))
-                items.append(template)
-                if let undo = context.undo {
-                    items.append(PaletteActionItem(action: .undoClear, title: undo.title, keys: "⌘Z"))
-                }
+                add(.newStack, "New Stack", "⌘N")
+                template()
+                undo()
             }
-
         case .notes:
             if case let .note(id, index, count, sourceURL) = context.focus {
-                items.append(PaletteActionItem(action: .editNote(id), title: "Edit Note", keys: "↩"))
-                items.append(PaletteActionItem(action: .copyNote(id), title: "Copy Note", keys: "⌘C"))
+                add(.editNote(id), "Edit Note", "↩")
+                add(.copyNote(id), "Copy Note", "⌘C")
                 if let sourceURL {
-                    items.append(PaletteActionItem(
-                        action: .openSource(sourceURL),
-                        title: "Open Source",
-                        keys: "⌘O",
-                        subtitle: sourceURL.host ?? sourceURL.absoluteString
-                    ))
+                    add(.openSource(sourceURL), "Open Source", "⌘O",
+                        subtitle: sourceURL.host ?? sourceURL.absoluteString)
                 }
-                if index > 0 {
-                    items.append(PaletteActionItem(action: .moveNoteUp(id), title: "Move Note Up", keys: "⌥↑"))
-                }
-                if index < count - 1 {
-                    items.append(PaletteActionItem(action: .moveNoteDown(id), title: "Move Note Down", keys: "⌥↓"))
-                }
-                items.append(PaletteActionItem(
-                    action: .deleteNote(id), title: "Delete Note", keys: "⌘⌫", isDestructive: true
-                ))
+                if index > 0 { add(.moveNoteUp(id), "Move Note Up", "⌥↑") }
+                if index < count - 1 { add(.moveNoteDown(id), "Move Note Down", "⌥↓") }
+                add(.deleteNote(id), "Delete Note", "⌘⌫", destructive: true)
             }
             if let stack = context.openStack {
-                if !stack.isCurrent {
-                    items.append(PaletteActionItem(
-                        action: .switchToStack(stack.id), title: "Switch to “\(stack.name)”", keys: "⌘↩"
-                    ))
-                }
-                if stack.noteCount > 0 {
-                    items.append(PaletteActionItem(
-                        action: .copyStack(stack.id),
-                        title: "Copy “\(stack.name)” as Markdown",
-                        keys: "⇧⌘C",
-                        subtitle: "Shaped by the \(context.templateName) template"
-                    ))
-                }
-                items.append(PaletteActionItem(
-                    action: .renameStack(stack.id), title: "Rename “\(stack.name)”", keys: "⌘R"
-                ))
+                if !stack.isCurrent { add(.switchToStack(stack.id), "Switch to “\(stack.name)”", "⌘↩") }
+                copy(stack, keys: "⇧⌘C")
+                add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
             }
-            items.append(template)
-            items.append(PaletteActionItem(action: .backToStacks, title: "All Stacks", keys: "←"))
-            if let undo = context.undo {
-                items.append(PaletteActionItem(action: .undoClear, title: undo.title, keys: "⌘Z"))
-            }
-            if let stack = context.openStack, stack.noteCount > 0 {
-                items.append(PaletteActionItem(
-                    action: .clearStack(stack.id),
-                    title: "Clear “\(stack.name)”",
-                    keys: "⇧⌘⌫",
-                    subtitle: "Sets the notes aside; undo with ⌘Z",
-                    isDestructive: true
-                ))
-            }
+            template()
+            add(.backToStacks, "All Stacks", "←")
+            undo()
+            if let stack = context.openStack { clear(stack) }
         }
         return items
     }
 
     /// The ⌘K menu narrowed by what was typed into it.
     static func filter(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let needle = SessionDocumentMutations.normalizedSessionName(trimmed) else {
-            return items
-        }
-        return items.filter {
-            let text = SessionDocumentMutations.normalizedSessionName(
-                [$0.title, $0.subtitle ?? ""].joined(separator: " ")) ?? ""
-            return text.contains(needle)
-        }
+        items.matching(query) { [$0.title, $0.subtitle ?? ""].joined(separator: " ") }
     }
 }
 

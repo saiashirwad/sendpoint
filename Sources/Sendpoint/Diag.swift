@@ -25,8 +25,14 @@ enum Diag {
         try? FileManager.default.moveItem(at: url, to: previous)
     }
 
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
+
     static func log(_ message: String) {
-        let line = "\(stamp()) \(message)\n"
+        let line = "\(clock.string(from: Date())) \(message)\n"
         queue.async {
             guard let data = line.data(using: .utf8) else { return }
             if let handle = try? FileHandle(forWritingTo: fileURL) {
@@ -37,11 +43,5 @@ enum Diag {
                 try? data.write(to: fileURL)
             }
         }
-    }
-
-    private static func stamp() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f.string(from: Date())
     }
 }

@@ -62,17 +62,16 @@ final class ProfileEditorState {
 
     @discardableResult
     func saveAsNew(named name: String) throws -> UUID {
-        var clone = draft
-        clone = Profile(
+        let clone = Profile(
             id: makeID(),
             name: name,
-            preamble: clone.preamble,
-            includeApplication: clone.includeApplication,
-            includeWindow: clone.includeWindow,
-            includeLink: clone.includeLink,
-            includeTimestamps: clone.includeTimestamps,
-            includeHeading: clone.includeHeading,
-            clearSessionAfterExport: clone.clearSessionAfterExport
+            preamble: draft.preamble,
+            includeApplication: draft.includeApplication,
+            includeWindow: draft.includeWindow,
+            includeLink: draft.includeLink,
+            includeTimestamps: draft.includeTimestamps,
+            includeHeading: draft.includeHeading,
+            clearSessionAfterExport: draft.clearSessionAfterExport
         )
         try settings.addProfile(clone)
         selectImmediately(clone.id)

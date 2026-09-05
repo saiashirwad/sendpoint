@@ -166,36 +166,23 @@ struct PaletteProjection {
         switch state.level {
         case .stacks:
             switch state.stackState.highlight {
-            case let .session(id):
-                if let session = facts.session(id: id) {
-                    focus = .stack(
-                        id: id, name: session.name, isCurrent: session.isCurrent,
-                        noteCount: session.annotationCount)
-                } else {
-                    focus = .nothing
-                }
-            case let .create(name):
-                focus = .createStack(name: name)
-            case nil:
-                focus = .nothing
+            case let .session(id): focus = facts.session(id: id).map { .stack($0) } ?? .nothing
+            case let .create(name): focus = .createStack(name: name)
+            case nil: focus = .nothing
             }
         case .notes:
             let listing = noteListing
             if let id = state.noteState.highlight, let index = listing.ids.firstIndex(of: id) {
-                focus = .note(
-                    id: id, index: index, count: listing.entries.count,
+                focus = .note(id: id, index: index, count: listing.entries.count,
                     sourceURL: listing.entries[index].provenance.url)
             } else {
                 focus = .nothing
             }
         }
-        let open = state.level.sessionID.flatMap { facts.session(id: $0) }.map {
-            (id: $0.id, name: $0.name, isCurrent: $0.isCurrent, noteCount: $0.annotationCount)
-        }
         return PaletteActionContext(
             level: state.level,
             focus: focus,
-            openStack: open,
+            openStack: state.level.sessionID.flatMap { facts.session(id: $0) },
             canDeleteStack: facts.canDelete,
             undo: facts.undo,
             templateName: context.activeProfile.name
@@ -211,13 +198,7 @@ struct PaletteProjection {
     }
 
     var filteredProfiles: [Profile] {
-        let trimmed = state.overlayQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let needle = SessionDocumentMutations.normalizedSessionName(trimmed) else {
-            return context.profiles
-        }
-        return context.profiles.filter {
-            (SessionDocumentMutations.normalizedSessionName($0.name) ?? "").contains(needle)
-        }
+        context.profiles.matching(state.overlayQuery, text: \.name)
     }
 
     /// The action ↩ performs, for the footer.
@@ -286,13 +267,13 @@ struct PaletteUpdate {
             case .createStack: state.interaction = .editing(.createStack(text: text, problem: nil))
             case let .note(id, _): state.interaction = .editing(.note(id: id, text: text))
             }
-        case .commitEdit: _ = finishEdit(before: nil)
+        case .commitEdit: finishEdit(before: nil)
         case .cancelEdit:
             if case .editing = state.interaction { state.interaction = .browsing; state.focus(.search) }
             if case .failed(_, _, false) = state.interaction { state.interaction = .browsing; state.focus(.search) }
         case let .noteFocus(id):
             if let id { chooseNote(id, editing: true) }
-            else if state.inlineEdit?.noteID != nil { _ = finishEdit(before: nil) }
+            else if state.inlineEdit?.noteID != nil { finishEdit(before: nil) }
         case let .chooseStack(id):
             guard !state.isBusy, state.inlineEdit == nil, state.level == .stacks else { break }
             _ = state.stackState.choose(id, from: view.facts)
@@ -334,7 +315,7 @@ struct PaletteUpdate {
             state.focus(.create)
         case let .createStack(name):
             state.interaction = .editing(.createStack(text: name, problem: nil))
-            _ = finishEdit(before: .close)
+            finishEdit(before: .close)
         case let .renameStack(id):
             guard let session = view.facts.session(id: id) else { break }
             state.interaction = .editing(.renameStack(id: id, text: session.name, problem: nil))
@@ -354,7 +335,7 @@ struct PaletteUpdate {
             if let sessionID = state.level.sessionID { enqueue(.removeAnnotation(sessionID: sessionID, annotationID: id)) }
         case let .moveNoteUp(id): moveNote(id, offset: -1)
         case let .moveNoteDown(id): moveNote(id, offset: 1)
-        case let .openSource(url): effects.append(.openURL(url)); _ = update(.close)
+        case let .openSource(url): effects.append(.openURL(url)); update(.close)
         }
     }
 
@@ -368,6 +349,7 @@ struct PaletteUpdate {
     }
 
     /// Navigation waits for the draft's own commit. Focus loss never drops it.
+    @discardableResult
     private mutating func finishEdit(before continuation: PaletteEvent?) -> Bool {
         switch state.interaction {
         case var .saving(pending):
@@ -419,7 +401,7 @@ struct PaletteUpdate {
             state.interaction = .browsing
             state.focus(.search)
             confine()
-            if let next = pending.continuation { _ = update(next) }
+            if let next = pending.continuation { update(next) }
         case let .commitFailed(message): state.interaction = .failed(pending, message, retryable: true)
         case let .rejected(message): state.interaction = .failed(pending, message, retryable: false)
         case .cancelled: state.interaction = .failed(pending, "Saving was cancelled.", retryable: false)
@@ -461,7 +443,7 @@ struct PaletteUpdate {
 
     private mutating func handle(_ key: PaletteKey, textHasSelection: Bool) -> Bool {
         if state.isBusy {
-            if key == .escape { _ = update(.cancelEdit) }
+            if key == .escape { update(.cancelEdit) }
             return true
         }
         if let overlay = state.overlay {
@@ -472,13 +454,13 @@ struct PaletteUpdate {
             case .activate, .commandActivate:
                 let index = state.overlayHighlight
                 if overlay == .actions, view.filteredActionItems.indices.contains(index) {
-                    _ = update(.perform(view.filteredActionItems[index].action))
+                    update(.perform(view.filteredActionItems[index].action))
                 } else if overlay == .templates, view.filteredProfiles.indices.contains(index) {
-                    _ = update(.selectProfile(view.filteredProfiles[index].id))
+                    update(.selectProfile(view.filteredProfiles[index].id))
                 }
             case .escape: closeOverlay()
-            case .command("k"): _ = update(.toggleOverlay(.actions))
-            case .command("p"): _ = update(.toggleOverlay(.templates))
+            case .command("k"): update(.toggleOverlay(.actions))
+            case .command("p"): update(.toggleOverlay(.templates))
             case .command, .shiftCommand, .commandDelete, .shiftCommandDelete, .optionUp, .optionDown, .commandDigit:
                 closeOverlay()
                 return handle(key, textHasSelection: false)
@@ -488,9 +470,9 @@ struct PaletteUpdate {
         }
         if state.inlineEdit != nil {
             switch key {
-            case .activate: _ = update(.commitEdit)
-            case .escape: _ = update(.cancelEdit)
-            case .command("k"): _ = update(.toggleOverlay(.actions))
+            case .activate: update(.commitEdit)
+            case .escape: update(.cancelEdit)
+            case .command("k"): update(.toggleOverlay(.actions))
             default: return false
             }
             return true
@@ -501,27 +483,27 @@ struct PaletteUpdate {
             if state.level == .stacks { state.stackState.move(by: offset, in: view.stackListing.rows) }
             else { state.noteState.move(by: offset, in: view.noteListing.ids) }
         case .escape:
-            if !state.query.isEmpty { _ = update(.query("")) }
+            if !state.query.isEmpty { update(.query("")) }
             else if state.level != .stacks { navigate(.stacks) }
-            else { _ = update(.close) }
+            else { update(.close) }
         case .command("k"): openOverlay(.actions)
         case .command("p"): openOverlay(.templates)
         case let .commandDigit(digit):
             let index = digit - 1
             if state.level == .stacks, view.stackListing.sessions.indices.contains(index) {
-                _ = update(.perform(.switchToStack(view.stackListing.sessions[index].id)))
+                update(.perform(.switchToStack(view.stackListing.sessions[index].id)))
             } else if view.noteListing.ids.indices.contains(index) {
                 state.noteState.select(view.noteListing.ids[index])
             }
         case .activate, .commandActivate:
             if state.level == .stacks {
                 switch state.stackState.highlight {
-                case let .session(id): _ = update(.perform(.switchToStack(id)))
-                case let .create(name): _ = update(.perform(.createStack(name)))
+                case let .session(id): update(.perform(.switchToStack(id)))
+                case let .create(name): update(.perform(.createStack(name)))
                 case nil: effects.append(.beep)
                 }
             } else if key == .commandActivate, let id = state.level.sessionID {
-                _ = update(.perform(.switchToStack(id)))
+                update(.perform(.switchToStack(id)))
             } else if let id = state.noteState.highlight { chooseNote(id, editing: true) }
         case .tab, .right:
             guard key == .tab || state.query.isEmpty else { return false }
@@ -548,7 +530,7 @@ struct PaletteUpdate {
             case .optionDown: shortcut = "⌥↓"
             default: return false
             }
-            if let item = view.actionItems.first(where: { $0.keys == shortcut }) { _ = update(.perform(item.action)) }
+            if let item = view.actionItems.first(where: { $0.keys == shortcut }) { update(.perform(item.action)) }
             else { effects.append(.beep) }
         }
         return true

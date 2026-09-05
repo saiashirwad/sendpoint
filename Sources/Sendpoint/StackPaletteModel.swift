@@ -9,19 +9,18 @@ final class StackPaletteModel {
     let store: AnnotationStore
     let settings: AppSettings
     @ObservationIgnored private let onSelectProfile: (UUID) -> Void
-    @ObservationIgnored private let onClose: () -> Void
+    @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored private let export: ExportController
     @ObservationIgnored private let confirmDelete: (UUID, [Session], ClearedBatch?) -> Bool
     @ObservationIgnored private var flashTask: Task<Void, Never>?
 
     init(store: AnnotationStore, settings: AppSettings, export: ExportController,
-         onSelectProfile: @escaping (UUID) -> Void, onClose: @escaping () -> Void,
+         onSelectProfile: @escaping (UUID) -> Void,
          confirmDelete: ((UUID, [Session], ClearedBatch?) -> Bool)? = nil) {
         self.store = store
         self.settings = settings
         self.export = export
         self.onSelectProfile = onSelectProfile
-        self.onClose = onClose
         self.confirmDelete = confirmDelete ?? {
             SessionDialogs.confirmsDelete(sessionID: $0, sessions: $1, lastCleared: $2)
         }

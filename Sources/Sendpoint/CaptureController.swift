@@ -29,16 +29,6 @@ private enum CaptureServiceError: LocalizedError {
     var errorDescription: String? { "Microphone access is off. Turn it on in Settings › Voice." }
 }
 
-enum CaptureSurface { case editor, voice }
-
-@MainActor
-struct CapturePresentation {
-    var show: (CaptureSurface) -> Void
-    var focus: () -> Void
-    var close: () -> Void
-    var stopEscapeHandling: () -> Void
-}
-
 /// TEA effect owner. The reducer owns workflow state; this owns native resources.
 @MainActor
 @Observable
@@ -48,7 +38,6 @@ final class CaptureController {
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let permissionState: PermissionState
     @ObservationIgnored private let services: CaptureServices
-    @ObservationIgnored private let presentation: CapturePresentation?
     @ObservationIgnored private lazy var windows = CaptureWindows(model: self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
     private enum Work: Hashable { case selection, recording, transcription, failure }
@@ -61,6 +50,9 @@ final class CaptureController {
     var onStatusChange: (() -> Void)?
     var onVoiceCaptureEnded: (() -> Void)?
     var onVoiceEscape: (() -> Void)?
+    /// Runs synchronously before the editor activates the app, so other
+    /// windows can get out of the way instead of being dragged forward.
+    var onWillPresentEditor: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { VoiceAnnotationService.shared.levelMeter }
     var isOpen: Bool { state.session != nil }
@@ -81,13 +73,11 @@ final class CaptureController {
     }
 
     init(settings: AppSettings, permissionState: PermissionState,
-         provenanceProbe: ProvenanceProbe = .live(), services: CaptureServices? = nil,
-         presentation: CapturePresentation? = nil) {
+         provenanceProbe: ProvenanceProbe = .live(), services: CaptureServices? = nil) {
         self.settings = settings
         self.permissionState = permissionState
         self.probe = provenanceProbe
         self.services = services ?? .live
-        self.presentation = presentation
     }
 
     func configure(store: AnnotationStore) {
@@ -144,7 +134,7 @@ final class CaptureController {
                 return .recordingStarted(context)
             }
         case let .transcribe(context):
-            if let presentation { presentation.stopEscapeHandling() } else { windows.stopEscapeHandling() }
+            windows.stopEscapeHandling()
             launch(.transcription, context: context) { [services] in
                 .transcript(context, try await services.transcribe())
             }
@@ -167,12 +157,8 @@ final class CaptureController {
             }
         case .retry: store?.retryPendingMutations()
         case let .abandon(target): provenance.abandon(for: target)
-        case .showEditor, .showVoice:
-            let surface: CaptureSurface
-            if case .showEditor = effect { surface = .editor } else { surface = .voice }
-            if let presentation { presentation.show(surface) } else { windows.show(surface) }
-        case .focusEditor:
-            if let presentation { presentation.focus() } else { windows.focus() }
+        case let .show(surface): windows.show(surface)
+        case .focusEditor: windows.focus()
         case let .failureTimer(context):
             cancelWork()
             launch(.failure, context: context) {
@@ -181,7 +167,7 @@ final class CaptureController {
             }
         case .close:
             cancelWork()
-            if let presentation { presentation.close() } else { windows.close() }
+            windows.close()
             if state != .tornDown, settings.restoreFocusAfterSave,
                let previousApp, previousApp.bundleIdentifier != Bundle.main.bundleIdentifier {
                 previousApp.activate()
@@ -229,5 +215,6 @@ final class CaptureController {
         onAccessibilityRequired = nil
         onStatusChange = nil
         onVoiceEscape = nil
+        onWillPresentEditor = nil
     }
 }

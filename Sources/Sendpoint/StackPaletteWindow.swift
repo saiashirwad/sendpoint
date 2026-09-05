@@ -46,18 +46,12 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.minSize = StackPaletteView.minimumSize
         self.panel = panel
 
-        // Filled in below, once `self` can be captured.
-        var closeHandler: () -> Void = {}
         let model = StackPaletteModel(
-            store: store,
-            settings: settings,
-            export: export,
-            onSelectProfile: onSelectProfile,
-            onClose: { closeHandler() }
+            store: store, settings: settings, export: export, onSelectProfile: onSelectProfile
         )
         self.model = model
         super.init()
-        closeHandler = { [weak self] in self?.releaseWindow() }
+        model.onClose = { [weak self] in self?.releaseWindow() }
 
         // The palette is a sheet of frosted glass over the desktop, so the
         // window itself is clear and a popover-material view carries the tint.

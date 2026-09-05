@@ -47,10 +47,6 @@ enum AudioInputDeviceQuery {
         return AudioInputDevice(id: id, uid: uid, name: name)
     }
 
-    static func device(forUID uid: String) -> AudioInputDevice? {
-        allInputs().first { $0.uid == uid }
-    }
-
     /// Points an engine's input unit at `device`. Must run before anything
     /// reads the node's format, and before the engine starts.
     @discardableResult

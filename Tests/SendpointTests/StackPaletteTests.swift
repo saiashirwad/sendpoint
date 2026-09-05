@@ -72,7 +72,7 @@ final class StackPaletteTests: XCTestCase {
     func testStackLevelActionsFollowTheHighlightedStack() {
         let context = PaletteActionContext(
             level: .stacks,
-            focus: .stack(id: stackID, name: "crdt", isCurrent: false, noteCount: 3),
+            focus: .stack(SessionItemFacts(id: stackID, name: "crdt", annotationCount: 3, isCurrent: false)),
             openStack: nil,
             canDeleteStack: true,
             undo: SessionUndoFacts(
@@ -93,7 +93,7 @@ final class StackPaletteTests: XCTestCase {
 
         let empty = PaletteActionCatalog.items(for: PaletteActionContext(
             level: .stacks,
-            focus: .stack(id: stackID, name: "crdt", isCurrent: true, noteCount: 0),
+            focus: .stack(SessionItemFacts(id: stackID, name: "crdt", annotationCount: 0, isCurrent: true)),
             openStack: nil, canDeleteStack: false, undo: nil, templateName: "Plain"
         ))
         XCTAssertEqual(empty.map(\.action), [
@@ -114,7 +114,7 @@ final class StackPaletteTests: XCTestCase {
         let context = PaletteActionContext(
             level: .notes(stackID),
             focus: .note(id: secondNoteID, index: 1, count: 3, sourceURL: url),
-            openStack: (id: stackID, name: "crdt", isCurrent: false, noteCount: 3),
+            openStack: SessionItemFacts(id: stackID, name: "crdt", annotationCount: 3, isCurrent: false),
             canDeleteStack: true,
             undo: nil,
             templateName: "Coherent"
@@ -132,7 +132,7 @@ final class StackPaletteTests: XCTestCase {
         let last = PaletteActionCatalog.items(for: PaletteActionContext(
             level: .notes(stackID),
             focus: .note(id: thirdNoteID, index: 2, count: 3, sourceURL: nil),
-            openStack: (id: stackID, name: "crdt", isCurrent: true, noteCount: 3),
+            openStack: SessionItemFacts(id: stackID, name: "crdt", annotationCount: 3, isCurrent: true),
             canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertFalse(last.contains { $0.action == .moveNoteDown(thirdNoteID) }, "last note cannot move down")
@@ -141,7 +141,7 @@ final class StackPaletteTests: XCTestCase {
 
         let nothing = PaletteActionCatalog.items(for: PaletteActionContext(
             level: .notes(stackID), focus: .nothing,
-            openStack: (id: stackID, name: "crdt", isCurrent: true, noteCount: 0),
+            openStack: SessionItemFacts(id: stackID, name: "crdt", annotationCount: 0, isCurrent: true),
             canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertEqual(nothing.map(\.action), [.renameStack(stackID), .chooseTemplate, .backToStacks])
@@ -150,7 +150,7 @@ final class StackPaletteTests: XCTestCase {
     func testActionFilterMatchesTitleAndSubtitle() {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             level: .stacks,
-            focus: .stack(id: stackID, name: "crdt", isCurrent: false, noteCount: 3),
+            focus: .stack(SessionItemFacts(id: stackID, name: "crdt", annotationCount: 3, isCurrent: false)),
             openStack: nil, canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertEqual(

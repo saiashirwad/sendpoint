@@ -102,19 +102,8 @@ final class PendingProvenanceWorkOwner {
         return annotation
     }
 
-    /// Cancels only if this capture has not been queued for a save.
-    func cancelBeforeSave(for target: AnnotationCaptureTarget) {
-        guard let work = workByCaptureID[target.captureID],
-              work.route == Route(target: target),
-              work.savedAnnotation == nil
-        else { return }
-        work.task?.cancel()
-        workByCaptureID.removeValue(forKey: target.captureID)
-        resumeIdleWaitersIfNeeded()
-    }
-
-    /// Cancels matching work even after it was prepared for a save. Use this
-    /// only when that save was rejected or the user chose a new destination.
+    /// Cancels matching work, even after it was prepared for a save: the save
+    /// was rejected, the user chose a new destination, or the capture was dropped.
     func abandon(for target: AnnotationCaptureTarget) {
         guard let work = workByCaptureID[target.captureID],
               work.route == Route(target: target)
