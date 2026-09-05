@@ -241,21 +241,50 @@
       display: flex; flex-direction: column;
       box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0,0,0,0.4);
     }
+    /* Helium's compact toolbar: lights, address field, tabs and tools on one row */
     .win .bar {
-      display: flex; align-items: center; gap: 0.6em;
-      padding: 0.5em 0.9em;
+      display: flex; align-items: center; gap: 0.55em;
+      height: 2.5em; padding: 0 0.7em 0 0.75em;
       border-bottom: 1px solid var(--line);
-      color: var(--fg-3); font-size: 0.85em;
+      color: var(--fg-2); font-size: 0.85em;
       background: var(--bg-2);
+      white-space: nowrap;
     }
-    .dots { display: flex; gap: 0.4em; }
-    .dots i { width: 0.7em; height: 0.7em; border-radius: 50%; background: var(--line); display: block; }
-    .win .bar .url {
-      flex: 1; max-width: 22em; margin: 0 auto;
-      text-align: center; background: var(--bg); border: 1px solid var(--line);
-      border-radius: 0.5em; padding: 0.15em 0.8em; color: var(--fg-2);
+    .lights { display: flex; gap: 0.5em; margin-right: 0.35em; flex: none; }
+    .lights i { width: 0.8em; height: 0.8em; border-radius: 50%; display: block; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.12); }
+    .lights i:nth-child(1) { background: #ff5f57; }
+    .lights i:nth-child(2) { background: #febc2e; }
+    .lights i:nth-child(3) { background: #28c840; }
+    .win .bar .field, .win .bar .tab {
+      display: flex; align-items: center; gap: 0.45em;
+      height: 1.75em; padding: 0 0.55em;
+      border-radius: 0.45em; border: 1px solid var(--line);
+      background: var(--bg); color: var(--fg);
     }
-    .win .bar .sp { width: 3.2em; }
+    .win .bar .field { width: 17em; flex: none; }
+    .win .bar .field .site { width: 0.95em; height: 0.95em; color: var(--fg-3); flex: none; }
+    .win .bar .field .addr { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .win .bar .field .star { width: 0.95em; height: 0.95em; color: var(--fg-3); flex: none; }
+    .win .bar .tabs { display: flex; align-items: center; gap: 0.2em; margin-left: 0.5em; min-width: 0; flex: 1; }
+    .win .bar .tab { border-color: transparent; background: transparent; color: var(--fg-2); flex: 0 1 auto; min-width: 0; }
+    .win .bar .tab.on { border-color: var(--line); background: var(--bg); color: var(--fg); flex-shrink: 0.15; }
+    .win .bar .tab .fav { width: 1em; height: 1em; flex: none; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: 700; border-radius: 0.2em; }
+    .win .bar .tab .fav svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+    .win .bar .tab .fav.x { background: #000; color: #fff; padding: 0.15em; box-sizing: border-box; }
+    .win .bar .tab .fav.oa { background: #fff; color: #000; padding: 0.12em; box-sizing: border-box; box-shadow: 0 0 0 0.5px rgba(0,0,0,0.12); }
+    .win .bar .tab .fav.he { border-radius: 0.26em; overflow: hidden; }
+    .win .bar .tab .t { overflow: hidden; text-overflow: ellipsis; }
+    .win .bar .tab .x { color: var(--fg-3); margin-left: 0.15em; font-size: 0.95em; }
+    .win .bar .plus { color: var(--fg-3); padding: 0 0.4em; font-size: 1.1em; flex: none; }
+    .win .bar .tools { margin-left: auto; display: flex; align-items: center; gap: 0.8em; color: var(--fg-3); flex: none; }
+    .win .bar .tools svg { width: 1em; height: 1em; display: block; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    /* Helium's dark toolbar is a mid grey with lighter, borderless fills */
+    @media (prefers-color-scheme: dark) {
+      .win .bar { background: #2b2b2f; border-bottom-color: #3a3a3f; color: #b9b9c0; }
+      .win .bar .field, .win .bar .tab.on { background: #3c3c41; border-color: transparent; color: #f2f2f2; }
+      .win .bar .tab { color: #c4c4cb; }
+      .win .bar .field .site, .win .bar .field .star, .win .bar .tab .x, .win .bar .plus, .win .bar .tools { color: #9a9aa2; }
+    }
     .msgs {
       flex: 1; overflow: hidden; position: relative;
       padding: 1em 1.2em 0.6em;
@@ -476,7 +505,24 @@
         </div>
 
         <div class="win" id="doc">
-          <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">chatgpt.com</span><span class="sp"></span></div>
+          <div class="bar">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="field">
+              <svg class="site" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5h12M2 11h12"/><circle cx="6" cy="5" r="1.6" fill="var(--bg-2)"/><circle cx="10" cy="11" r="1.6" fill="var(--bg-2)"/></svg>
+              <span class="addr">chatgpt.com/c/68b6f2a4-9c1e-8005-b7d3-4e2f91c0a8d7</span>
+              <svg class="star" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4L2.2 6.5l4-.6z"/></svg>
+            </span>
+            <span class="tabs">
+              <span class="tab"><span class="fav x"><svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></span><span class="t">sai (@texoport__) / X</span></span>
+              <span class="tab on"><span class="fav oa"><svg viewBox="0 0 24 24"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg></span><span class="t">Closures in CEK Machines</span><span class="x">×</span></span>
+              <span class="tab"><span class="fav"><svg viewBox="0 0 24 24"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg></span><span class="t">sendpoint</span></span>
+              <span class="tab"><span class="fav he"><svg viewBox="0 0 256 256"><rect width="256" height="256" rx="67" fill="#3450D1"/><path fill="#FBFCFF" d="M145.966 207.813L128 221L110.034 207.813L118.198 144.891L67.4689 183.379L47 174.5L49.4993 152.438L108.391 128L49.4993 103.562L47 81.5L67.4689 72.6214L118.198 111.109L110.034 48.1871L128 35L145.966 48.1871L137.802 111.109L188.531 72.6214L209 81.5L206.501 103.562L147.609 128L206.501 152.438L209 174.5L188.531 183.379L137.802 144.891L145.966 207.813Z"/></svg></span><span class="t">Helium</span></span>
+              <span class="plus">+</span>
+            </span>
+            <span class="tools">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3.5" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="12.5" r="1" fill="currentColor"/></svg>
+            </span>
+          </div>
           <div class="msgs" id="msgs">
             <div class="col" id="col">
               <div class="user">how does a CEK machine handle closures?</div>
