@@ -55,54 +55,32 @@ _Ghostty · sendpoint — fish · ~/code/sendpoint · 2:17 PM_
 
 ## Where notes come from
 
-Each note records the app it was taken in, the window or tab title, and a link when the app can give one. Sendpoint asks the frontmost app directly; the first time it asks a browser or terminal, macOS shows the Automation prompt for that app.
+Every note records the app and window title. Some apps give more:
 
-- **Browsers — page URL and tab title.** Safari, Safari Technology Preview, Chrome (including Beta, Dev and Canary), Chromium, Arc, Brave, Edge, Vivaldi, Helium.
-- **Editors — the file you have open.** VS Code (including Insiders, Exploration and OSS builds), VSCodium, Cursor, Windsurf, Antigravity, T3 Code, Trae, Zed.
-- **Terminals — the working directory.** Ghostty, kitty, Terminal.
-
-Everywhere else, a note still records the app and its window title.
+- **Browsers** add the page URL: Safari, Chrome, Chromium, Arc, Brave, Edge, Vivaldi, Helium.
+- **Editors** add the open file: VS Code, VSCodium, Cursor, Windsurf, Antigravity, T3 Code, Trae, Zed.
+- **Terminals** add the working directory: Ghostty, kitty, Terminal.
 
 ## Templates
 
-A template decides what the export looks like: the preamble at the top, and whether to include the app, the window title, the link, timestamps and the date heading. Three come built in.
-
-- **Plain** — the notes and the quotes, nothing else. The default.
-- **Coherent** — asks for one answer that takes all the notes together.
-- **Point by Point** — asks for each note addressed separately.
-
-You can edit these and add your own.
+A template is the preamble plus which metadata to include. Three are built in: **Plain** (default), **Coherent**, **Point by Point**. Edit them or add your own.
 
 ## Privacy
 
-Selected text, notes, audio, transcription, and voice-model work stay on this Mac.
-
-The microphone is only open while a voice note is being recorded. Transcription runs locally on Parakeet v3 through Core ML. There are no analytics, and the app makes no network requests of its own — the one download is the voice model, fetched once from Hugging Face when you ask for it during setup.
-
-Everything Sendpoint writes:
+Everything stays on this Mac. The microphone is open only while recording. Transcription is local (Parakeet v3, Core ML). No analytics. The only network request is the one-time model download.
 
 ```
-~/Library/Application Support/Sendpoint/store.json    your stacks and notes
-~/Library/Application Support/Sendpoint/debug.log     a local log, rotated at ~2 MB
-~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3    the voice model
-~/Library/Preferences/app.sendpoint.plist             shortcuts, templates, settings
+~/Library/Application Support/Sendpoint/store.json                       notes
+~/Library/Application Support/Sendpoint/debug.log                        log
+~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3     voice model
+~/Library/Preferences/app.sendpoint.plist                                settings
 ```
-
-## Requirements
-
-An Apple Silicon Mac running macOS 14 or later.
 
 ## Install
 
-Download from [sendpoint.app/download](https://sendpoint.app/download), unzip, and move Sendpoint to your Applications folder. On first launch it walks you through three things:
-
-- **Accessibility** — reads the text you select. Granted by hand in System Settings → Privacy & Security → Accessibility.
-- **Microphone** — listens only while a voice note is open.
-- **Local voice model** — Parakeet v3, a one-time 460 MB download.
+Apple Silicon, macOS 14 or later. Download from [sendpoint.app/download](https://sendpoint.app/download), move to Applications, and grant Accessibility, Microphone, and the 460 MB voice model when asked.
 
 ## Uninstall
-
-Turn off "Launch at login" in Settings first, then delete:
 
 ```sh
 rm -rf /Applications/Sendpoint.app
@@ -111,26 +89,16 @@ rm -rf ~/Library/Application\ Support/FluidAudio/Models/parakeet-tdt-0.6b-v3
 defaults delete app.sendpoint
 ```
 
-The FluidAudio directory may hold models other apps put there, so remove the one folder rather than the whole thing.
-
 ## Development
 
-Swift Package Manager from the terminal; no Xcode project is needed.
-
 ```sh
-swift test                     # Debug build and tests
-./build.sh                     # Debug app bundle, locally signed
-./install.sh                   # Replace the installed app and launch it
-./build.sh release             # Optimized app bundle for performance checks
-./release.sh 1.4               # Build, notarize, staple and zip a release
-./release.sh 1.4 --publish     # ...then publish it on GitHub
+swift test                  # tests
+./build.sh                  # debug app bundle
+./install.sh                # replace the installed app and launch it
+./release.sh 1.4 --publish  # notarize, zip, publish on GitHub
 ```
 
-`./release.sh VERSION --ad-hoc` builds without an Apple account. See the notes at the top of the script for the one-time notarization setup.
-
-[AGENTS.md](AGENTS.md) has the engineering guidelines this codebase follows — state, concurrency, and where the system boundaries are.
-
-Speech to text is [FluidAudio](https://github.com/FluidInference/FluidAudio) running Parakeet TDT v3.
+See [AGENTS.md](AGENTS.md) for engineering guidelines. Speech to text is [FluidAudio](https://github.com/FluidInference/FluidAudio).
 
 ## License
 
