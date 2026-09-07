@@ -6,6 +6,9 @@
 #   ./release.sh 1.2 --ad-hoc                build without an Apple account
 #   ./release.sh 1.2 --ad-hoc --publish      ...then publish on GitHub
 #
+# Publishing also points the website's download button at the new zip,
+# commits that with the version bump, and deploys the site with wrangler.
+#
 # One-time setup:
 #   1. Install a "Developer ID Application" certificate in your keychain
 #      (Xcode → Settings → Accounts → Manage Certificates).
@@ -84,7 +87,14 @@ if [ "$PUBLISH" = true ]; then
         echo "Publishing needs an authenticated GitHub CLI (gh)." >&2
         exit 1
     fi
+    if ! (cd web && npx --yes wrangler whoami 2>/dev/null | grep -q "logged in"); then
+        echo "Publishing needs wrangler logged in to Cloudflare (cd web && npx wrangler login)." >&2
+        exit 1
+    fi
 fi
+
+SITE_PAGE="web/public/index.html"
+DOWNLOAD_URL="https://github.com/saiashirwad/sendpoint/releases/download/v${VERSION}/Sendpoint-${VERSION}.zip"
 
 echo "==> Stamping version ${VERSION}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" Resources/Info.plist
@@ -120,8 +130,15 @@ ditto -c -k --keepParent "$APP" "$ARCHIVE"
 )
 
 if [ "$PUBLISH" = true ]; then
+    echo "==> Pointing the website at ${DOWNLOAD_URL}"
+    sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.zip#${DOWNLOAD_URL}#" "$SITE_PAGE"
+    if ! grep -q "$DOWNLOAD_URL" "$SITE_PAGE"; then
+        echo "Could not find the download link in ${SITE_PAGE}." >&2
+        exit 1
+    fi
+
     echo "==> Publishing v${VERSION}"
-    git add Resources/Info.plist
+    git add Resources/Info.plist "$SITE_PAGE"
     git commit -m "Release ${VERSION}"
     git tag -a "v${VERSION}" -m "${APP_NAME} ${VERSION}"
     git push --atomic origin HEAD "refs/tags/v${VERSION}"
@@ -143,6 +160,9 @@ if [ "$PUBLISH" = true ]; then
             --title "${APP_NAME} ${VERSION}" \
             --generate-notes
     fi
+
+    echo "==> Deploying the website"
+    (cd web && npx --yes wrangler deploy)
 else
     echo
     echo "Ready: ${ARCHIVE}"

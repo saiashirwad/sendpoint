@@ -25,3 +25,10 @@
 - Cover cancellation, stale-result rejection, invalid transitions, and teardown paths.
 - Prefer a small explicit dependency boundary over a framework or protocol hierarchy.
 - Make clean cutovers: remove obsolete callers, state fields, settings keys, imports, and files.
+
+## Releasing
+
+- Cut and publish a release with one command: `./release.sh X.Y.Z --ad-hoc --publish`. Drop `--ad-hoc` once a Developer ID certificate and notary profile exist.
+- That command bumps the version, builds, tags, pushes, publishes the GitHub release, points the website's download button at the new zip, and deploys the site with wrangler. Do not do those steps by hand or split them across commits.
+- The website's download link must always match the latest GitHub release. If you touch `web/public/index.html`, keep the link pointing at `releases/download/vX.Y.Z/Sendpoint-X.Y.Z.zip` for the current version in `Resources/Info.plist`.
+- Pushing to `main` does not deploy the site. Only `wrangler deploy` from `web/` does.
