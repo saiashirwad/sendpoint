@@ -63,10 +63,25 @@ final class VoiceAnnotationService {
         }
     }
 
+    /// Building an engine and touching its input node costs tens of
+    /// milliseconds, so the next one is built ahead of time, off the hot path.
+    private var spareEngine: AVAudioEngine?
+
+    /// Call once at launch and after every recording, when nobody is waiting.
+    func warmUp() {
+        guard spareEngine == nil,
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        else { return }
+        let engine = AVAudioEngine()
+        _ = engine.inputNode
+        spareEngine = engine
+    }
+
     func startRecording() throws {
         guard !isRecording else { return }
 
-        let engine = AVAudioEngine()
+        let engine = spareEngine ?? AVAudioEngine()
+        spareEngine = nil
         let input = engine.inputNode
         selectInputDevice(on: input)
         let format = input.outputFormat(forBus: 0)
@@ -111,11 +126,16 @@ final class VoiceAnnotationService {
 
     /// Points the input unit at the chosen microphone before the engine
     /// reads its format. Must run before anything else touches the node.
+    ///
+    /// The unit is always pinned to a concrete device. Left to follow the
+    /// system default on its own, the input unit takes around half a second
+    /// to start; pinned to that same default device it starts in about 50ms.
     private func selectInputDevice(on input: AVAudioInputNode) {
-        guard let device = InputDeviceChoice.resolve(
+        let device = InputDeviceChoice.resolve(
             preferredUID: preferredInputDeviceUID,
             available: AudioInputDeviceQuery.allInputs()
-        ) else { return }
+        ) ?? AudioInputDeviceQuery.defaultInput()
+        guard let device else { return }
         if AudioInputDeviceQuery.select(device, on: input) {
             Diag.log("voice input device: \(device.name)")
         }
@@ -176,6 +196,7 @@ final class VoiceAnnotationService {
         recordingFile = nil // Flush the audio file before FluidAudio reads it.
         recordingURL = nil
         Diag.log("voice recording stopped, \(Int(duration * 1000))ms")
+        warmUp()
         return (url, duration)
     }
 }

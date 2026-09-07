@@ -86,6 +86,12 @@ final class CaptureController {
         self.store = store
     }
 
+    /// Builds the voice overlay ahead of the first hotkey press.
+    func warmUp() {
+        guard state != .tornDown else { return }
+        windows.prepareVoiceOverlay()
+    }
+
     func beginCapture() { begin(.text) }
     func beginVoiceCapture() { begin(.voice) }
     func endVoiceCapture() { send(.finishVoice) }
@@ -210,6 +216,7 @@ final class CaptureController {
         guard state != .tornDown else { return }
         onVoiceCaptureEnded = nil
         send(.teardown)
+        windows.discardVoiceOverlay()
         provenance.teardown()
         store = nil
         onAccessibilityRequired = nil

@@ -26,6 +26,10 @@ final class CapturePanel: NSPanel {
 final class CaptureWindows {
     private unowned let model: CaptureController
     private var panel: CapturePanel?
+    /// Built once and kept: constructing the overlay and its SwiftUI hosting
+    /// view costs tens of milliseconds, which would sit between the hotkey
+    /// and the first sample of audio. Showing it again is a reposition.
+    private var voicePanel: CapturePanel?
     private var keyMonitor: Any?
     private var voiceEscapeMonitor: Any?
     private var surface: CaptureSurface?
@@ -72,10 +76,26 @@ final class CaptureWindows {
         keyMonitor = nil
         panel?.onClose = nil
         panel?.orderOut(nil)
-        panel?.contentView = nil
-        panel?.close()
+        if panel !== voicePanel {
+            panel?.contentView = nil
+            panel?.close()
+        }
         panel = nil
         surface = nil
+    }
+
+    func discardVoiceOverlay() {
+        close()
+        voicePanel?.contentView = nil
+        voicePanel?.close()
+        voicePanel = nil
+    }
+
+    /// Call at launch, when nobody is waiting, so the first voice note pays
+    /// nothing for the overlay.
+    func prepareVoiceOverlay() {
+        guard voicePanel == nil else { return }
+        voicePanel = makeVoicePanel()
     }
 
     private func installVoiceEscapeFallback() {
@@ -126,13 +146,31 @@ final class CaptureWindows {
     /// Puts the overlay on screen without activating the app, so the front
     /// app keeps focus while its selection is still being read.
     private func presentVoice() {
+        prepareVoiceOverlay()
+        guard let panel = voicePanel else { return }
+        panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
+        positionVoiceOverlay(panel)
+        self.panel = panel
+
+        let escapeRegistration = HotKeyCenter.shared.registerRaw(
+            name: "voiceEscape",
+            keyCode: 53,
+            carbonModifiers: 0,
+            pressed: { [weak self] in self?.model.voiceEscape() }
+        )
+        if case .failed = escapeRegistration {
+            installVoiceEscapeFallback()
+        }
+        panel.orderFrontRegardless()
+    }
+
+    private func makeVoicePanel() -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 110),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -150,19 +188,7 @@ final class CaptureWindows {
         ))
         panel.contentView = hosting
         panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
-        positionVoiceOverlay(panel)
-        self.panel = panel
-
-        let escapeRegistration = HotKeyCenter.shared.registerRaw(
-            name: "voiceEscape",
-            keyCode: 53,
-            carbonModifiers: 0,
-            pressed: { [weak self] in self?.model.voiceEscape() }
-        )
-        if case .failed = escapeRegistration {
-            installVoiceEscapeFallback()
-        }
-        panel.orderFrontRegardless()
+        return panel
     }
 
     // MARK: - Placement

@@ -13,7 +13,10 @@ struct VoiceCaptureView: View {
     let meter: VoiceLevelMeter
 
     @Environment(\.colorScheme) private var systemScheme
-    @State private var appeared = false
+
+    /// The overlay window is built once at launch and kept, so the entrance
+    /// animation keys off the session rather than the view's first appearance.
+    private var appeared: Bool { model.state.session?.mode == .voice }
 
     private var palette: OverlayPalette { .against(systemScheme) }
 
@@ -58,6 +61,7 @@ struct VoiceCaptureView: View {
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(appeared ? 1 : 0.92)
         .opacity(appeared ? 1 : 0)
+        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: appeared)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
         .animation(.easeOut(duration: 0.18), value: failureMessage)
         .environment(\.colorScheme, palette.contentScheme)
@@ -65,11 +69,6 @@ struct VoiceCaptureView: View {
         // The hosting panel is wider than the capsule so the tether and a
         // failure message can appear later without the window resizing.
         .frame(maxWidth: .infinity)
-        .onAppear {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
-                appeared = true
-            }
-        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
     }

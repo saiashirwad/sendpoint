@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             VoiceAnnotationService.shared.preferredInputDeviceUID = settings.inputDeviceUID
         }
         VoiceAnnotationService.shared.preferredInputDeviceUID = settings.inputDeviceUID
+        VoiceAnnotationService.shared.warmUp()
+        captureController.warmUp()
         registerHotKeys()
         permissionState.refresh()
         AutomaticSelectionMonitor.shared.start()
