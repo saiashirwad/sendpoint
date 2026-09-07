@@ -94,11 +94,22 @@ enum SelectionCapture {
         else { return .unavailable }
         if text.isEmpty {
             // An empty string alone is not proof: some views answer "" for
-            // any selection. A readable zero-length range is.
-            return selectedRangeLength(of: element) == 0 ? .empty : .unavailable
+            // any selection. A zero-length range inside real text is. Kitty
+            // reports "", range (0,0) and zero characters no matter what is
+            // highlighted, so an element that claims to hold no text at all
+            // still goes to the clipboard fallback.
+            let holdsText = (characterCount(of: element) ?? 0) > 0
+            return holdsText && selectedRangeLength(of: element) == 0 ? .empty : .unavailable
         }
 
         return .text(text, selectionRect(of: element))
+    }
+
+    private static func characterCount(of element: AXUIElement) -> Int? {
+        var countRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &countRef) == .success
+        else { return nil }
+        return countRef as? Int
     }
 
     private static func selectedRangeLength(of element: AXUIElement) -> Int? {
