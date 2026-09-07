@@ -29,7 +29,18 @@ enum SelectionCapture {
         case brief
 
         var waitsForModifierRelease: Bool { self == .patient }
-        var clipboardTimeout: TimeInterval { self == .patient ? 0.7 : 0.15 }
+        /// A real copy lands well under 100ms; the rest is slack for a busy app.
+        var clipboardTimeout: TimeInterval { self == .patient ? 0.3 : 0.15 }
+    }
+
+    /// What the focused element said when asked for its selection.
+    private enum AccessibilityAnswer {
+        case text(String, CGRect?)
+        /// The element handles text selection and reports none. Nothing to
+        /// copy, so the clipboard fallback would only wait out its timeout.
+        case empty
+        /// No focused element, or one that does not speak the text protocol.
+        case unavailable
     }
 
     static func capture(fallback: FallbackPolicy = .patient) async throws -> CapturedSelection {
@@ -40,11 +51,13 @@ enum SelectionCapture {
         var text = ""
         defer { AutomaticSelectionMonitor.shared.discard() }
 
-        if let (axText, axRect) = accessibilitySelection() {
+        var answer = accessibilitySelection()
+        if case let .text(axText, axRect) = answer {
             text = axText
             rect = axRect
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { answer = .unavailable }
         }
-        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if case .unavailable = answer {
             if let automatic = AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) {
                 text = automatic
             } else {
@@ -65,22 +78,37 @@ enum SelectionCapture {
 
     // MARK: - Accessibility
 
-    private static func accessibilitySelection() -> (String, CGRect?)? {
-        guard AXIsProcessTrusted() else { return nil }
+    private static func accessibilitySelection() -> AccessibilityAnswer {
+        guard AXIsProcessTrusted() else { return .unavailable }
         let system = AXUIElementCreateSystemWide()
 
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focused = focusedRef, CFGetTypeID(focused) == AXUIElementGetTypeID()
-        else { return nil }
+        else { return .unavailable }
         let element = focused as! AXUIElement
 
         var textRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &textRef) == .success,
-              let text = textRef as? String, !text.isEmpty
-        else { return nil }
+              let text = textRef as? String
+        else { return .unavailable }
+        if text.isEmpty {
+            // An empty string alone is not proof: some views answer "" for
+            // any selection. A readable zero-length range is.
+            return selectedRangeLength(of: element) == 0 ? .empty : .unavailable
+        }
 
-        return (text, selectionRect(of: element))
+        return .text(text, selectionRect(of: element))
+    }
+
+    private static func selectedRangeLength(of element: AXUIElement) -> Int? {
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rangeValue = rangeRef, CFGetTypeID(rangeValue) == AXValueGetTypeID()
+        else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else { return nil }
+        return range.length
     }
 
     /// Screen rect of the highlighted range, so the panel can appear beside it.
