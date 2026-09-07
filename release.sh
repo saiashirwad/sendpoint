@@ -87,7 +87,10 @@ if [ "$PUBLISH" = true ]; then
         echo "Publishing needs an authenticated GitHub CLI (gh)." >&2
         exit 1
     fi
-    if ! (cd web && npx --yes wrangler whoami 2>/dev/null | grep -q "logged in"); then
+    # Capture first: with pipefail, grep -q closing the pipe early would
+    # make a successful whoami look like a failure.
+    WRANGLER_STATUS=$(cd web && npx --yes wrangler whoami 2>/dev/null || true)
+    if ! grep -q "logged in" <<<"$WRANGLER_STATUS"; then
         echo "Publishing needs wrangler logged in to Cloudflare (cd web && npx wrangler login)." >&2
         exit 1
     fi
