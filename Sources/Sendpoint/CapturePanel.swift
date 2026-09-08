@@ -26,10 +26,12 @@ final class CapturePanel: NSPanel {
 final class CaptureWindows {
     private unowned let model: CaptureController
     private var panel: CapturePanel?
-    /// Built once and kept: constructing the overlay and its SwiftUI hosting
+    /// Built once and kept: constructing a panel and its SwiftUI hosting
     /// view costs tens of milliseconds, which would sit between the hotkey
-    /// and the first sample of audio. Showing it again is a reposition.
+    /// and the first sample of audio or the first typed letter. Showing one
+    /// again is a reposition.
     private var voicePanel: CapturePanel?
+    private var editorPanel: CapturePanel?
     private var keyMonitor: Any?
     private var voiceEscapeMonitor: Any?
     private var surface: CaptureSurface?
@@ -76,26 +78,25 @@ final class CaptureWindows {
         keyMonitor = nil
         panel?.onClose = nil
         panel?.orderOut(nil)
-        if panel !== voicePanel {
-            panel?.contentView = nil
-            panel?.close()
-        }
         panel = nil
         surface = nil
     }
 
-    func discardVoiceOverlay() {
+    func discardSurfaces() {
         close()
-        voicePanel?.contentView = nil
-        voicePanel?.close()
+        for kept in [voicePanel, editorPanel] {
+            kept?.contentView = nil
+            kept?.close()
+        }
         voicePanel = nil
+        editorPanel = nil
     }
 
-    /// Call at launch, when nobody is waiting, so the first voice note pays
-    /// nothing for the overlay.
-    func prepareVoiceOverlay() {
-        guard voicePanel == nil else { return }
-        voicePanel = makeVoicePanel()
+    /// Call at launch, when nobody is waiting, so the first note pays
+    /// nothing for its window.
+    func prepareSurfaces() {
+        if voicePanel == nil { voicePanel = makeVoicePanel() }
+        if editorPanel == nil { editorPanel = makeEditorPanel() }
     }
 
     private func installVoiceEscapeFallback() {
@@ -107,13 +108,25 @@ final class CaptureWindows {
 
     private func presentEditor() {
         let captured = model.state.session?.target?.captured
+        if editorPanel == nil { editorPanel = makeEditorPanel() }
+        guard let panel = editorPanel else { return }
+        panel.onClose = { [weak self] in self?.model.send(.dismiss) }
+        position(panel, near: captured?.screenRect)
+        self.panel = panel
+
+        model.onWillPresentEditor?()
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    private func makeEditorPanel() -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.onClose = { [weak self] in self?.model.send(.dismiss) }
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.standardWindowButton(.closeButton)?.isHidden = true
@@ -132,21 +145,13 @@ final class CaptureWindows {
         // the material runs edge to edge under the transparent title bar.
         let hosting = NSHostingView(rootView: view)
         panel.contentView = hosting
-
-        position(panel, near: captured?.screenRect)
-
-        self.panel = panel
-
-        model.onWillPresentEditor?()
-
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        return panel
     }
 
     /// Puts the overlay on screen without activating the app, so the front
     /// app keeps focus while its selection is still being read.
     private func presentVoice() {
-        prepareVoiceOverlay()
+        if voicePanel == nil { voicePanel = makeVoicePanel() }
         guard let panel = voicePanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
         positionVoiceOverlay(panel)

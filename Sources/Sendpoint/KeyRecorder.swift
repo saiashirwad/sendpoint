@@ -3,24 +3,40 @@ import SwiftUI
 
 /// Click it, press a shortcut, done.
 struct KeyRecorder: NSViewRepresentable {
-    @Binding var combo: KeyCombo
+    @Binding var combo: KeyCombo?
+    /// Whether ⌫ while recording removes the shortcut instead of setting one.
+    var clearable = false
+
+    init(combo: Binding<KeyCombo?>, clearable: Bool = false) {
+        _combo = combo
+        self.clearable = clearable
+    }
+
+    /// A slot that always has a shortcut.
+    init(combo: Binding<KeyCombo>) {
+        _combo = Binding(get: { combo.wrappedValue }, set: { if let new = $0 { combo.wrappedValue = new } })
+        clearable = false
+    }
 
     func makeNSView(context: Context) -> KeyRecorderView {
         let view = KeyRecorderView()
         view.onChange = { combo = $0 }
         view.combo = combo
+        view.clearable = clearable
         return view
     }
 
     func updateNSView(_ nsView: KeyRecorderView, context: Context) {
         nsView.combo = combo
+        nsView.clearable = clearable
     }
 }
 
 /// Drawn to look like a keycap: a light face over a slightly darker rim.
 /// While recording it turns accent-tinted and asks for the keys.
 final class KeyRecorderView: NSView {
-    var onChange: ((KeyCombo) -> Void)?
+    var onChange: ((KeyCombo?) -> Void)?
+    var clearable = false
 
     var combo: KeyCombo? {
         didSet { needsDisplay = true }
@@ -74,6 +90,15 @@ final class KeyRecorderView: NSView {
         if event.keyCode == 53 { // escape cancels
             recording = false
             window?.makeFirstResponder(nil)
+            return
+        }
+        let plainDelete = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
+            && (event.keyCode == 51 || event.keyCode == 117)
+        if clearable, plainDelete {
+            combo = nil
+            recording = false
+            window?.makeFirstResponder(nil)
+            onChange?(nil)
             return
         }
         let candidate = KeyCombo(keyCode: event.keyCode, modifiers: event.modifierFlags)
@@ -133,7 +158,7 @@ final class KeyRecorderView: NSView {
             color = .labelColor
             font = .monospacedSystemFont(ofSize: 12.5, weight: .medium)
         } else {
-            text = "Click to set"
+            text = "Not set"
             color = .tertiaryLabelColor
             font = .systemFont(ofSize: 12)
         }

@@ -5,13 +5,18 @@ import SendpointDomain
 /// Replace these leaves in tests; no microphone, clipboard or windows are required.
 @MainActor
 struct CaptureServices {
-    var selection: (CaptureMode) async throws -> CapturedSelection
+    /// Reads the selection. The callback fires once nothing that remains
+    /// needs the front app to still be frontmost, so the editor may open.
+    var selection: (CaptureMode, _ editorMayOpen: @escaping @MainActor () -> Void) async throws -> CapturedSelection
     var startRecording: () async throws -> Void
     var transcribe: () async throws -> String
     var discardRecording: () -> Void
 
     static var live: Self {
-        Self(selection: { try await SelectionCapture.capture(fallback: $0 == .text ? .patient : .brief) },
+        Self(selection: { mode, editorMayOpen in
+                try await SelectionCapture.capture(fallback: mode == .text ? .patient : .brief,
+                    editorMayOpen: editorMayOpen)
+            },
             startRecording: {
                 guard await VoiceAnnotationService.shared.requestMicrophoneAccess() else {
                     throw CaptureServiceError.microphoneDenied
@@ -55,6 +60,14 @@ final class CaptureController {
     var onWillPresentEditor: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { VoiceAnnotationService.shared.levelMeter }
+    /// The stack this note lands in: the one fixed when the capture began,
+    /// so switching stacks mid-note does not change what the pill says.
+    var targetStack: SessionItemFacts? {
+        guard let store else { return nil }
+        let id = state.session?.context.sessionID ?? store.currentSessionID
+        return SessionUIFacts(sessions: store.sessions, currentSessionID: store.currentSessionID,
+            lastCleared: store.lastCleared).session(id: id)
+    }
     var isOpen: Bool { state.session != nil }
     var captured: CapturedSelection? { state.session?.target?.captured }
     var note: String {
@@ -68,8 +81,8 @@ final class CaptureController {
         set { send(.changeNote(newValue)) }
     }
     var isNoteFrozen: Bool {
-        if case .editing = state.session?.phase { return false }
-        return true
+        guard let session = state.session, case .editing = session.phase else { return true }
+        return session.saveAwaitsSelection
     }
 
     init(settings: AppSettings, permissionState: PermissionState,
@@ -86,10 +99,10 @@ final class CaptureController {
         self.store = store
     }
 
-    /// Builds the voice overlay ahead of the first hotkey press.
+    /// Builds the overlay and the note box ahead of the first hotkey press.
     func warmUp() {
         guard state != .tornDown else { return }
-        windows.prepareVoiceOverlay()
+        windows.prepareSurfaces()
     }
 
     func beginCapture() { begin(.text) }
@@ -131,8 +144,10 @@ final class CaptureController {
     private func run(_ effect: CaptureEffect, previous: CaptureSession?) {
         switch effect {
         case let .readSelection(context, mode):
-            launch(.selection, context: context) { [services] in
-                .selection(context, try await services.selection(mode))
+            launch(.selection, context: context) { [services, weak self] in
+                .selection(context, try await services.selection(mode) {
+                    self?.send(.selectionPending(context))
+                })
             }
         case let .startRecording(context):
             launch(.recording, context: context) { [services] in
@@ -216,7 +231,7 @@ final class CaptureController {
         guard state != .tornDown else { return }
         onVoiceCaptureEnded = nil
         send(.teardown)
-        windows.discardVoiceOverlay()
+        windows.discardSurfaces()
         provenance.teardown()
         store = nil
         onAccessibilityRequired = nil

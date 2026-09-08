@@ -663,7 +663,7 @@ struct StackPaletteView: View {
 /// The palette's whole color story: a solid sheet, near-black or paper-white,
 /// with every state drawn as a grey wash of the text color so it reads the
 /// same in either appearance.
-private enum PaletteTint {
+enum PaletteTint {
     static let cornerRadius: CGFloat = 16
 
     static func surface(_ scheme: ColorScheme) -> Color {

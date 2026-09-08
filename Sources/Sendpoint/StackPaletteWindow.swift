@@ -60,9 +60,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         installKeyMonitor()
     }
 
-    func show(at level: PaletteLevel) {
+    func show(at level: PaletteLevel, highlighting sessionID: UUID? = nil) {
         guard lifecycle == .active else { return }
         model.send(.open(level))
+        if let sessionID, level == .stacks { model.send(.chooseStack(sessionID)) }
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()

@@ -2,25 +2,19 @@ import AVFoundation
 import Foundation
 import Observation
 
-/// A short, rolling history of microphone loudness, fed by the recording tap
-/// and read by the voice overlay to draw its waveform.
+/// Live microphone loudness, fed by the recording tap and read by the voice
+/// overlay to size its orb. Rises at once and falls gently.
 @MainActor
 @Observable
 final class VoiceLevelMeter {
-    static let sampleCount = 48
-
-    private(set) var samples: [Float] = Array(repeating: 0, count: VoiceLevelMeter.sampleCount)
     private(set) var current: Float = 0
 
     func push(_ level: Float) {
         current = max(level, current * 0.7)
-        samples.removeFirst()
-        samples.append(level)
     }
 
     func reset() {
         current = 0
-        samples = Array(repeating: 0, count: Self.sampleCount)
     }
 
     /// Loudness in 0…1, on a decibel scale that puts quiet speech near 0.3

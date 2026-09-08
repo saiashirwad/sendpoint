@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var accessibilityHelperWindowController: AccessibilityHelperWindowController?
     private var profileEditor: ProfileEditorState?
     private var palette: StackPaletteWindowController?
+    private var switcher: StackSwitcherController?
     private enum StoreState {
         case loading
         case available(AnnotationStore)
@@ -96,6 +97,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bootstrapTask = nil
                 storeState = .available(store)
                 captureController.configure(store: store)
+                switcher = StackSwitcherController(
+                    store: store, settings: settings,
+                    onOpenPalette: { [weak self] id in self?.presentPalette(at: .stacks, highlighting: id) },
+                    onSwitched: { [weak self] stack in self?.flashStatus(stack.name) }
+                )
                 refreshStatusItem()
             } catch is CancellationError {
                 // App termination owns cancellation and teardown.
@@ -111,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func storeDidChange() {
         palette?.documentChanged()
+        switcher?.documentChanged()
         refreshStatusItem()
     }
 
@@ -143,6 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bootstrapTask?.cancel()
         bootstrapTask = nil
         exportController.teardown()
+        switcher?.teardown()
+        switcher = nil
         palette?.teardown()
         setupWindowController?.teardown()
         setupWindowController = nil
@@ -158,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onHotKeysChanged = nil
         settings.onProfilesChanged = nil
         settings.onInputDeviceChanged = nil
-        for name in ShortcutSlot.allCases.map(\.rawValue) + ["voiceEscape"] {
+        for name in ShortcutSlot.allCases.map(\.rawValue) + ["voiceEscape", Self.reverseSwitchHotKey] {
             HotKeyCenter.shared.unregister(name: name)
         }
     }
@@ -270,6 +279,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sessionMenu.addItem(.separator())
             sessionMenu.addItem(item("Switch Stack…", action: #selector(showQuickSwitcher),
                 combo: settings.switchSessionCombo))
+            if let combo = settings.nextStackCombo {
+                sessionMenu.addItem(item("Next Stack", action: #selector(nextStack), combo: combo))
+            }
+            if let combo = settings.previousStackCombo {
+                sessionMenu.addItem(item("Previous Stack", action: #selector(previousStack), combo: combo))
+            }
             let sessionRoot = item("Stack")
             sessionRoot.submenu = sessionMenu
             menu.addItem(sessionRoot)
@@ -340,6 +355,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Hot keys
 
+    private static let reverseSwitchHotKey = "switchSessionReverse"
+
     private func registerHotKeys() {
         handleVoiceTrigger(.configurationChanged(settings.voiceMode))
         let actions: [ShortcutSlot: () -> Void] = [
@@ -347,14 +364,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .capture: { [weak self] in self?.captureSelection() },
             .copy: { [weak self] in self?.copyMarkdown() },
             .stack: { [weak self] in self?.showStack() },
-            .switchSession: { [weak self] in self?.showQuickSwitcher() },
+            .switchSession: { [weak self] in self?.cycleStacks(reverse: false) },
+            .nextStack: { [weak self] in self?.nextStack() },
+            .previousStack: { [weak self] in self?.previousStack() },
             .clear: { [weak self] in self?.clearStack() },
         ]
         var issues: [ShortcutRegistrationIssue] = []
+        HotKeyCenter.shared.unregister(name: Self.reverseSwitchHotKey)
         for slot in ShortcutSlot.allCases {
-            let combo = settings.combo(for: slot)
             // A rejected replacement must not leave the previous binding live.
             HotKeyCenter.shared.unregister(name: slot.rawValue)
+            guard let combo = settings.combo(for: slot) else { continue }
             if let conflict = settings.shortcutConflict(for: combo, excluding: slot) {
                 issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
                 continue
@@ -363,7 +383,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? { [weak self] in self?.handleVoiceTrigger(.released) } : nil
             switch HotKeyCenter.shared.register(name: slot.rawValue, combo: combo, released: released,
                                                 action: actions[slot]!) {
-            case .registered: break
+            case .registered:
+                // ⇧ on the switch shortcut walks the cycle backwards. It is
+                // claimed together with the shortcut, so a failure here is
+                // only logged: the forward direction still works.
+                if slot == .switchSession, let reverse = settings.switchSessionReverseCombo {
+                    HotKeyCenter.shared.register(name: Self.reverseSwitchHotKey, combo: reverse) { [weak self] in
+                        self?.cycleStacks(reverse: true)
+                    }
+                }
             case .invalid: issues.append(.invalid(slot: slot, combo: combo))
             case let .failed(status): issues.append(.unavailable(slot: slot, combo: combo, status: status))
             }
@@ -488,7 +516,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         presentPalette(at: .stacks)
     }
 
-    private func presentPalette(at level: PaletteLevel) {
+    /// The switch shortcut: ⌘⇥ for stacks. A pinned palette gives way to it.
+    private func cycleStacks(reverse: Bool) {
+        guard let switcher else { NSSound.beep(); return }
+        palette?.close()
+        switcher.press(reverse: reverse)
+    }
+
+    @objc private func nextStack() {
+        guard let switcher else { NSSound.beep(); return }
+        switcher.step(1)
+    }
+
+    @objc private func previousStack() {
+        guard let switcher else { NSSound.beep(); return }
+        switcher.step(-1)
+    }
+
+    private func presentPalette(at level: PaletteLevel, highlighting sessionID: UUID? = nil) {
         guard let store else { NSSound.beep(); return }
         if palette == nil {
             palette = StackPaletteWindowController(
@@ -501,7 +546,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onDismiss: { [weak self] in self?.palette = nil }
             )
         }
-        palette?.show(at: level)
+        palette?.show(at: level, highlighting: sessionID)
     }
 
     private func presentPermissionHelpForCapture() {

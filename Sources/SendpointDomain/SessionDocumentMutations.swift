@@ -75,6 +75,13 @@ public enum SessionDocumentMutations {
             }
         }
 
+        guard Set(document.recentSessionIDs).count == document.recentSessionIDs.count else {
+            throw SessionDocumentValidationError("recentSessionIDs must be unique")
+        }
+        for id in document.recentSessionIDs where !document.sessions.contains(where: { $0.id == id }) {
+            throw SessionDocumentValidationError("recentSessionIDs must identify sessions")
+        }
+
         if let batch = document.lastCleared {
             guard !batch.entries.isEmpty else {
                 throw SessionDocumentValidationError("lastCleared must not be empty")
@@ -116,6 +123,7 @@ public enum SessionDocumentMutations {
             }
             document.sessions.append(session)
             document.currentSessionID = session.id
+            document.touchSession(session.id)
 
         case let .renameSession(sessionID, name):
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,7 +144,10 @@ public enum SessionDocumentMutations {
                 return .rejected("The session no longer exists.")
             }
             guard document.currentSessionID != sessionID else { return .noOp }
+            // The stack being left is the one a single switch should bring back.
+            document.touchSession(document.currentSessionID)
             document.currentSessionID = sessionID
+            document.touchSession(sessionID)
 
         case let .deleteSession(sessionID):
             guard let index = sessionIndex(sessionID, in: document) else {
@@ -146,6 +157,7 @@ public enum SessionDocumentMutations {
                 return .rejected("The last session cannot be deleted.")
             }
             document.sessions.remove(at: index)
+            document.recentSessionIDs.removeAll { $0 == sessionID }
             if document.currentSessionID == sessionID {
                 document.currentSessionID = document.sessions[min(index, document.sessions.count - 1)].id
             }
@@ -161,6 +173,7 @@ public enum SessionDocumentMutations {
                 return .rejected("The annotation already exists.")
             }
             document.sessions[sessionIndex].entries.append(annotation)
+            document.touchSession(sessionID)
 
         case let .updateAnnotationNote(sessionID, annotationID, note):
             guard let sessionIndex = sessionIndex(sessionID, in: document),

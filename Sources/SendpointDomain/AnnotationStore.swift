@@ -58,6 +58,11 @@ public final class AnnotationStore {
         document.currentSessionID
     }
 
+    /// The current session first, then the rest by how recently they were used.
+    public var sessionsByRecency: [Session] {
+        document.sessionsByRecency
+    }
+
     public var currentSession: Session {
         // StoreDocument validation guarantees this lookup succeeds.
         document.sessions.first { $0.id == document.currentSessionID }!

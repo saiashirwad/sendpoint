@@ -43,7 +43,13 @@ enum SelectionCapture {
         case unavailable
     }
 
-    static func capture(fallback: FallbackPolicy = .patient) async throws -> CapturedSelection {
+    /// `editorMayOpen` is called when the front app no longer needs to be
+    /// frontmost: at once when Accessibility answered, or just after the copy
+    /// keystroke has been delivered. The clipboard may still be read after.
+    static func capture(
+        fallback: FallbackPolicy = .patient,
+        editorMayOpen: @escaping @MainActor () -> Void = {}
+    ) async throws -> CapturedSelection {
         try Task.checkCancellation()
         let app = NSWorkspace.shared.frontmostApplication
         let processIdentifier = app?.processIdentifier ?? 0
@@ -61,7 +67,8 @@ enum SelectionCapture {
             if let automatic = AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) {
                 text = automatic
             } else {
-                text = try await copyViaKeystroke(processIdentifier: processIdentifier, fallback: fallback)
+                text = try await copyViaKeystroke(processIdentifier: processIdentifier, fallback: fallback,
+                    afterKeystroke: editorMayOpen)
                     ?? AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) ?? ""
             }
         }
@@ -144,9 +151,15 @@ enum SelectionCapture {
 
     // MARK: - Clipboard fallback
 
+    /// How long the target app gets to take the copy keystroke before the
+    /// editor is allowed to come forward. Key events are handled well inside
+    /// this in any responsive app; the clipboard poll continues regardless.
+    private static let keystrokeSettleTime: Duration = .milliseconds(40)
+
     private static func copyViaKeystroke(
         processIdentifier: pid_t,
-        fallback: FallbackPolicy
+        fallback: FallbackPolicy,
+        afterKeystroke: @escaping @MainActor () -> Void
     ) async throws -> String? {
         let pasteboard = NSPasteboard.general
         let saved = snapshot(pasteboard)
@@ -162,6 +175,9 @@ enum SelectionCapture {
         var copiedChangeCount: Int?
         var result: String?
         let deadline = Date().addingTimeInterval(fallback.clipboardTimeout)
+        try await Task.sleep(for: keystrokeSettleTime)
+        try Task.checkCancellation()
+        afterKeystroke()
         while Date() < deadline {
             if pasteboard.changeCount != changeCountBeforeCopy {
                 copiedChangeCount = pasteboard.changeCount

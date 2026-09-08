@@ -26,10 +26,16 @@ struct CaptureSession: Equatable {
     let mode: CaptureMode
     var target: AnnotationCaptureTarget?
     var phase: CapturePhase
+    /// ⌘↩ arrived while the selection was still being read; the save runs
+    /// the moment the target exists.
+    var saveAwaitsSelection = false
 }
 
 enum CaptureAction {
     case begin(CaptureMode, AnnotationCaptureContext)
+    /// The selection reader has done everything that must happen before the
+    /// note box takes over the keyboard; the rest may finish behind it.
+    case selectionPending(AnnotationCaptureContext)
     case selection(AnnotationCaptureContext, CapturedSelection)
     case recordingStarted(AnnotationCaptureContext)
     case failed(AnnotationCaptureContext, String)
@@ -95,6 +101,10 @@ enum CaptureState: Equatable {
         guard var session else { return [] }
         var effects: [CaptureEffect] = []
         switch action {
+        case let .selectionPending(context):
+            guard context == session.context, session.phase == .selectingText else { return [] }
+            session.phase = .editing("")
+            effects = [.show(.editor)]
         case let .selection(context, selection):
             guard context == session.context else { return [] }
             let target = context.target(captured: selection)
@@ -102,6 +112,20 @@ enum CaptureState: Equatable {
             case .selectingText:
                 session.phase = .editing("")
                 effects = [.probe(target), .show(.editor)]
+            case let .editing(note) where session.target == nil:
+                // The box opened early; the passage catches up with it.
+                effects = [.probe(target)]
+                if session.saveAwaitsSelection {
+                    session.saveAwaitsSelection = false
+                    if let annotation = target.annotation(note: note) {
+                        let request = CaptureSaveRequest(target: target,
+                            destinationSessionID: target.sessionID, annotation: annotation)
+                        session.phase = .saving(request)
+                        effects.append(.save(request))
+                    } else {
+                        effects.append(.beep)
+                    }
+                }
             case let .selectingVoice(recording, finishRequested):
                 session.phase = recording ? (finishRequested ? .transcribing : .recording) : .startingVoice
                 effects = [.probe(target)]
@@ -133,7 +157,7 @@ enum CaptureState: Equatable {
             default: return []
             }
         case let .changeNote(note):
-            guard case .editing = session.phase else { return [] }
+            guard case .editing = session.phase, !session.saveAwaitsSelection else { return [] }
             session.phase = .editing(note)
         case .save, .transcript:
             let note: String
@@ -153,6 +177,12 @@ enum CaptureState: Equatable {
                     self = .active(session)
                     return [.failureTimer(session.context)]
                 }
+                if session.target == nil, note.nonblank != nil {
+                    // The passage is still on its way; save as soon as it lands.
+                    session.saveAwaitsSelection = true
+                    self = .active(session)
+                    return []
+                }
                 return [.beep]
             }
             let request = CaptureSaveRequest(target: target,
@@ -165,6 +195,11 @@ enum CaptureState: Equatable {
             case .selectingVoice, .startingVoice, .recording, .transcribing:
                 session.phase = .failed(message)
                 effects = [.failureTimer(context)]
+            case .selectingText:
+                // A typed note never waits on the passage: open without one.
+                return update(.selection(context, CapturedSelection(text: "")))
+            case .editing where session.target == nil:
+                return update(.selection(context, CapturedSelection(text: "")))
             default: return []
             }
         case let .prepared(request, annotation):

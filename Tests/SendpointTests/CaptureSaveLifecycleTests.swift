@@ -121,6 +121,62 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(failed.update(.dismiss), [.close])
     }
 
+    func testEditorOpensAheadOfTheSelectionAndThePassageCatchesUp() {
+        var state = CaptureState.idle
+        XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
+        XCTAssertEqual(state.update(.selectionPending(context)), [.show(.editor)])
+        XCTAssertEqual(state.session?.phase, .editing(""))
+        XCTAssertNil(state.session?.target)
+        XCTAssertEqual(state.update(.selectionPending(context)), [], "a repeat is inert")
+        XCTAssertEqual(state.update(.changeNote("Typed already")), [])
+
+        let target = context.target(captured: selection)
+        XCTAssertEqual(state.update(.selection(context, selection)), [.probe(target)],
+            "the box is already up, so only provenance work starts")
+        XCTAssertEqual(state.session?.target, target)
+        XCTAssertEqual(state.session?.phase, .editing("Typed already"), "typing is kept")
+
+        XCTAssertEqual(state.update(.selection(context, selection)), [], "a second passage is ignored")
+    }
+
+    func testSaveBeforeThePassageArrivesWaitsForItThenSaves() {
+        var state = CaptureState.idle
+        _ = state.update(.begin(.text, context))
+        _ = state.update(.selectionPending(context))
+        _ = state.update(.changeNote("Quick thought"))
+        XCTAssertEqual(state.update(.save), [], "nothing to save against yet, and no beep")
+        XCTAssertEqual(state.session?.saveAwaitsSelection, true)
+        XCTAssertEqual(state.update(.changeNote("Edited late")), [], "the note is frozen while waiting")
+        XCTAssertEqual(state.session?.phase, .editing("Quick thought"))
+
+        let target = context.target(captured: selection)
+        let effects = state.update(.selection(context, selection))
+        guard case let .save(request)? = effects.last else { return XCTFail("expected a save, got \(effects)") }
+        XCTAssertEqual(effects, [.probe(target), .save(request)])
+        XCTAssertEqual(request.annotation.note, "Quick thought")
+        XCTAssertEqual(request.target, target)
+        XCTAssertEqual(state.session?.saveAwaitsSelection, false)
+
+        var blank = CaptureState.idle
+        _ = blank.update(.begin(.text, context))
+        _ = blank.update(.selectionPending(context))
+        XCTAssertEqual(blank.update(.save), [.beep], "a blank note still cannot be queued")
+    }
+
+    func testAFailedSelectionReadOpensTheEditorWithoutAPassage() {
+        var state = CaptureState.idle
+        _ = state.update(.begin(.text, context))
+        let emptyTarget = context.target(captured: CapturedSelection(text: ""))
+        XCTAssertEqual(state.update(.failed(context, "no focused element")), [.probe(emptyTarget), .show(.editor)])
+        XCTAssertEqual(state.session?.phase, .editing(""))
+
+        var early = CaptureState.idle
+        _ = early.update(.begin(.text, context))
+        _ = early.update(.selectionPending(context))
+        XCTAssertEqual(early.update(.failed(context, "timed out")), [.probe(emptyTarget)])
+        XCTAssertEqual(early.session?.target, emptyTarget)
+    }
+
     private func editing(note: String) throws -> CaptureState {
         var state = CaptureState.idle
         XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])

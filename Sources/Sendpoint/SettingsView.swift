@@ -357,8 +357,22 @@ struct SettingsView: View {
                     shortcutRow(
                         icon: "arrow.left.arrow.right",
                         title: "Switch stack",
-                        detail: "Jump to another stack, or name a new one.",
+                        detail: switchStackDetail,
                         slot: .switchSession
+                    )
+                    SettingsDivider()
+                    shortcutRow(
+                        icon: "arrow.right.to.line",
+                        title: "Next stack",
+                        detail: "Steps through your stacks in order. Press ⌫ while recording to remove it.",
+                        slot: .nextStack
+                    )
+                    SettingsDivider()
+                    shortcutRow(
+                        icon: "arrow.left.to.line",
+                        title: "Previous stack",
+                        detail: "The same walk, backwards.",
+                        slot: .previousStack
                     )
                     SettingsDivider()
                     shortcutRow(
@@ -373,6 +387,19 @@ struct SettingsView: View {
         }
     }
 
+    /// Names the modifiers of the switch shortcut, so the explanation matches
+    /// whatever the user bound.
+    private var switchStackDetail: String {
+        let combo = settings.switchSessionCombo
+        var held = ""
+        if combo.modifiers.contains(.control) { held += "⌃" }
+        if combo.modifiers.contains(.option) { held += "⌥" }
+        if combo.modifiers.contains(.command) { held += "⌘" }
+        let reverse = settings.switchSessionReverseCombo.map { " \($0.displayString) goes backwards." } ?? ""
+        return "Tap for the stack you used last. Keep \(held) held and tap again to keep going; "
+            + "let go to choose. ↑ or ↓ opens the full list.\(reverse)"
+    }
+
     private func shortcutRow(
         icon: String,
         title: String,
@@ -380,7 +407,7 @@ struct SettingsView: View {
         slot: ShortcutSlot
     ) -> some View {
         SettingsIconRow(icon: icon, title: title, detail: detail) {
-            KeyRecorder(combo: shortcutBinding(for: slot))
+            KeyRecorder(combo: shortcutBinding(for: slot), clearable: slot.isOptional)
                 .fixedSize()
         }
     }
@@ -395,10 +422,15 @@ struct SettingsView: View {
         }
     }
 
-    private func shortcutBinding(for slot: ShortcutSlot) -> Binding<KeyCombo> {
+    private func shortcutBinding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {
         Binding(
             get: { settings.combo(for: slot) },
             set: { proposed in
+                guard let proposed else {
+                    settings.clearShortcut(for: slot)
+                    shortcutFeedback = nil
+                    return
+                }
                 do {
                     try settings.setShortcut(proposed, for: slot)
                     shortcutFeedback = nil

@@ -22,8 +22,10 @@ The default shortcuts, all changeable in Settings:
 | <kbd>⌃⌘A</kbd> | Typed note, for when you can't talk out loud |
 | <kbd>⌃⌘V</kbd> | Export stack as Markdown                     |
 | <kbd>⌃⌘S</kbd> | Show stack                                   |
-| <kbd>⌃⌘K</kbd> | Switch stack                                 |
+| <kbd>⌘U</kbd>  | Switch stack                                 |
 | <kbd>⌃⌘⌫</kbd> | Clear stack                                  |
+
+Switching works like <kbd>⌘⇥</kbd>. Tap <kbd>⌘U</kbd> to go back to the stack you used last. Keep <kbd>⌘</kbd> held and tap <kbd>U</kbd> again to keep cycling, <kbd>⌘⇧U</kbd> goes backwards, and letting go picks the lit stack. Press <kbd>↑</kbd> or <kbd>↓</kbd> while holding to open the full list instead. Next and previous stack keys exist too, unbound until you set them in Settings.
 
 Voice notes work two ways, set in Settings. **Hold** is the default: hold to speak, release to save. **Tap** presses once to start and again to save. <kbd>⎋</kbd> cancels either way.
 

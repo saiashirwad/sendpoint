@@ -16,11 +16,14 @@ struct CaptureView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let stack = model.targetStack {
+                StackBadge(stack: stack)
+            }
             if !quote.isEmpty {
                 quoteBlock
             }
             noteEditor
-            if case .editing = model.state.session?.phase {
+            if case .editing = model.state.session?.phase, !model.isNoteFrozen {
                 HStack(spacing: 12) {
                     ShortcutHint(keys: "⌘↩", label: "Save")
                     ShortcutHint(keys: "esc", label: "Discard")
@@ -34,6 +37,12 @@ struct CaptureView: View {
         .background(.regularMaterial)
         .ignoresSafeArea()
         .onAppear {
+            DispatchQueue.main.async { noteFocused = true }
+        }
+        // The panel is kept between notes, so each new capture asks for
+        // focus itself rather than relying on a first appearance.
+        .onChange(of: model.state.session?.context) { _, context in
+            guard context != nil else { return }
             DispatchQueue.main.async { noteFocused = true }
         }
     }
@@ -87,9 +96,7 @@ struct CaptureView: View {
     @ViewBuilder
     private var saveStatus: some View {
         switch model.state.session?.phase {
-        case .editing, .none:
-            EmptyView()
-        case .saving:
+        case .editing where model.state.session?.saveAwaitsSelection == true, .saving:
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
@@ -98,6 +105,8 @@ struct CaptureView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
+        case .editing, .none:
+            EmptyView()
         case let .saveFailed(_, message, retryable, missing):
             statusRow(message: message, color: .red) {
                 if retryable {
@@ -126,5 +135,29 @@ struct CaptureView: View {
                 .fixedSize(horizontal: false, vertical: true)
             actions()
         }
+    }
+}
+
+/// Where the note is going, said once and quietly: the stack's name and how
+/// many notes are already in it.
+struct StackBadge: View {
+    let stack: SessionItemFacts
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "square.stack.3d.up.fill")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            Text(stack.name)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text("\(stack.annotationCount)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.leading, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Saving to \(stack.name), \(stack.countLabel)")
     }
 }

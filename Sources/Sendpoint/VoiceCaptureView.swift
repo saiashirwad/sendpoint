@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// The press-and-hold voice overlay: a low, wordless capsule whose only
-/// moving part is a single ribbon of sound. The ribbon's motion is the state
-/// language: it swells with the voice while listening, settles into a hairline
-/// with a passing light while the transcript is made, and turns amber only
-/// when something actually went wrong. When the note is tied to a selection,
-/// a dim word count sits beside the ribbon, so it is clear the words will
-/// attach to something without echoing it back. The capsule inverts against
-/// the system appearance so it never sinks into a same-coloured desktop.
+/// The press-and-hold voice overlay: a low, wordless capsule. It says where
+/// the note is going, the stack's name and how many notes are already there,
+/// and its only moving part is a single orb of sound that swells with the
+/// voice while listening, breathes while the transcript is made, and turns
+/// amber only when something actually went wrong. When the note is tied to a
+/// selection, a dim word count sits beside the orb, so it is clear the words
+/// will attach to something without echoing it back. The capsule inverts
+/// against the system appearance so it never sinks into a same-coloured
+/// desktop.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
@@ -21,21 +22,31 @@ struct VoiceCaptureView: View {
     private var palette: OverlayPalette { .against(systemScheme) }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            if let stack = model.targetStack {
+                Text(stack.name)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(palette.ink.opacity(0.9))
+                    .lineLimit(1)
+                    .frame(maxWidth: 160, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text("\(stack.annotationCount)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(palette.ink.opacity(0.45))
+                    .padding(.leading, -4)
+            }
             if let tether {
+                divider
                 Text(tether)
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(palette.ink.opacity(0.55))
+                    .foregroundStyle(palette.ink.opacity(0.5))
                     .lineLimit(1)
                     .fixedSize()
                     .transition(.opacity.combined(with: .offset(x: 6)))
-                Rectangle()
-                    .fill(palette.ink.opacity(0.12))
-                    .frame(width: 1, height: 12)
-                    .transition(.opacity)
             }
-            Ribbon(mode: ribbonMode, samples: meter.samples, ink: palette.ink, amber: palette.amber)
-                .frame(width: 112, height: 22)
+            Orb(mode: orbMode, level: Double(meter.current), ink: palette.ink, amber: palette.amber)
+                .frame(width: 22, height: 22)
+                .padding(.leading, 2)
             if let failureMessage {
                 Text(failureMessage)
                     .font(.system(size: 11.5, weight: .medium))
@@ -45,8 +56,9 @@ struct VoiceCaptureView: View {
                     .transition(.opacity.combined(with: .offset(x: -6)))
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 34)
+        .padding(.leading, 14)
+        .padding(.trailing, 10)
+        .frame(height: 32)
         .background(Capsule().fill(palette.paper))
         .overlay(
             Capsule().strokeBorder(
@@ -73,11 +85,18 @@ struct VoiceCaptureView: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
+    private var divider: some View {
+        Rectangle()
+            .fill(palette.ink.opacity(0.12))
+            .frame(width: 1, height: 12)
+            .transition(.opacity)
+    }
+
     // MARK: - Copy
 
     // Reading the selection happens while the microphone is already open, so
     // the overlay never mentions it: from the user's side it is all listening.
-    private var ribbonMode: Ribbon.Mode {
+    private var orbMode: Orb.Mode {
         switch model.state.session?.phase {
         case .recording, .selectingVoice(recording: true, finishRequested: _): .live
         case .transcribing, .saving: .thinking
@@ -97,42 +116,13 @@ struct VoiceCaptureView: View {
     }
 
     private var accessibilityLabel: String {
+        let destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
         switch model.state.session?.phase {
-        case .selectingVoice, .startingVoice, .recording: "Voice note: listening"
-        case .transcribing: "Voice note: transcribing"
-        case let .failed(message): "Voice note: \(message)"
-        case .saving: "Voice note: saving"
-        default: ""
-        }
-    }
-}
-
-/// Ink on paper for the capsule, chosen against the system appearance: a
-/// near-black capsule with white ink over light desktops, a translucent white
-/// capsule with black ink over dark ones.
-private struct OverlayPalette {
-    let ink: Color
-    let paper: Color
-    let amber: Color
-    /// What the capsule's own contents render as, the opposite of the system.
-    let contentScheme: ColorScheme
-
-    static func against(_ system: ColorScheme) -> OverlayPalette {
-        switch system {
-        case .dark:
-            OverlayPalette(
-                ink: .black,
-                paper: Color(white: 0.98).opacity(0.9),
-                amber: Color(red: 0.76, green: 0.42, blue: 0.0),
-                contentScheme: .light
-            )
-        default:
-            OverlayPalette(
-                ink: .white,
-                paper: Color(white: 0.06).opacity(0.94),
-                amber: Color(red: 1.0, green: 0.72, blue: 0.38),
-                contentScheme: .dark
-            )
+        case .selectingVoice, .startingVoice, .recording: return "Voice note: listening.\(destination)"
+        case .transcribing: return "Voice note: transcribing.\(destination)"
+        case let .failed(message): return "Voice note: \(message)"
+        case .saving: return "Voice note: saving.\(destination)"
+        default: return ""
         }
     }
 }
@@ -147,10 +137,10 @@ enum VoiceOverlayCopy {
     }
 }
 
-/// One continuous line of sound. Live loudness scrolls through it as a
-/// mirrored envelope; while waiting it is a breathing hairline; while busy a
-/// light travels along it.
-private struct Ribbon: View {
+/// One small circle of sound. Live loudness swells it; while waiting it
+/// breathes; while busy it pulses; when something failed it sits still and
+/// amber.
+private struct Orb: View {
     enum Mode: Equatable {
         case idle
         case live
@@ -159,125 +149,49 @@ private struct Ribbon: View {
     }
 
     let mode: Mode
-    let samples: [Float]
+    /// 0…1 loudness on the speech-centred scale of `VoiceLevelMeter`.
+    let level: Double
     let ink: Color
     let amber: Color
 
+    private let restingDiameter: CGFloat = 8
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: mode == .flat)) { context in
-            Canvas { canvas, size in
-                let time = context.date.timeIntervalSinceReferenceDate
-                let midY = size.height / 2
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: mode == .flat || mode == .live)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            ZStack {
                 switch mode {
                 case .live:
-                    let path = envelope(levels: smoothedLevels(), in: size)
-                    canvas.fill(path, with: .color(ink.opacity(0.22)))
-                    canvas.stroke(
-                        path,
-                        with: .color(ink.opacity(0.92)),
-                        style: StrokeStyle(lineWidth: 1.1, lineJoin: .round)
-                    )
+                    // A soft halo grows faster than the core so loud moments
+                    // read as a bloom rather than a bigger dot.
+                    Circle()
+                        .fill(ink.opacity(0.18))
+                        .frame(width: restingDiameter + 14 * shaped(level), height: restingDiameter + 14 * shaped(level))
+                    Circle()
+                        .fill(ink.opacity(0.95))
+                        .frame(width: restingDiameter + 5 * shaped(level), height: restingDiameter + 5 * shaped(level))
                 case .idle:
                     let breath = 0.5 + 0.5 * sin(time * 2.2)
-                    canvas.stroke(
-                        hairline(in: size),
-                        with: .color(ink.opacity(0.22 + 0.12 * breath)),
-                        style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
-                    )
+                    Circle()
+                        .fill(ink.opacity(0.3 + 0.25 * breath))
+                        .frame(width: restingDiameter, height: restingDiameter)
                 case .thinking:
-                    canvas.stroke(
-                        hairline(in: size),
-                        with: .color(ink.opacity(0.18)),
-                        style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
-                    )
-                    let sweep = (time * 0.85).truncatingRemainder(dividingBy: 1)
-                    let center = (-0.25 + 1.5 * sweep) * size.width
-                    canvas.stroke(
-                        hairline(in: size),
-                        with: .linearGradient(
-                            Gradient(colors: [.clear, ink.opacity(0.95), .clear]),
-                            startPoint: CGPoint(x: center - 34, y: midY),
-                            endPoint: CGPoint(x: center + 34, y: midY)
-                        ),
-                        style: StrokeStyle(lineWidth: 1.6, lineCap: .round)
-                    )
+                    let pulse = 0.5 + 0.5 * sin(time * 5)
+                    Circle()
+                        .strokeBorder(ink.opacity(0.35 + 0.4 * pulse), lineWidth: 1.4)
+                        .frame(width: restingDiameter + 2 + 3 * pulse, height: restingDiameter + 2 + 3 * pulse)
                 case .flat:
-                    canvas.stroke(
-                        hairline(in: size),
-                        with: .color(amber.opacity(0.85)),
-                        style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
-                    )
+                    Circle()
+                        .fill(amber.opacity(0.9))
+                        .frame(width: restingDiameter, height: restingDiameter)
                 }
             }
-        }
-        .mask(
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .white, location: 0.12),
-                    .init(color: .white, location: 0.88),
-                    .init(color: .clear, location: 1),
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-    }
-
-    private func hairline(in size: CGSize) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: size.height / 2))
-        path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-        return path
-    }
-
-    /// Neighbour-averaged loudness, so the ribbon reads as one line rather
-    /// than a row of spikes.
-    private func smoothedLevels() -> [Double] {
-        let raw = samples.map(Double.init)
-        return raw.indices.map { index in
-            let lower = max(0, index - 1)
-            let upper = min(raw.count - 1, index + 1)
-            let window = raw[lower...upper]
-            return window.reduce(0, +) / Double(window.count)
+            .animation(.linear(duration: 0.05), value: level)
         }
     }
 
-    private func envelope(levels: [Double], in size: CGSize) -> Path {
-        var path = Path()
-        guard levels.count > 1 else { return path }
-        let midY = size.height / 2
-        let reach = size.height / 2 - 1
-        let step = size.width / CGFloat(levels.count - 1)
-        let amplitudes = levels.map { level -> CGFloat in
-            let shaped = pow(max(0, level), 1.3)
-            return reach * CGFloat(0.06 + 0.94 * shaped)
-        }
-        let top = amplitudes.enumerated().map { index, amplitude in
-            CGPoint(x: CGFloat(index) * step, y: midY - amplitude)
-        }
-        let bottom = amplitudes.enumerated().reversed().map { index, amplitude in
-            CGPoint(x: CGFloat(index) * step, y: midY + amplitude)
-        }
-        path.move(to: top[0])
-        addSmoothCurve(through: top, to: &path)
-        path.addLine(to: bottom[0])
-        addSmoothCurve(through: bottom, to: &path)
-        path.closeSubpath()
-        return path
-    }
-
-    private func addSmoothCurve(through points: [CGPoint], to path: inout Path) {
-        guard points.count > 2 else {
-            if let last = points.last { path.addLine(to: last) }
-            return
-        }
-        for index in 1..<(points.count - 1) {
-            let control = points[index]
-            let next = points[index + 1]
-            let mid = CGPoint(x: (control.x + next.x) / 2, y: (control.y + next.y) / 2)
-            path.addQuadCurve(to: mid, control: control)
-        }
-        path.addLine(to: points[points.count - 1])
+    /// Quiet speech still moves the orb a little; loud speech does not pin it.
+    private func shaped(_ level: Double) -> CGFloat {
+        CGFloat(pow(min(max(level, 0), 1), 1.3))
     }
 }

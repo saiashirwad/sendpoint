@@ -48,6 +48,8 @@ enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
     case copy
     case stack
     case switchSession
+    case nextStack
+    case previousStack
     case clear
 
     var title: String {
@@ -57,7 +59,17 @@ enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
         case .switchSession: "Switch stack"
+        case .nextStack: "Next stack"
+        case .previousStack: "Previous stack"
         case .clear: "Clear stack"
+        }
+    }
+
+    /// Slots that ship unbound and may be cleared again.
+    var isOptional: Bool {
+        switch self {
+        case .nextStack, .previousStack: true
+        default: false
         }
     }
 }
@@ -125,20 +137,28 @@ final class AppSettings {
         .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
         .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
         .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
-        .switchSession: KeyCombo(keyCode: UInt16(kVK_ANSI_K), modifiers: [.control, .command]),
+        .switchSession: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),
         .clear: KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command]),
     ]
 
+    /// Marks an optional slot the user cleared, so the default does not return.
+    private static let unboundMarker = Data()
+
     private let defaults: UserDefaults
 
-    /// One combo per slot, filled in by `init`.
+    /// One combo per bound slot. Optional slots are absent until set.
     private var combos: [ShortcutSlot: KeyCombo]
-    var voiceCaptureCombo: KeyCombo { combo(for: .voiceCapture) }
-    var captureCombo: KeyCombo { combo(for: .capture) }
-    var copyCombo: KeyCombo { combo(for: .copy) }
-    var stackCombo: KeyCombo { combo(for: .stack) }
-    var switchSessionCombo: KeyCombo { combo(for: .switchSession) }
-    var clearCombo: KeyCombo { combo(for: .clear) }
+    var voiceCaptureCombo: KeyCombo { combos[.voiceCapture]! }
+    var captureCombo: KeyCombo { combos[.capture]! }
+    var copyCombo: KeyCombo { combos[.copy]! }
+    var stackCombo: KeyCombo { combos[.stack]! }
+    var switchSessionCombo: KeyCombo { combos[.switchSession]! }
+    var clearCombo: KeyCombo { combos[.clear]! }
+    /// Walks backwards through the cycle: the switch shortcut plus ⇧, when
+    /// the shortcut itself has no ⇧.
+    var switchSessionReverseCombo: KeyCombo? { switchSessionCombo.addingShift }
+    var nextStackCombo: KeyCombo? { combos[.nextStack] }
+    var previousStackCombo: KeyCombo? { combos[.previousStack] }
 
     private(set) var voiceMode: VoiceRecordingMode
 
@@ -222,7 +242,7 @@ final class AppSettings {
         inputDeviceName = storedInputUID == nil ? nil : defaults.string(forKey: Key.inputDeviceName)
         launchAtLogin = SMAppService.mainApp.status == .enabled
         shortcutRegistrationIssues = ShortcutSlot.allCases.compactMap { slot in
-            let combo = combo(for: slot)
+            guard let combo = combo(for: slot) else { return nil }
             if let conflict = shortcutConflict(for: combo, excluding: slot) {
                 return .conflict(slot: slot, combo: combo, reason: conflict)
             }
@@ -245,7 +265,14 @@ final class AppSettings {
         defaults.set(true, forKey: Key.hasCompletedSetup)
     }
 
-    func combo(for slot: ShortcutSlot) -> KeyCombo { combos[slot]! }
+    func combo(for slot: ShortcutSlot) -> KeyCombo? { combos[slot] }
+
+    /// Every key a slot takes when bound to `combo`: the combo itself, and for
+    /// the switch shortcut also its ⇧ variant, which walks the cycle backwards.
+    private static func claimedCombos(_ combo: KeyCombo, for slot: ShortcutSlot) -> [KeyCombo] {
+        guard slot == .switchSession, let reverse = combo.addingShift else { return [combo] }
+        return [combo, reverse]
+    }
 
     func shortcutConflict(for proposed: KeyCombo, excluding slot: ShortcutSlot) -> ShortcutConflict? {
         guard proposed.isValid else { return .invalid }
@@ -254,11 +281,13 @@ final class AppSettings {
             (KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command]), "Close Window (⌘W)"),
             (KeyCombo(keyCode: UInt16(kVK_ANSI_Z), modifiers: [.command]), "Undo (⌘Z)"),
         ]
-        if let (_, name) = fixed.first(where: { $0.0 == proposed }) {
+        let claimed = Self.claimedCombos(proposed, for: slot)
+        if let (_, name) = fixed.first(where: { claimed.contains($0.0) }) {
             return .reserved(name)
         }
-        if let duplicate = ShortcutSlot.allCases.first(where: {
-            $0 != slot && combo(for: $0) == proposed
+        if let duplicate = ShortcutSlot.allCases.first(where: { other in
+            guard other != slot, let combo = combo(for: other) else { return false }
+            return !Set(Self.claimedCombos(combo, for: other)).isDisjoint(with: claimed)
         }) {
             return .duplicate(duplicate)
         }
@@ -271,6 +300,14 @@ final class AppSettings {
         }
         combos[slot] = proposed
         persist(proposed, key: Key.combo(slot))
+        onHotKeysChanged?()
+    }
+
+    /// Unbinds an optional slot. Required slots keep their shortcut.
+    func clearShortcut(for slot: ShortcutSlot) {
+        guard slot.isOptional, combos[slot] != nil else { return }
+        combos[slot] = nil
+        defaults.set(Self.unboundMarker, forKey: Key.combo(slot))
         onHotKeysChanged?()
     }
 
@@ -334,7 +371,7 @@ final class AppSettings {
     }
 
     private static func read(_ key: String, from defaults: UserDefaults) -> KeyCombo? {
-        guard let data = defaults.data(forKey: key) else { return nil }
+        guard let data = defaults.data(forKey: key), data != unboundMarker else { return nil }
         return try? JSONDecoder().decode(KeyCombo.self, from: data)
     }
 

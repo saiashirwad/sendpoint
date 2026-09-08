@@ -20,6 +20,12 @@ struct KeyCombo: Codable, Equatable, Hashable {
         return m
     }
 
+    /// The same key with ⇧ added, or `nil` when ⇧ is already part of it.
+    var addingShift: KeyCombo? {
+        guard !modifiers.contains(.shift) else { return nil }
+        return KeyCombo(keyCode: keyCode, modifiers: modifiers.union(.shift))
+    }
+
     var isValid: Bool {
         // Require at least one of control/option/command so we don't eat plain typing.
         !modifiers.intersection([.command, .option, .control]).isEmpty
