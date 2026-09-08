@@ -94,7 +94,7 @@
     }
     /* "loud" is the one living word: a soft band of sound drifts through the
        letters now and then, and while the demo is speaking the word breathes
-       with the same loudness that drives the ribbon (--v, 0 to 1). */
+       with the same loudness that drives the orb (--v, 0 to 1). */
     .loud {
       --v: 0;
       display: inline-block;
@@ -344,15 +344,16 @@
     .composer .text b { font-weight: 600; }
     .composer.flash { border-color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 
-    /* voice capsule, matches the app's overlay: a low wordless pill whose
-       only moving part is a single ribbon of sound. A dim word count appears
-       beside it when the note is tied to a selection. */
+    /* voice capsule, matches the app's overlay: a low pill that says where
+       the note is going (the stack's name and how many notes it already
+       holds), and whose only moving part is a single orb of sound. A dim
+       word count appears beside the orb when the note is tied to a selection. */
     .capsule {
       position: absolute; left: 50%; bottom: 3.2em; z-index: 10;
       transform: translate(-50%, 1.2em) scale(0.92);
       opacity: 0;
-      display: flex; align-items: center; gap: 0.75em;
-      height: 2.6em; padding: 0 1.1em;
+      display: flex; align-items: center; gap: 0.7em;
+      height: 2.3em; padding: 0 0.7em 0 1em;
       border-radius: 3em;
       --ink: 255, 255, 255;
       background: rgba(15, 15, 15, 0.94);
@@ -367,20 +368,52 @@
     @media (prefers-color-scheme: dark) {
       .capsule { --ink: 0, 0, 0; background: rgba(250, 250, 250, 0.9); box-shadow: 0 6px 14px rgba(0,0,0,0.45); }
     }
+    .capsule .stack {
+      font-size: 0.82em; font-weight: 500; letter-spacing: -0.005em;
+      color: rgba(var(--ink), 0.9); white-space: nowrap;
+    }
+    .capsule .count {
+      font-size: 0.79em; font-weight: 500; font-variant-numeric: tabular-nums;
+      color: rgba(var(--ink), 0.45); margin-left: -0.35em;
+    }
     .capsule .tether {
       display: none; align-items: center;
-      font-size: 0.8em; font-weight: 500; font-variant-numeric: tabular-nums;
-      color: rgba(var(--ink), 0.55); white-space: nowrap;
+      font-size: 0.79em; font-weight: 500; font-variant-numeric: tabular-nums;
+      color: rgba(var(--ink), 0.5); white-space: nowrap;
       animation: tether-in 0.32s cubic-bezier(.2,.9,.3,1.1);
     }
-    .capsule .rule { display: none; width: 1px; height: 0.9em; background: rgba(var(--ink), 0.12); flex: none; }
+    .capsule .rule { display: none; width: 1px; height: 0.85em; background: rgba(var(--ink), 0.12); flex: none; }
     .capsule.tethered .tether { display: flex; }
     .capsule.tethered .rule { display: block; }
     @keyframes tether-in { from { opacity: 0; transform: translateX(0.4em); } }
-    .capsule canvas {
-      width: 8.4em; height: 1.65em; display: block;
-      -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
-      mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+    /* the orb: a resting dot of ink. Live loudness swells it, and a softer
+       halo grows faster than the core so loud moments read as a bloom rather
+       than a bigger dot. While idle it breathes; while transcribing a ring
+       pulses in its place. */
+    .capsule .orb {
+      position: relative; width: 1.6em; height: 1.6em; flex: none; margin-left: 0.15em;
+    }
+    .capsule .orb i {
+      position: absolute; left: 50%; top: 50%; width: 0.57em; height: 0.57em;
+      margin: -0.285em 0 0 -0.285em; border-radius: 50%;
+      background: rgba(var(--ink), 0.95);
+      transform: scale(var(--s, 1)); opacity: var(--o, 1);
+      transition: transform 0.05s linear, opacity 0.05s linear;
+    }
+    .capsule .orb .halo { background: rgba(var(--ink), 0.18); --o: 0; }
+    .capsule .orb .ring {
+      background: none; box-sizing: border-box;
+      border: 0.1em solid rgba(var(--ink), 1); --o: 0;
+    }
+    .capsule .orb .core { --o: 0.55; animation: orb-breath 2.9s ease-in-out infinite; }
+    .capsule.live .orb .core, .capsule.busy .orb .core { animation: none; }
+    .capsule.live .orb .core { --o: 1; }
+    .capsule.busy .orb .core { --o: 0; }
+    .capsule.busy .orb .ring { animation: orb-pulse 1.25s ease-in-out infinite; }
+    @keyframes orb-breath { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.55; } }
+    @keyframes orb-pulse {
+      0%, 100% { opacity: 0.35; transform: scale(1.25); }
+      50% { opacity: 0.75; transform: scale(1.62); }
     }
 
     /* subtitles, what's being said */
@@ -556,9 +589,11 @@
         <div class="subs" id="subs"><span class="line" id="subline"></span></div>
 
         <div class="capsule" id="capsule">
-          <span class="tether" id="ct"></span>
+          <span class="stack">Reading notes</span>
+          <span class="count" id="ccount">0</span>
           <span class="rule"></span>
-          <canvas id="wave"></canvas>
+          <span class="tether" id="ct"></span>
+          <span class="orb" aria-hidden="true"><i class="halo" id="halo"></i><i class="ring"></i><i class="core" id="core"></i></span>
         </div>
       </div>
     </section>
@@ -573,7 +608,8 @@
     const scene = $("scene"), badge = $("badge"), mbitem = $("mbitem"),
           msgs = $("msgs"), col = $("col"),
           subs = $("subs"), subline = $("subline"),
-          capsule = $("capsule"), ct = $("ct"), wave = $("wave"), loud = $("loud"),
+          capsule = $("capsule"), ct = $("ct"), ccount = $("ccount"),
+          halo = $("halo"), core = $("core"), loud = $("loud"),
           composer = $("composer"), ctext = $("ctext");
     const PH = '<span class="ph">Ask anything</span>';
     let added = [];
@@ -587,73 +623,32 @@
     const PREAMBLE = "These are my reading notes, captured in order while I read. Each entry is either a response to a quoted passage or a standalone thought. Read the notes as a whole and give me one coherent response that takes all of them into account.";
     const replyWords = "Good instincts, and your third note already answers your first. The environment doesn't grow forever because a closure keeps only the frames it was created inside, and a frame is dropped once nothing references it. On the second note, your last thought is the right way to hold it. The environment is data: it answers \"what does x mean here\". The continuation is control: it answers \"what happens next\". Both are chains, but only the continuation is the call stack.".split(" ");
 
-    /* ---------- ribbon (same shapes as the app: a mirrored envelope of loudness while
-       live, a breathing hairline while idle, a passing light while transcribing) ---------- */
-    const wctx = wave.getContext("2d");
-    const inkOf = () => getComputedStyle(capsule).getPropertyValue("--ink").trim() || "255, 255, 255";
-    let ink = inkOf();
-    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { ink = inkOf(); });
+    /* ---------- orb (same shape as the app: a dot that swells with loudness while
+       live, breathes while idle, and pulses as a ring while transcribing) ---------- */
     let mode = "idle";          // idle | live | busy
     let energy = 0;             // target loudness while speaking
-    const samples = new Array(48).fill(0);
+    let level = 0;              // current loudness sample
     let lastPush = 0;
     let breath = 0;             // smoothed loudness the headline breathes with
-    const hairline = (w, h, style, width) => {
-      wctx.strokeStyle = style; wctx.lineWidth = width; wctx.lineCap = "round";
-      wctx.beginPath(); wctx.moveTo(0, h / 2); wctx.lineTo(w, h / 2); wctx.stroke();
-    };
-    const smoothCurve = (pts) => {
-      for (let i = 1; i < pts.length - 1; i++) {
-        const c = pts[i], n = pts[i + 1];
-        wctx.quadraticCurveTo(c.x, c.y, (c.x + n.x) / 2, (c.y + n.y) / 2);
-      }
-      wctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
-    };
+    const shaped = (l) => Math.pow(Math.max(0, Math.min(1, l)), 1.3);
     const draw = (now) => {
-      const dpr = devicePixelRatio || 1;
-      const w = wave.clientWidth, h = wave.clientHeight;
-      if (wave.width !== w * dpr || wave.height !== h * dpr) { wave.width = w * dpr; wave.height = h * dpr; }
-      wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      wctx.clearRect(0, 0, w, h);
-      const t = now / 1000, midY = h / 2;
-
       if (mode === "live" && now - lastPush > 33) {
         lastPush = now;
         energy *= 0.86;
-        const level = Math.max(0.04, Math.min(1, energy * (0.7 + Math.random() * 0.5) + 0.03 * Math.random()));
-        samples.shift(); samples.push(level);
+        level = Math.max(0.04, Math.min(1, energy * (0.7 + Math.random() * 0.5) + 0.03 * Math.random()));
       }
-      breath += ((mode === "live" ? samples[samples.length - 1] : 0) - breath) * 0.18;
+      breath += ((mode === "live" ? level : 0) - breath) * 0.18;
       loud.style.setProperty("--v", breath < 0.005 ? "0" : breath.toFixed(3));
 
       if (mode === "live") {
-        const levels = samples.map((_, i) => {
-          const lo = Math.max(0, i - 1), hi = Math.min(samples.length - 1, i + 1);
-          let sum = 0; for (let j = lo; j <= hi; j++) sum += samples[j];
-          return sum / (hi - lo + 1);
-        });
-        const reach = h / 2 - 1, step = w / (levels.length - 1);
-        const amp = levels.map((l) => reach * (0.06 + 0.94 * Math.pow(Math.max(0, l), 1.3)));
-        const top = amp.map((a, i) => ({ x: i * step, y: midY - a }));
-        const bottom = amp.map((a, i) => ({ x: i * step, y: midY + a })).reverse();
-        wctx.beginPath();
-        wctx.moveTo(top[0].x, top[0].y);
-        smoothCurve(top);
-        wctx.lineTo(bottom[0].x, bottom[0].y);
-        smoothCurve(bottom);
-        wctx.closePath();
-        wctx.fillStyle = `rgba(${ink},0.22)`; wctx.fill();
-        wctx.strokeStyle = `rgba(${ink},0.92)`; wctx.lineWidth = 1.1; wctx.lineJoin = "round"; wctx.stroke();
-      } else if (mode === "busy") {
-        hairline(w, h, `rgba(${ink},0.18)`, 1.4);
-        const sweep = (t * 0.85) % 1;
-        const center = (-0.25 + 1.5 * sweep) * w;
-        const g = wctx.createLinearGradient(center - 34, midY, center + 34, midY);
-        g.addColorStop(0, `rgba(${ink},0)`); g.addColorStop(0.5, `rgba(${ink},0.95)`); g.addColorStop(1, `rgba(${ink},0)`);
-        hairline(w, h, g, 1.6);
+        const s = shaped(level);
+        // resting diameter 8, core grows by up to 5, halo by up to 14
+        core.style.setProperty("--s", (1 + 5 / 8 * s).toFixed(3));
+        halo.style.setProperty("--s", (1 + 14 / 8 * s).toFixed(3));
+        halo.style.setProperty("--o", s > 0.02 ? "1" : "0");
       } else {
-        const breath = 0.5 + 0.5 * Math.sin(t * 2.2);
-        hairline(w, h, `rgba(${ink},${(0.22 + 0.12 * breath).toFixed(3)})`, 1.4);
+        core.style.removeProperty("--s");
+        halo.style.setProperty("--o", "0");
       }
       requestAnimationFrame(draw);
     };
@@ -665,7 +660,11 @@
       badge.classList.toggle("on", n > 0);
       if (n > 0) { badge.classList.remove("bump"); void badge.offsetWidth; badge.classList.add("bump"); }
     };
-    const capsuleState = (m) => { mode = m; };
+    const capsuleState = (m) => {
+      mode = m;
+      capsule.classList.toggle("live", m === "live");
+      capsule.classList.toggle("busy", m === "busy");
+    };
     const tether = (text) => {
       const n = text ? text.split(/\s+/).filter(Boolean).length : 0;
       capsule.classList.toggle("tethered", n > 0);
@@ -769,6 +768,7 @@
       const sel = note.sel ? $(note.sel) : null;
       if (sel) { await scrollToSel(sel); await highlight(sel); await sleep(500); }
 
+      ccount.textContent = count - 1;
       tether(sel ? sel.textContent : null);
       capsuleState("live");
       capsule.classList.add("on");
