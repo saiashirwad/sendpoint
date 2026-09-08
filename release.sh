@@ -3,8 +3,13 @@
 #
 #   ./release.sh 1.2                         build, notarize, staple, zip
 #   ./release.sh 1.2 --publish               ...then publish on GitHub
-#   ./release.sh 1.2 --ad-hoc                build without an Apple account
+#   ./release.sh 1.2 --ad-hoc                build without notarizing
 #   ./release.sh 1.2 --ad-hoc --publish      ...then publish on GitHub
+#
+# --ad-hoc skips notarization but still signs with whatever certificate
+# build.sh finds (Developer ID, else Apple Development). A stable certificate
+# keeps users' Accessibility grants across updates; a true ad-hoc signature
+# is pinned to the binary's hash and breaks the grant on every release.
 #
 # Publishing also points the website's download button at the new zip,
 # commits that with the version bump, and deploys the site with wrangler.
@@ -107,11 +112,9 @@ if [ "$PUBLISH" = true ]; then
 fi
 
 if [ "$AD_HOC" = true ]; then
-    echo "==> Building an ad-hoc signed release"
-    CODESIGN_IDENTITY=- APP_BUILD="$APP_BUILD" ./build.sh release
-else
-    APP_BUILD="$APP_BUILD" ./build.sh release
+    echo "==> Building an unnotarized release"
 fi
+APP_BUILD="$APP_BUILD" ./build.sh release
 
 if [ "$AD_HOC" = false ]; then
     echo "==> Notarizing"
@@ -149,7 +152,7 @@ if [ "$PUBLISH" = true ]; then
     if [ "$AD_HOC" = true ]; then
         RELEASE_NOTES=$(printf '%s\n' \
             '> [!WARNING]' \
-            '> This build is ad-hoc signed and is not notarized by Apple.' \
+            '> This build is not notarized by Apple.' \
             '> Only open it if you trust this repository.' \
             '' \
             'Move **Sendpoint.app** to `/Applications` and try to open it once.' \
