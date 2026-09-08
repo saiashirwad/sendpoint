@@ -217,16 +217,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setUpStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        let image = NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: "Sendpoint")
-        image?.isTemplate = true
         if let button = statusItem.button {
-            button.image = image
-            button.imagePosition = image == nil ? .noImage : .imageLeading
-            if image == nil { button.title = "S" }
+            button.image = MenuBarIcon.image()
+            button.imagePosition = .imageLeading
         }
         statusItem.isVisible = true
         rebuildMenu()
-        Diag.log("statusItem button=\(statusItem.button != nil) image=\(image != nil) visible=\(statusItem.isVisible)")
+        Diag.log("statusItem button=\(statusItem.button != nil) visible=\(statusItem.isVisible)")
     }
 
     private func refreshStatusItem() {
