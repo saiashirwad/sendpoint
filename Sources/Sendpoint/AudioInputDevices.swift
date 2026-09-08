@@ -49,6 +49,12 @@ enum AudioInputDeviceQuery {
 
     /// Points an engine's input unit at `device`. Must run before anything
     /// reads the node's format, and before the engine starts.
+    ///
+    /// The engine fixes the unit's output format when its input node is
+    /// first touched. Switching the device underneath it leaves that format
+    /// at the old sample rate; when the new device runs at another rate the
+    /// unit renders nothing at all and a recording ends up empty. Copying
+    /// the new hardware rate into the output format keeps them in step.
     @discardableResult
     static func select(_ device: AudioInputDevice, on input: AVAudioInputNode) -> Bool {
         guard let unit = input.audioUnit else { return false }
@@ -61,10 +67,44 @@ enum AudioInputDeviceQuery {
             &id,
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
-        if status != noErr {
+        guard status == noErr else {
             Diag.log("input device selection failed (\(status)) for \(device.name)")
+            return false
         }
-        return status == noErr
+        matchOutputRateToHardware(of: unit, deviceName: device.name)
+        return true
+    }
+
+    private static let inputElement: AudioUnitElement = 1
+
+    private static func matchOutputRateToHardware(of unit: AudioUnit, deviceName: String) {
+        guard let hardware = streamFormat(of: unit, scope: kAudioUnitScope_Input),
+              var output = streamFormat(of: unit, scope: kAudioUnitScope_Output),
+              hardware.mSampleRate > 0, output.mSampleRate != hardware.mSampleRate
+        else { return }
+        output.mSampleRate = hardware.mSampleRate
+        let status = AudioUnitSetProperty(
+            unit,
+            kAudioUnitProperty_StreamFormat,
+            kAudioUnitScope_Output,
+            inputElement,
+            &output,
+            UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        )
+        if status == noErr {
+            Diag.log("input unit resampled to \(Int(hardware.mSampleRate))Hz for \(deviceName)")
+        } else {
+            Diag.log("input unit rate update failed (\(status)) for \(deviceName)")
+        }
+    }
+
+    private static func streamFormat(of unit: AudioUnit, scope: AudioUnitScope) -> AudioStreamBasicDescription? {
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        let status = AudioUnitGetProperty(
+            unit, kAudioUnitProperty_StreamFormat, scope, inputElement, &format, &size
+        )
+        return status == noErr ? format : nil
     }
 
     // MARK: - Plumbing
