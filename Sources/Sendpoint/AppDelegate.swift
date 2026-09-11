@@ -4,7 +4,7 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem!
+    private let statusItemController = StatusItemController()
     private var settingsWindow: NSWindow?
     private var setupWindowController: SetupWindowController?
     private var accessibilityHelperWindowController: AccessibilityHelperWindowController?
@@ -20,9 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var storeState: StoreState = .loading
     private var bootstrapTask: Task<Void, Never>?
     private let exportController = ExportController()
-
-    private var flashToken = 0
-    private var flashing = false
 
     private let settings: AppSettings
     private let captureController: CaptureController
@@ -59,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.log("=== launch pid=\(ProcessInfo.processInfo.processIdentifier) ===")
         installMainMenu()
-        setUpStatusItem()
+        statusItemController.onAction = { [weak self] action in self?.perform(action) }
         settings.onHotKeysChanged = { [weak self] in self?.registerHotKeys() }
         settings.onProfilesChanged = { [weak self] in self?.refreshStatusItem() }
         settings.onInputDeviceChanged = { [settings] in
@@ -100,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switcher = StackSwitcherController(
                     store: store, settings: settings,
                     onOpenPalette: { [weak self] id in self?.presentPalette(at: .stacks, highlighting: id) },
-                    onSwitched: { [weak self] stack in self?.flashStatus(stack.name) }
+                    onSwitched: { [weak self] stack in self?.statusItemController.flash(stack.name) }
                 )
                 refreshStatusItem()
             } catch is CancellationError {
@@ -126,14 +123,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return store
     }
 
-    private var unavailableMenuTitle: String {
+    private var statusMenuStoreStatus: StatusMenuStoreStatus {
         switch storeState {
         case .loading:
-            return "Loading notes…"
+            .loading
         case .available:
-            return "Nothing captured yet"
+            .available
         case let .unavailable(message):
-            return "Notes unavailable: \(message)"
+            .unavailable(message)
         }
     }
 
@@ -162,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow = nil
         captureController.teardown()
         permissionState.teardown()
+        statusItemController.teardown()
         AutomaticSelectionMonitor.shared.teardown()
         store?.teardown()
         settings.onHotKeysChanged = nil
@@ -215,139 +213,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Status item
 
-    private func setUpStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = MenuBarIcon.image()
-            button.imagePosition = .imageLeading
-        }
-        statusItem.isVisible = true
-        rebuildMenu()
-        Diag.log("statusItem button=\(statusItem.button != nil) visible=\(statusItem.isVisible)")
-    }
-
     private func refreshStatusItem() {
-        if !flashing { applyCountTitle() }
-        rebuildMenu()
-    }
-
-    private func applyCountTitle() {
         let count = store?.currentEntries.count ?? 0
-        statusItem.button?.title = count > 0 ? " \(count)" : ""
         let sessionName = store?.currentSession.name ?? "No stack"
-        statusItem.button?.toolTip = "\(sessionName) · \(settings.activeProfile.name)"
-    }
-
-    private func flashStatus(_ text: String) {
-        flashToken += 1
-        let token = flashToken
-        flashing = true
-        statusItem.button?.title = " \(text)"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
-            guard let self, self.flashToken == token else { return }
-            self.flashing = false
-            self.applyCountTitle()
-        }
-    }
-
-    private func rebuildMenu() {
-        let menu = NSMenu()
-        let ready = store != nil
-
-        let voice = item("Voice Note (\(settings.voiceCaptureCombo.displayString))",
-            action: ready ? #selector(captureVoiceSelection) : nil)
-        voice.toolTip = settings.voiceCaptureCombo.displayString
-        menu.addItem(voice)
-        menu.addItem(item("Typed Note", action: ready ? #selector(captureSelection) : nil,
-            combo: settings.captureCombo))
-        menu.addItem(item("Show Stack…", action: ready ? #selector(showStack) : nil,
-            combo: settings.stackCombo))
-
-        let facts = store.map {
-            SessionUIFacts(sessions: $0.sessions, currentSessionID: $0.currentSessionID, lastCleared: $0.lastCleared)
-        }
-        if let facts, facts.current != nil {
-            menu.addItem(item(facts.currentTitle))
-            let sessionMenu = NSMenu(title: "Stack")
-            for session in facts.sessions {
-                sessionMenu.addItem(item("\(session.name) — \(session.countLabel)",
-                    action: #selector(switchToSession(_:)), represents: session.id, checked: session.isCurrent))
-            }
-            sessionMenu.addItem(.separator())
-            sessionMenu.addItem(item("Switch Stack…", action: #selector(showQuickSwitcher),
-                combo: settings.switchSessionCombo))
-            if let combo = settings.nextStackCombo {
-                sessionMenu.addItem(item("Next Stack", action: #selector(nextStack), combo: combo))
-            }
-            if let combo = settings.previousStackCombo {
-                sessionMenu.addItem(item("Previous Stack", action: #selector(previousStack), combo: combo))
-            }
-            let sessionRoot = item("Stack")
-            sessionRoot.submenu = sessionMenu
-            menu.addItem(sessionRoot)
-        }
-
-        let profileMenu = NSMenu(title: "Template")
-        for profile in settings.profiles {
-            profileMenu.addItem(item(profile.name, action: #selector(selectProfile(_:)),
-                represents: profile.id, checked: profile.id == settings.activeProfileID))
-        }
-        let profileRoot = item("Template")
-        profileRoot.submenu = profileMenu
-        menu.addItem(profileRoot)
-        menu.addItem(.separator())
-
-        let count = facts?.current?.annotationCount ?? 0
-        let verb = settings.pasteDirectly ? "Paste" : "Copy"
-        menu.addItem(item(
-            count > 0 ? "\(verb) \(count) Note\(count == 1 ? "" : "s") as Markdown" : unavailableMenuTitle,
-            action: count > 0 ? #selector(copyMarkdown) : nil, combo: settings.copyCombo))
-        menu.addItem(item(facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
-            action: count > 0 ? #selector(clearSession(_:)) : nil, represents: facts?.current?.id,
-            combo: settings.clearCombo))
-        if let undo = facts?.undo {
-            let undoItem = item(undo.title, action: #selector(undoClear))
-            undoItem.keyEquivalent = "z"
-            menu.addItem(undoItem)
-        }
-
-        if let error = store?.error {
-            menu.addItem(.separator())
-            menu.addItem(item(annotationStoreErrorMessage(error)))
-            if store?.hasPendingMutations == true {
-                menu.addItem(item("Retry Pending Stack Changes", action: #selector(retryPendingMutations)))
-            }
-        }
-
-        menu.addItem(.separator())
-        let settingsItem = item("Settings…", action: #selector(showSettings))
-        settingsItem.keyEquivalent = ","
-        menu.addItem(settingsItem)
-        let quit = item("Quit Sendpoint", action: #selector(quit))
-        quit.keyEquivalent = "q"
-        menu.addItem(quit)
-
-        statusItem.menu = menu
-    }
-
-    /// A menu item targeting this delegate. A valid global shortcut is shown
-    /// beside it so it is discoverable; the Carbon hotkey swallows the event
-    /// first, so it never double-fires.
-    private func item(_ title: String, action: Selector? = nil, represents id: UUID? = nil,
-                      checked: Bool = false, combo: KeyCombo? = nil) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.target = self
-        item.representedObject = id
-        item.state = checked ? .on : .off
-        if let combo, combo.isValid {
-            if let equivalent = combo.menuKeyEquivalent {
-                item.keyEquivalent = equivalent
-                item.keyEquivalentModifierMask = combo.modifiers
-            } else {
-                item.toolTip = combo.displayString
-            }
-        }
-        return item
+        statusItemController.setBaseTitle(
+            count > 0 ? " \(count)" : "",
+            tooltip: "\(sessionName) · \(settings.activeProfile.name)"
+        )
+        statusItemController.rebuildMenu(
+            facts: store.map {
+                SessionUIFacts(
+                    sessions: $0.sessions,
+                    currentSessionID: $0.currentSessionID,
+                    lastCleared: $0.lastCleared
+                )
+            },
+            storeStatus: statusMenuStoreStatus,
+            error: store?.error,
+            hasPendingMutations: store?.hasPendingMutations == true,
+            settings: settings
+        )
     }
 
     // MARK: - Hot keys
@@ -393,17 +278,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         settings.updateShortcutRegistrationIssues(issues)
-        rebuildMenu()
+        refreshStatusItem()
     }
 
     // MARK: - Actions
 
-    @objc private func captureSelection() {
+    private func perform(_ action: StatusMenuAction) {
+        switch action {
+        case .voiceNote:
+            captureVoiceSelection()
+        case .typedNote:
+            captureSelection()
+        case .showStack:
+            showStack()
+        case let .switchToStack(sessionID):
+            switchToSession(sessionID)
+        case .quickSwitcher:
+            showQuickSwitcher()
+        case .nextStack:
+            nextStack()
+        case .previousStack:
+            previousStack()
+        case let .selectProfile(profileID):
+            selectProfile(profileID)
+        case .copyMarkdown:
+            copyMarkdown()
+        case let .clearSession(sessionID):
+            clearSession(sessionID)
+        case .undoClear:
+            undoClear()
+        case .retryPendingMutations:
+            retryPendingMutations()
+        case .settings:
+            showSettings()
+        case .quit:
+            quit()
+        }
+    }
+
+    private func captureSelection() {
         Diag.log("captureSelection invoked")
         captureController.beginCapture()
     }
 
-    @objc private func captureVoiceSelection() {
+    private func captureVoiceSelection() {
         Diag.log("voice capture invoked")
         handleVoiceTrigger(.menuToggle)
     }
@@ -425,16 +343,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func copyMarkdown() {
+    private func copyMarkdown() {
         guard let store else { NSSound.beep(); return }
         let target = settings.pasteDirectly ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
         exportController.copy(store: store, sessionID: store.currentSessionID,
             profile: settings.activeProfile, pasteTarget: target) { [weak self] message in
-                self?.flashStatus(message)
+                self?.statusItemController.flash(message)
             }
     }
 
-    @objc private func clearStack() {
+    private func clearStack() {
         guard let store else { NSSound.beep(); return }
         let sessionID = store.currentSessionID
         guard let session = store.sessions.first(where: { $0.id == sessionID }), !session.entries.isEmpty else {
@@ -445,23 +363,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enqueueMenuMutation(.clearSession(sessionID: sessionID))
     }
 
-    @objc private func clearSession(_ sender: NSMenuItem) {
-        guard let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
+    private func clearSession(_ sessionID: UUID) {
         enqueueMenuMutation(.clearSession(sessionID: sessionID))
     }
 
-    @objc private func undoClear() {
+    private func undoClear() {
         guard store != nil else { NSSound.beep(); return }
         enqueueMenuMutation(.undoClear)
     }
 
-    @objc private func switchToSession(_ sender: NSMenuItem) {
-        guard let sessionID = sender.representedObject as? UUID else { NSSound.beep(); return }
+    private func switchToSession(_ sessionID: UUID) {
         enqueueMenuMutation(.switchSession(sessionID: sessionID))
     }
 
-    @objc private func selectProfile(_ sender: NSMenuItem) {
-        guard let profileID = sender.representedObject as? UUID else { NSSound.beep(); return }
+    private func selectProfile(_ profileID: UUID) {
         requestProfileSelection(profileID)
     }
 
@@ -484,7 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func retryPendingMutations() {
+    private func retryPendingMutations() {
         guard let store else { NSSound.beep(); return }
         store.retryPendingMutations()
         exportController.send(.retry)
@@ -501,13 +416,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Opens the palette inside the current stack: its notes, full width.
-    @objc private func showStack() {
+    private func showStack() {
         guard let store else { NSSound.beep(); return }
         presentPalette(at: .notes(store.currentSessionID))
     }
 
     /// Opens the palette at the list of every stack.
-    @objc private func showQuickSwitcher() {
+    private func showQuickSwitcher() {
         guard store != nil else { NSSound.beep(); return }
         presentPalette(at: .stacks)
     }
@@ -519,12 +434,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switcher.press(reverse: reverse)
     }
 
-    @objc private func nextStack() {
+    private func nextStack() {
         guard let switcher else { NSSound.beep(); return }
         switcher.step(1)
     }
 
-    @objc private func previousStack() {
+    private func previousStack() {
         guard let switcher else { NSSound.beep(); return }
         switcher.step(-1)
     }
@@ -566,7 +481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 onComplete: { [weak self] in
                     guard let self else { return }
                     self.setupWindowController?.close()
-                    self.flashStatus("\(self.settings.voiceCaptureCombo.displayString): \(self.settings.voiceMode.detail) · Esc discards")
+                    self.statusItemController.flash("\(self.settings.voiceCaptureCombo.displayString): \(self.settings.voiceMode.detail) · Esc discards")
                 }
             )
         }
@@ -582,7 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityHelperWindowController?.show()
     }
 
-    @objc private func showSettings() {
+    private func showSettings() {
         permissionState.refresh()
         if let settingsWindow {
             NSApp.activate(ignoringOtherApps: true)
@@ -646,7 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette?.close()
     }
 
-    @objc private func quit() {
+    private func quit() {
         NSApp.terminate(nil)
     }
 }
