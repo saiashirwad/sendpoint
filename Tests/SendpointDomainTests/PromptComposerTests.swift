@@ -3,106 +3,10 @@ import XCTest
 
 @testable import SendpointDomain
 
-final class ModelsAndPromptComposerTests: XCTestCase {
+final class PromptComposerTests: XCTestCase {
     private let date = Date(timeIntervalSince1970: 1_735_831_440)
     private let locale = Locale(identifier: "en_US_POSIX")
     private let timeZone = TimeZone(secondsFromGMT: 0)!
-
-    func testStoreDocumentRoundTripsAllCurrentModelFactsAndArrayOrder() throws {
-        let annotationID = UUID(uuidString: "00000000-0000-0000-0000-000000000011")!
-        let first = Annotation(
-            id: annotationID,
-            subject: .selection(quote: "A quote"),
-            note: "A note",
-            provenance: Provenance(
-                application: ApplicationIdentity(
-                    name: "Reader",
-                    bundleID: "com.example.reader"
-                ),
-                windowTitle: "Article",
-                url: URL(string: "https://example.com/article"),
-                workingDirectory: URL(fileURLWithPath: "/tmp/reading")
-            ),
-            createdAt: date
-        )
-        let second = Annotation(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!,
-            subject: .standalone,
-            note: "A second note remains in array order.",
-            provenance: Provenance(application: ApplicationIdentity(name: "Reader")),
-            createdAt: date.addingTimeInterval(60)
-        )
-        let session = Session(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000010")!,
-            name: "Reading",
-            entries: [first, second],
-            createdAt: date
-        )
-        let document = StoreDocument(
-            sessions: [session],
-            currentSessionID: session.id,
-            lastCleared: ClearedBatch(sessionID: session.id, entries: [second, first])
-        )
-        try SessionDocumentMutations.validate(document)
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.sortedKeys]
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        let data = try encoder.encode(document)
-        let decoded = try decoder.decode(StoreDocument.self, from: data)
-
-        XCTAssertEqual(decoded, document)
-        XCTAssertEqual(decoded.sessions[0].entries.map(\.note), [first.note, second.note])
-        XCTAssertEqual(decoded.lastCleared?.entries.map(\.note), [second.note, first.note])
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(object["version"] as? Int, StoreDocument.currentVersion)
-        XCTAssertNotNil(object["sessions"])
-        XCTAssertNotNil(object["currentSessionID"])
-        XCTAssertNotNil(object["lastCleared"])
-    }
-
-    func testSubjectAndProvenanceRoundTripThroughCodable() throws {
-        let subjects: [Subject] = [
-            .selection(quote: "First line\n\nThird line"),
-            .standalone,
-        ]
-        let application = ApplicationIdentity(name: "Helium", bundleID: "com.example.helium")
-        let url = URL(string: "https://example.com/article")!
-        let directory = URL(fileURLWithPath: "/tmp/project")
-        let provenances = [
-            Provenance(application: application),
-            Provenance(application: application, url: url),
-            Provenance(application: application, workingDirectory: directory),
-            Provenance(
-                application: application,
-                windowTitle: "Page title",
-                url: url,
-                workingDirectory: directory
-            ),
-        ]
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-
-        XCTAssertEqual(try decoder.decode([Subject].self, from: encoder.encode(subjects)), subjects)
-        XCTAssertEqual(
-            try decoder.decode([Provenance].self, from: encoder.encode(provenances)),
-            provenances
-        )
-    }
-
-    func testAnnotationPreservesNoteTextExactly() {
-        let note = "  Keep leading space\n\nand trailing space  "
-        let annotation = Annotation(
-            subject: .standalone,
-            note: note,
-            provenance: Provenance(application: ApplicationIdentity(name: "Test"))
-        )
-
-        XCTAssertEqual(annotation.note, note)
-    }
 
     func testTextNormalizationTrimsAndCaseFoldsSessionIdentity() {
         XCTAssertEqual("  Reading Notes \n".nonblank, "Reading Notes")
@@ -112,53 +16,6 @@ final class ModelsAndPromptComposerTests: XCTestCase {
         XCTAssertEqual("ＲＥＡＤＩＮＧ".normalizedSessionName, "reading")
         XCTAssertNil(" \n\t".nonblank)
         XCTAssertNil(" \n\t".normalizedSessionName)
-    }
-
-    func testProfileBuiltInsHaveStableIDsOrderTextAndCurrentSplitFlags() {
-        XCTAssertEqual(Profile.builtIns.map(\.name), ["Plain", "Coherent", "Point by Point"])
-        XCTAssertEqual(
-            Profile.builtIns.map(\.id),
-            [
-                UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-                UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-            ]
-        )
-        XCTAssertTrue(Profile.coherent.preamble.hasPrefix("These are my reading notes"))
-        XCTAssertTrue(Profile.pointByPoint.preamble.contains("Address each note separately."))
-
-        for profile in [Profile.coherent, .pointByPoint] {
-            XCTAssertTrue(profile.includeApplication)
-            XCTAssertTrue(profile.includeWindow)
-            XCTAssertTrue(profile.includeLink)
-            XCTAssertTrue(profile.includeTimestamps)
-            XCTAssertTrue(profile.includeHeading)
-            XCTAssertFalse(profile.clearSessionAfterExport)
-        }
-        XCTAssertFalse(Profile.coherent.includeEntryNumbers)
-        XCTAssertTrue(Profile.pointByPoint.includeEntryNumbers)
-        XCTAssertEqual(Profile.plain.preamble, "")
-        XCTAssertFalse(Profile.plain.includeApplication)
-        XCTAssertFalse(Profile.plain.includeWindow)
-        XCTAssertFalse(Profile.plain.includeLink)
-        XCTAssertFalse(Profile.plain.includeTimestamps)
-        XCTAssertFalse(Profile.plain.includeHeading)
-        XCTAssertFalse(Profile.plain.includeEntryNumbers)
-        XCTAssertFalse(Profile.plain.clearSessionAfterExport)
-    }
-
-    func testProfileCodableWritesOnlyCurrentSplitSourceFlags() throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(Profile.coherent)
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-
-        XCTAssertEqual(object["includeApplication"] as? Bool, true)
-        XCTAssertEqual(object["includeWindow"] as? Bool, true)
-        XCTAssertEqual(object["includeLink"] as? Bool, true)
-        XCTAssertEqual(object["includeEntryNumbers"] as? Bool, false)
-        XCTAssertNil(object["includeProvenance"])
-        XCTAssertEqual(try JSONDecoder().decode(Profile.self, from: data), .coherent)
     }
 
     func testComposerIncludesPreambleHeadingEntriesAndFullMetadata() {

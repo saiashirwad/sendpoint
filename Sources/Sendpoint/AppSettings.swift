@@ -282,11 +282,6 @@ final class AppSettings {
             return nil
         }
 
-        for obsoleteKey in [
-            "includeSource", "includeHeading", "clearAfterCopy",
-        ] {
-            defaults.removeObject(forKey: obsoleteKey)
-        }
         persistProfiles()
         persistActiveProfileID()
     }

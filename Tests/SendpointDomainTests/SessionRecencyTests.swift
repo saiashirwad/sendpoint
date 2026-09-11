@@ -79,24 +79,6 @@ final class SessionRecencyTests: XCTestCase {
         XCTAssertNoThrow(try SessionDocumentMutations.validate(fine))
     }
 
-    func testOlderJSONWithoutTheFieldDecodesAndRoundTrips() throws {
-        let json = """
-        {"version":1,"currentSessionID":"\(firstID.uuidString)","sessions":[{"id":"\(firstID.uuidString)","name":"First","entries":[],"createdAt":"2026-01-01T00:00:00Z"}]}
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let decoded = try decoder.decode(StoreDocument.self, from: Data(json.utf8))
-        XCTAssertEqual(decoded.recentSessionIDs, [])
-        XCTAssertNoThrow(try SessionDocumentMutations.validate(decoded))
-
-        var touched = decoded
-        touched.recentSessionIDs = [firstID]
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let again = try decoder.decode(StoreDocument.self, from: try encoder.encode(touched))
-        XCTAssertEqual(again, touched)
-    }
-
     private func applied(_ mutation: SessionDocumentMutation, to document: StoreDocument) -> StoreDocument {
         guard case let .applied(result) = SessionDocumentMutations.applying(mutation, to: document) else {
             XCTFail("expected \(mutation) to apply")

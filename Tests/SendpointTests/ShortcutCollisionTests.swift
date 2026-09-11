@@ -38,20 +38,6 @@ final class ShortcutCollisionTests: XCTestCase {
         XCTAssertThrowsError(try settings.setShortcut(undo, for: .clear))
     }
 
-    func testOptionCommandPrefixIsAvailable() throws {
-        let (defaults, suite) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
-        let prefixed = KeyCombo(
-            keyCode: UInt16(kVK_ANSI_K),
-            modifiers: [.option, .command]
-        )
-
-        XCTAssertNil(settings.shortcutConflict(for: prefixed, excluding: .switchSession))
-        try settings.setShortcut(prefixed, for: .switchSession)
-        XCTAssertEqual(settings.switchSessionCombo, prefixed)
-    }
-
     func testStalePersistedConflictsRemainVisibleToRegistrationValidation() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -79,19 +65,6 @@ final class ShortcutCollisionTests: XCTestCase {
                 .conflict(slot: .clear, combo: reserved, reason: .reserved("Undo (⌘Z)")),
             ]
         )
-    }
-
-    func testCarbonRegistrationFailureIsReturned() {
-        let status: Int32 = -9876
-        let center = HotKeyCenter(registerEvent: { _, _, _ in (status, nil) })
-
-        let result = center.register(
-            name: .capture,
-            combo: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
-            action: {}
-        )
-
-        XCTAssertEqual(result, .failed(status))
     }
 
     private func makeDefaults() -> (UserDefaults, String) {

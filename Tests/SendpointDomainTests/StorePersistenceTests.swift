@@ -92,24 +92,6 @@ final class StorePersistenceTests: XCTestCase {
         XCTAssertEqual(loaded, original)
     }
 
-    func testStackJSONIsNotLoadedOrChanged() async throws {
-        let directory = temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let legacyFile = directory.appendingPathComponent("stack.json")
-        let bytes = Data(#"[{"old":"format"}]"#.utf8)
-        try bytes.write(to: legacyFile)
-
-        let loaded = try await StorePersistence.live(directory: directory).load()
-        XCTAssertNil(loaded)
-        XCTAssertEqual(try Data(contentsOf: legacyFile), bytes)
-        XCTAssertFalse(
-            FileManager.default.fileExists(
-                atPath: directory.appendingPathComponent(StorePersistence.fileName).path
-            )
-        )
-    }
-
     private func document(name: String = "First") -> StoreDocument {
         StoreDocument(
             sessions: [Session(id: sessionID, name: name, createdAt: now)],

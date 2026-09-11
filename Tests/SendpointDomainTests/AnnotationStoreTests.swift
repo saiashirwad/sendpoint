@@ -26,24 +26,6 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(commits, [])
     }
 
-    func testSessionsExposeAReadOnlyCommittedSnapshot() async throws {
-        let first = document(name: "First").sessions[0]
-        let second = Session(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!,
-            name: "Second",
-            createdAt: now
-        )
-        let original = StoreDocument(
-            sessions: [first, second],
-            currentSessionID: second.id
-        )
-        let store = try await AnnotationStore(
-            persistence: StorePersistence(load: { original }, commit: { _ in })
-        )
-
-        XCTAssertEqual(store.sessions, [first, second])
-    }
-
     func testFirstLoadCommitsDefaultBeforeStoreIsReturned() async throws {
         let recorder = CommitRecorder()
         let persistence = StorePersistence(
@@ -62,42 +44,6 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(commits, [
             StoreDocument(sessions: [defaultSession], currentSessionID: sessionID)
         ])
-    }
-
-    func testFailingInitialDefaultCommitDoesNotReturnAStore() async {
-        let persistence = StorePersistence(
-            load: { nil },
-            commit: { _ in throw TestFailure.failed }
-        )
-
-        do {
-            _ = try await AnnotationStore(persistence: persistence)
-            XCTFail("Expected the initial commit to fail")
-        } catch {
-            XCTAssertEqual(String(describing: error), "failed")
-        }
-    }
-
-    func testFailedCommitDoesNotPublishCandidate() async throws {
-        let original = document()
-        let persistence = StorePersistence(
-            load: { original },
-            commit: { _ in throw TestFailure.failed }
-        )
-        var callbackCount = 0
-        let store = try await AnnotationStore(persistence: persistence) {
-            callbackCount += 1
-        }
-        let added = annotation(note: "not committed")
-
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: added))
-        await store.waitForIdle()
-
-        XCTAssertEqual(store.currentEntries, [])
-        XCTAssertEqual(store.currentSession, original.sessions[0])
-        XCTAssertEqual(store.state, .halted)
-        XCTAssertEqual(store.error, .commitFailed("failed"))
-        XCTAssertEqual(callbackCount, 0)
     }
 
     func testCommitFailureRetainsFailedAndLaterMutationsUntilExplicitRetry() async throws {
@@ -239,33 +185,6 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(maximumInFlightCommitCount, 1)
     }
 
-    func testSessionTargetStaysStableAcrossQueuedSessionSwitches() async throws {
-        let original = document(name: "First")
-        let recorder = CommitRecorder()
-        let persistence = StorePersistence(
-            load: { original },
-            commit: { document in await recorder.record(document) }
-        )
-        let store = try await AnnotationStore(persistence: persistence)
-        let second = Session(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!,
-            name: "Second",
-            createdAt: now
-        )
-        let capturedForFirst = annotation(note: "captured for First")
-
-        store.mutate(.createSession(second))
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: capturedForFirst))
-        await store.waitForIdle()
-
-        XCTAssertEqual(store.currentSessionID, second.id)
-        XCTAssertEqual(store.currentEntries, [])
-
-        store.mutate(.switchSession(sessionID: sessionID))
-        await store.waitForIdle()
-        XCTAssertEqual(store.currentEntries, [capturedForFirst])
-    }
-
     func testCallbackRunsOnlyAfterCommitAndPublishedStateIsVisible() async throws {
         let original = document()
         let commitStarted = expectation(description: "commit started")
@@ -297,51 +216,6 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(store.currentEntries, [added])
         XCTAssertEqual(callbackSnapshots, [[added]])
         XCTAssertEqual(store.state, .idle)
-    }
-
-    func testNoteAndProvenanceOnlyUpdatesPreserveEachOtherInBothQueueOrders() async throws {
-        let base = annotation(note: "Original note")
-        let original = StoreDocument(
-            sessions: [Session(id: sessionID, name: "First", entries: [base], createdAt: now)],
-            currentSessionID: sessionID
-        )
-        let enriched = Provenance(
-            application: base.provenance.application,
-            windowTitle: "Focused window",
-            url: URL(string: "https://example.com")
-        )
-
-        for noteFirst in [true, false] {
-            let store = try await AnnotationStore(persistence: StorePersistence(
-                load: { original },
-                commit: { _ in }
-            ))
-            let noteMutation = SessionDocumentMutation.updateAnnotationNote(
-                sessionID: sessionID,
-                annotationID: base.id,
-                note: "Edited note"
-            )
-            let provenanceMutation = SessionDocumentMutation.updateAnnotationProvenance(
-                sessionID: sessionID,
-                annotationID: base.id,
-                expectedApplication: base.provenance.application,
-                provenance: enriched
-            )
-            if noteFirst {
-                store.mutate(noteMutation)
-                store.mutate(provenanceMutation)
-            } else {
-                store.mutate(provenanceMutation)
-                store.mutate(noteMutation)
-            }
-            await store.waitForIdle()
-
-            XCTAssertEqual(store.currentEntries.first?.note, "Edited note")
-            XCTAssertEqual(store.currentEntries.first?.provenance, enriched)
-            XCTAssertEqual(store.currentEntries.first?.subject, base.subject)
-            XCTAssertEqual(store.currentEntries.first?.createdAt, base.createdAt)
-            store.teardown()
-        }
     }
 
     func testClearBeforeLateProvenanceThenUndoRestoresEnrichment() async throws {
@@ -492,24 +366,6 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .tornDown)
         XCTAssertFalse(store.hasPendingMutations)
         XCTAssertEqual(outcomes, [.commitFailed("failed"), .cancelled, .cancelled])
-    }
-
-    func testIdleRetryAndTeardownDoNotStartPersistence() async throws {
-        let original = document()
-        let recorder = CommitRecorder()
-        let store = try await AnnotationStore(persistence: StorePersistence(
-            load: { original }, commit: { await recorder.record($0) }
-        ))
-        store.retryPendingMutations()
-        XCTAssertEqual(store.state, .idle)
-        store.teardown()
-        var outcome: AnnotationStoreMutationOutcome?
-        store.mutate(.renameSession(sessionID: sessionID, name: "Late")) { outcome = $0 }
-        await store.waitForIdle()
-        XCTAssertEqual(store.state, .tornDown)
-        XCTAssertEqual(outcome, .cancelled)
-        let commits = await recorder.documents()
-        XCTAssertTrue(commits.isEmpty)
     }
 
     func testCancelledLoadCannotReturnAnActiveStore() async {

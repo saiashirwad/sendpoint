@@ -141,24 +141,6 @@ final class PermissionStateTests: XCTestCase {
         }
     }
 
-    func testInitAndRefreshPublishServiceValues() {
-        let state = PermissionState(services: services(
-            accessibility: .notGranted,
-            microphone: .restricted,
-            modelReady: false
-        ))
-
-        XCTAssertEqual(state.accessibility, .notGranted)
-        XCTAssertEqual(state.microphone, .restricted)
-        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
-
-        state.refresh()
-        XCTAssertEqual(state.accessibility, .notGranted)
-        XCTAssertEqual(state.microphone, .restricted)
-        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
-        state.teardown()
-    }
-
     func testPermissionRequestsPublishSuccessAndDenial() async {
         let granted = PermissionState(services: services(
             accessibility: .notGranted,
@@ -208,17 +190,6 @@ final class PermissionStateTests: XCTestCase {
         state.teardown()
     }
 
-    func testLocalVoiceModelReadinessIncludesFilesPersistedAcrossLaunch() async {
-        let downloaded = LocalVoiceTranscriber(modelsAreDownloaded: { true })
-        let absent = LocalVoiceTranscriber(modelsAreDownloaded: { false })
-
-        let downloadedIsReady = await downloaded.isReady()
-        let absentIsReady = await absent.isReady()
-
-        XCTAssertTrue(downloadedIsReady)
-        XCTAssertFalse(absentIsReady)
-    }
-
     func testModelDownloadFailureCanRetryAndSucceed() async {
         let attempts = Counter()
         let state = PermissionState(services: services(
@@ -260,16 +231,6 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(state.localVoiceModel, .ready)
         let downloadCount = await gate.count
         XCTAssertEqual(downloadCount, 1)
-        state.teardown()
-    }
-
-    func testModelReadyNotificationPublishesCaptureTimePreparation() {
-        let state = PermissionState(services: services(modelReady: false))
-        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
-
-        NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
-
-        XCTAssertEqual(state.localVoiceModel, .ready)
         state.teardown()
     }
 

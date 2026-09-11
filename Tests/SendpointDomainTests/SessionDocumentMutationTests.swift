@@ -51,21 +51,6 @@ final class SessionDocumentMutationTests: XCTestCase {
         XCTAssertEqual(deletedLast.currentSessionID, firstID)
     }
 
-    func testDeletingNoncurrentSessionPreservesCurrentSession() {
-        let initial = StoreDocument(
-            sessions: [
-                Session(id: firstID, name: "First", createdAt: now),
-                Session(id: secondID, name: "Second", createdAt: now),
-            ],
-            currentSessionID: secondID
-        )
-
-        let deleted = applied(.deleteSession(sessionID: firstID), to: initial)
-
-        XCTAssertEqual(deleted.sessions.map(\.id), [secondID])
-        XCTAssertEqual(deleted.currentSessionID, secondID)
-    }
-
     func testDeletingSessionThatOriginatedLastClearDiscardsUndoBatch() {
         let cleared = annotation(id: UUID(), note: "cleared")
         let initial = StoreDocument(

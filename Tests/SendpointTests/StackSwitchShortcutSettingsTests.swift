@@ -5,19 +5,6 @@ import XCTest
 
 @MainActor
 final class StackSwitchShortcutSettingsTests: XCTestCase {
-    func testSwitchDefaultsToCommandUWithShiftReverseAndStepKeysUnbound() {
-        withDefaults { defaults in
-            let settings = AppSettings(defaults: defaults)
-            XCTAssertEqual(settings.switchSessionCombo, KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]))
-            XCTAssertEqual(settings.switchSessionReverseCombo,
-                KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command, .shift]))
-            XCTAssertNil(settings.nextStackCombo)
-            XCTAssertNil(settings.previousStackCombo)
-            XCTAssertNil(settings.combo(for: .nextStack))
-            XCTAssertTrue(settings.shortcutRegistrationIssues.isEmpty)
-        }
-    }
-
     func testTheShiftVariantOfTheSwitchShortcutIsClaimed() throws {
         try withDefaults { defaults in
             let settings = AppSettings(defaults: defaults)

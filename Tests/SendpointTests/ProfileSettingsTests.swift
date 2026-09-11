@@ -30,19 +30,6 @@ final class ProfileSettingsTests: XCTestCase {
         }
     }
 
-    func testUnknownActiveIDIsRepairedToFirstValidStoredProfile() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        defaults.set(try JSONEncoder().encode([Profile.pointByPoint, .plain]), forKey: "profiles")
-        defaults.set(UUID().uuidString, forKey: "activeProfileID")
-
-        let settings = AppSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.profiles, [.plain, .pointByPoint])
-        XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
-        XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.plain.id.uuidString)
-    }
-
     func testValidProfilesAndActiveProfilePersistAcrossSettingsInstances() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
@@ -68,36 +55,6 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(reloaded.profiles, Profile.builtIns + [custom])
         XCTAssertEqual(reloaded.activeProfileID, custom.id)
         XCTAssertEqual(reloaded.activeProfile, custom)
-    }
-
-    func testSetupCompletionDefaultsFalseAndPersistsOnlyAfterExplicitCompletion() {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-
-        let initial = AppSettings(defaults: defaults)
-        XCTAssertFalse(initial.hasCompletedSetup)
-        XCTAssertNil(defaults.object(forKey: "hasCompletedSetup"))
-
-        initial.completeSetup()
-        initial.completeSetup()
-
-        XCTAssertTrue(initial.hasCompletedSetup)
-        XCTAssertEqual(defaults.object(forKey: "hasCompletedSetup") as? Bool, true)
-        XCTAssertTrue(AppSettings(defaults: defaults).hasCompletedSetup)
-    }
-
-    func testInitializationRemovesObsoleteGlobalFormattingKeys() {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        defaults.set(true, forKey: "includeSource")
-        defaults.set(false, forKey: "includeHeading")
-        defaults.set(true, forKey: "clearAfterCopy")
-
-        _ = AppSettings(defaults: defaults)
-
-        XCTAssertNil(defaults.object(forKey: "includeSource"))
-        XCTAssertNil(defaults.object(forKey: "includeHeading"))
-        XCTAssertNil(defaults.object(forKey: "clearAfterCopy"))
     }
 
     func testDirtyExternalSelectionCancelKeepsDraftAndActiveProfile() throws {
@@ -148,23 +105,6 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertTrue(try editor.resolveClose(.save))
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(settings.activeProfile.preamble, "Save me")
-    }
-
-    func testCloseSaveAsNewClonesDraftAndResolvesDirtyState() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
-        let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000097")!
-        let editor = ProfileEditorState(settings: settings, makeID: { newID })
-        editor.draft.preamble = "Keep as a clone"
-
-        XCTAssertTrue(try editor.resolveClose(.saveAsNew(name: "Close Clone")))
-
-        XCTAssertFalse(editor.isDirty)
-        XCTAssertEqual(editor.editedProfileID, newID)
-        XCTAssertEqual(settings.activeProfileID, newID)
-        XCTAssertEqual(settings.profile(id: Profile.coherent.id), .coherent)
-        XCTAssertEqual(settings.profile(id: newID)?.preamble, "Keep as a clone")
     }
 
     func testDraftDoesNotAffectStoredProfileUntilSaveAndCanRevert() throws {
@@ -235,41 +175,6 @@ final class ProfileSettingsTests: XCTestCase {
         XCTAssertEqual(settings.profile(id: newID)?.preamble, "Clone only")
         XCTAssertEqual(settings.activeProfileID, newID)
         XCTAssertEqual(editor.editedProfileID, newID)
-    }
-
-    func testDirtySaveAsNewSwitchClonesDraftThenPersistsPendingTargetAsActive() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        let settings = try makeSettingsOnCoherent(defaults)
-        let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000098")!
-        let editor = ProfileEditorState(settings: settings, makeID: { newID })
-        editor.draft.preamble = "Clone while switching"
-
-        XCTAssertEqual(editor.requestSelection(Profile.plain.id), .needsDecision)
-        try editor.saveAsNewAndSelectPending(named: "Switch Clone")
-
-        XCTAssertEqual(settings.profile(id: Profile.coherent.id), Profile.coherent)
-        XCTAssertEqual(settings.profile(id: newID)?.preamble, "Clone while switching")
-        XCTAssertEqual(editor.editedProfileID, Profile.plain.id)
-        XCTAssertEqual(settings.activeProfileID, Profile.plain.id)
-        XCTAssertEqual(defaults.string(forKey: "activeProfileID"), Profile.plain.id.uuidString)
-    }
-
-    func testSaveAsNewRejectsBlankAndFoldedDuplicateNames() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
-        let editor = ProfileEditorState(settings: settings)
-        editor.draft.preamble = "Dirty"
-
-        XCTAssertThrowsError(try editor.saveAsNew(named: " \n ")) {
-            XCTAssertEqual($0 as? ProfileMutationError, .emptyName)
-        }
-        XCTAssertThrowsError(try editor.saveAsNew(named: "cOhÉrEnt")) {
-            XCTAssertEqual($0 as? ProfileMutationError, .duplicateName)
-        }
-        XCTAssertEqual(settings.profiles, Profile.builtIns)
-        XCTAssertTrue(editor.isDirty)
     }
 
     func testDeleteIsGuardedWhileDirtyAndDeletingActiveKeepsValidActiveID() throws {

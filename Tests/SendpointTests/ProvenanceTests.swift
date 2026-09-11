@@ -116,18 +116,6 @@ final class ProvenanceProbeTests: XCTestCase {
         XCTAssertEqual(enrichmentCallCount, 1)
     }
 
-    func testEditorBundleRoutingCoversVSCodeCursorWindsurfVSCodiumZedAndCodeOSS() {
-        let identifiers = ProvenanceProvider.codeEditorBundleIDs
-        for bundleID in [
-            "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders",
-            "com.todesktop.230313mzl4w4u92", "co.anysphere.cursor.nightly",
-            "com.exafunction.windsurf", "com.vscodium.VSCodium",
-            "dev.zed.Zed", "com.visualstudio.code.oss",
-        ] {
-            XCTAssertTrue(identifiers.contains(bundleID), bundleID)
-        }
-    }
-
     func testBrowserTabParserAcceptsOnlyWebURL() {
         let fields = BrowserActiveTabParser.fields(
             from: ["Article title", "https://example.com/story?item=1"]

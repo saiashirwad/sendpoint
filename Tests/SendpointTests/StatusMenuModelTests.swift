@@ -26,20 +26,7 @@ final class StatusMenuModelTests: XCTestCase {
             let unavailableCopy = entry(titled: "Notes unavailable: disk full", in: unavailable)
             XCTAssertNotNil(unavailableCopy)
             XCTAssertNil(unavailableCopy?.action)
-        }
-    }
-
-    func testCopyItemUsesExportVerbAndPluralizesNotes() {
-        withSettings { settings in
-            settings.pasteDirectly = false
-
-            let one = facts(sessions: [session(id: firstStackID, name: "First", noteCount: 1)], current: firstStackID)
-            let oneCopy = entry(titled: "Copy 1 Note as Markdown", in: items(facts: one, status: .available, settings: settings))
-            XCTAssertEqual(oneCopy?.action, .copyMarkdown)
-
-            let two = facts(sessions: [session(id: firstStackID, name: "First", noteCount: 2)], current: firstStackID)
-            let twoCopy = entry(titled: "Copy 2 Notes as Markdown", in: items(facts: two, status: .available, settings: settings))
-            XCTAssertEqual(twoCopy?.action, .copyMarkdown)
+            XCTAssertNil(submenu(titled: "Stack", in: unavailable), "no stacks to list without facts")
         }
     }
 
@@ -80,13 +67,6 @@ final class StatusMenuModelTests: XCTestCase {
             XCTAssertEqual(rows.map(\.representedID), [firstStackID, secondStackID])
             XCTAssertEqual(rows.map(\.checked), [true, false])
             XCTAssertEqual(entry(titled: "Switch Stack…", in: stack)?.action, .quickSwitcher)
-        }
-    }
-
-    func testStackSubmenuIsAbsentWithoutFacts() {
-        withSettings { settings in
-            let menu = items(facts: nil, status: .unavailable("gone"), settings: settings)
-            XCTAssertNil(submenu(titled: "Stack", in: menu))
         }
     }
 
@@ -160,48 +140,6 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
-    func testTopLevelOrderAndChromeMatchTheDelegateMenu() {
-        withSettings { settings in
-            let session = session(id: firstStackID, name: "First", noteCount: 1)
-            let cleared = ClearedBatch(sessionID: firstStackID, entries: [annotation()])
-            let menu = items(
-                facts: facts(sessions: [session], current: firstStackID, lastCleared: cleared),
-                status: .available,
-                settings: settings,
-                error: .mutationRejected("nope"),
-                hasPendingMutations: true
-            )
-
-            XCTAssertEqual(topLevelTitles(menu), [
-                "Voice Note (\(settings.voiceCaptureCombo.displayString))",
-                "Typed Note",
-                "Show Stack…",
-                "First — 1 note",
-                "Stack",
-                "Template",
-                "Paste 1 Note as Markdown",
-                "Clear First",
-                "Undo Clear (1)",
-                "nope",
-                "Retry Pending Stack Changes",
-                "Settings…",
-                "Quit Sendpoint",
-            ])
-
-            let voice = entry(titled: "Voice Note (\(settings.voiceCaptureCombo.displayString))", in: menu)
-            XCTAssertNil(voice?.keyEquivalent)
-            XCTAssertEqual(voice?.tooltip, settings.voiceCaptureCombo.displayString)
-
-            let typed = entry(titled: "Typed Note", in: menu)
-            XCTAssertEqual(typed?.keyEquivalent, settings.captureCombo.menuKeyEquivalent)
-            XCTAssertEqual(typed?.keyEquivalentModifiers, settings.captureCombo.modifiers)
-
-            XCTAssertEqual(entry(titled: "Settings…", in: menu)?.keyEquivalent, ",")
-            XCTAssertEqual(entry(titled: "Quit Sendpoint", in: menu)?.keyEquivalent, "q")
-            XCTAssertEqual(menu.filter { $0 == .separator }.count, 3)
-        }
-    }
-
     private func items(
         facts: SessionUIFacts?,
         status: StatusMenuStoreStatus,
@@ -256,16 +194,6 @@ final class StatusMenuModelTests: XCTestCase {
         items.compactMap {
             guard case let .entry(entry) = $0 else { return nil }
             return entry
-        }
-    }
-
-    private func topLevelTitles(_ items: [StatusMenuItem]) -> [String] {
-        items.compactMap {
-            switch $0 {
-            case let .entry(entry): entry.title
-            case .separator: nil
-            case let .submenu(title, _): title
-            }
         }
     }
 

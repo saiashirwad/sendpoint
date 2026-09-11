@@ -5,46 +5,22 @@ import XCTest
 
 @MainActor
 final class AppIconStoreTests: XCTestCase {
-    private final class LoadCounter {
-        var count = 0
-    }
-
-    func testFailedLoaderIsCalledOnceAcrossLookups() {
-        let counter = LoadCounter()
-        let store = AppIconStore { _ in
-            counter.count += 1
-            return nil
-        }
-        let application = ApplicationIdentity(name: "Missing", bundleID: "example.missing")
-
-        XCTAssertNil(store.icon(for: application))
-        XCTAssertNil(store.icon(for: application))
-        XCTAssertEqual(counter.count, 1)
-    }
-
-    func testSuccessfulLoaderIsCalledOnceAcrossLookups() {
-        let counter = LoadCounter()
+    func testLoaderRunsOncePerBundleIDAndNeverForABlankOne() {
+        var loads: [String] = []
         let image = NSImage(size: NSSize(width: 16, height: 16))
-        let store = AppIconStore { _ in
-            counter.count += 1
-            return image
+        let store = AppIconStore { bundleID in
+            loads.append(bundleID)
+            return bundleID == "example.found" ? image : nil
         }
-        let application = ApplicationIdentity(name: "Found", bundleID: "example.found")
+        let found = ApplicationIdentity(name: "Found", bundleID: "example.found")
+        let missing = ApplicationIdentity(name: "Missing", bundleID: "example.missing")
 
-        XCTAssertTrue(store.icon(for: application) === image)
-        XCTAssertTrue(store.icon(for: application) === image)
-        XCTAssertEqual(counter.count, 1)
-    }
-
-    func testBlankBundleIDNeverCallsLoader() {
-        let counter = LoadCounter()
-        let store = AppIconStore { _ in
-            counter.count += 1
-            return nil
-        }
-
+        XCTAssertTrue(store.icon(for: found) === image)
+        XCTAssertTrue(store.icon(for: found) === image)
+        XCTAssertNil(store.icon(for: missing))
+        XCTAssertNil(store.icon(for: missing), "a failed load is remembered too")
         XCTAssertNil(store.icon(for: ApplicationIdentity(name: "No bundle ID")))
         XCTAssertNil(store.icon(for: ApplicationIdentity(name: "Blank", bundleID: "   ")))
-        XCTAssertEqual(counter.count, 0)
+        XCTAssertEqual(loads, ["example.found", "example.missing"])
     }
 }

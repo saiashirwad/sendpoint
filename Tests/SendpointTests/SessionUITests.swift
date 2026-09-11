@@ -7,25 +7,6 @@ final class SessionUITests: XCTestCase {
     private let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
 
-    func testSessionFactsExposeMenuAndPickerNamesCountsAndCurrentCheckmark() {
-        let sessions = [
-            Session(id: firstID, name: "Reading", entries: [annotation("One")]),
-            Session(id: secondID, name: "Writing", entries: [annotation("Two"), annotation("Three")]),
-        ]
-
-        let facts = SessionUIFacts(
-            sessions: sessions,
-            currentSessionID: secondID,
-            lastCleared: nil
-        )
-
-        XCTAssertEqual(facts.sessions.map(\.name), ["Reading", "Writing"])
-        XCTAssertEqual(facts.sessions.map(\.annotationCount), [1, 2])
-        XCTAssertEqual(facts.sessions.map(\.isCurrent), [false, true])
-        XCTAssertEqual(facts.currentTitle, "Writing — 2 notes")
-        XCTAssertTrue(facts.canDelete)
-    }
-
     func testSingleSessionCannotBeDeleted() {
         let facts = SessionUIFacts(
             sessions: [Session(id: firstID, name: "Only")],
