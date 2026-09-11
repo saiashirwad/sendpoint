@@ -10,8 +10,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         stackID: UUID(), createdAt: Date(timeIntervalSince1970: 123)
     )
     private let selection = CapturedSelection(
-        text: "Selection", appName: "Reader", appBundleID: "com.example.reader",
-        processIdentifier: 42, screenRect: nil
+        text: "Selection", screenRect: nil
     )
 
     func testSaveFreezesTheNoteAndRetryReusesTheExactRequest() throws {
@@ -23,11 +22,10 @@ final class CaptureSaveLifecycleTests: XCTestCase {
             target: target, destinationStackID: context.stackID,
             note: try XCTUnwrap(target.note(body: "Keep this draft"))
         )
-        XCTAssertEqual(effects, [.save(request)])
+        XCTAssertEqual(effects, [.commit(request)])
         XCTAssertEqual(state.update(.changeNote("A late edit")), [])
         XCTAssertEqual(state.session?.phase, .saving(request))
 
-        XCTAssertEqual(state.update(.prepared(request, request.note)), [.commit(request)])
         XCTAssertEqual(
             state.update(.saved(request, .commitFailed("disk full"), destinationExists: true)),
             [.show(.editor)]
@@ -58,37 +56,35 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         let retargeted = CaptureSaveRequest(
             target: request.target, destinationStackID: destination, note: request.note
         )
-        XCTAssertEqual(state.update(.retarget(destination)), [.abandon(request.target), .save(retargeted)])
+        XCTAssertEqual(state.update(.retarget(destination)), [.commit(retargeted)])
         XCTAssertEqual(state.session?.phase, .saving(retargeted))
-        XCTAssertEqual(state.update(.prepared(retargeted, retargeted.note)), [.commit(retargeted)])
         XCTAssertEqual(state.update(.saved(retargeted, .committed, destinationExists: true)), [.close])
     }
 
-    func testRejectedExistingDestinationCannotRetargetAndDismissAbandonsProvenance() throws {
+    func testRejectedExistingDestinationCannotRetargetAndDismissCloses() throws {
         var (state, request) = try saving()
         _ = state.update(.saved(request, .rejected("The note already exists."), destinationExists: true))
         XCTAssertEqual(state.session?.phase, .saveFailed(
             request, message: "The note already exists.", retryable: false, targetMissing: false
         ))
         XCTAssertEqual(state.update(.retarget(UUID())), [])
-        XCTAssertEqual(state.update(.dismiss), [.abandon(request.target), .close])
+        XCTAssertEqual(state.update(.dismiss), [.close])
     }
 
     func testStaleOutcomesAreIgnored() throws {
         var (state, request) = try saving()
-        let otherNote = Note(
-            subject: .standalone, body: "Other", provenance: request.note.provenance
-        )
+        let otherNote = Note(subject: .standalone, body: "Other")
         for stale in [
             CaptureSaveRequest(target: request.target, destinationStackID: UUID(), note: request.note),
-            CaptureSaveRequest(target: request.target, destinationStackID: request.destinationStackID,
-                note: otherNote),
+            CaptureSaveRequest(
+                target: request.target,
+                destinationStackID: request.destinationStackID,
+                note: otherNote
+            ),
         ] {
-            XCTAssertEqual(state.update(.prepared(stale, stale.note)), [])
             XCTAssertEqual(state.update(.saved(stale, .committed, destinationExists: true)), [])
             XCTAssertEqual(state.session?.phase, .saving(request))
         }
-        XCTAssertEqual(state.update(.prepared(request, otherNote)), [], "the prepared note must keep its id")
     }
 
     func testNoOpAndCancellationNeverClaimSuccess() throws {
@@ -103,16 +99,16 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         }
     }
 
-    func testDismissAbandonsOnlyUnsavedWorkAndLateOutcomesAreDropped() throws {
+    func testDismissesUnsavedWorkAndLateOutcomesAreDropped() throws {
         var editing = try editing(body: "")
-        let target = try XCTUnwrap(editing.session?.target)
+        XCTAssertNotNil(editing.session?.target)
         XCTAssertEqual(editing.update(.save), [.beep], "a blank note cannot be saved")
         XCTAssertEqual(editing.update(.begin(.text, context)), [.focusEditor])
-        XCTAssertEqual(editing.update(.dismiss), [.abandon(target), .close])
+        XCTAssertEqual(editing.update(.dismiss), [.close])
 
         var (queued, request) = try saving()
         XCTAssertEqual(queued.update(.begin(.text, context)), [.beep])
-        XCTAssertEqual(queued.update(.dismiss), [.close], "a queued save keeps its provenance work")
+        XCTAssertEqual(queued.update(.dismiss), [.close])
         XCTAssertEqual(queued.update(.saved(request, .committed, destinationExists: true)), [])
         XCTAssertEqual(queued.lifecycle, .idle)
 
@@ -131,8 +127,8 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(state.update(.changeNote("Typed already")), [])
 
         let target = context.target(captured: selection)
-        XCTAssertEqual(state.update(.selection(context, selection)), [.probe(target)],
-            "the box is already up, so only provenance work starts")
+        XCTAssertEqual(state.update(.selection(context, selection)), [],
+            "the box is already up, so the passage only updates the target")
         XCTAssertEqual(state.session?.target, target)
         XCTAssertEqual(state.session?.phase, .editing("Typed already"), "typing is kept")
 
@@ -151,8 +147,8 @@ final class CaptureSaveLifecycleTests: XCTestCase {
 
         let target = context.target(captured: selection)
         let effects = state.update(.selection(context, selection))
-        guard case let .save(request)? = effects.last else { return XCTFail("expected a save, got \(effects)") }
-        XCTAssertEqual(effects, [.probe(target), .save(request)])
+        guard case let .commit(request)? = effects.last else { return XCTFail("expected a commit, got \(effects)") }
+        XCTAssertEqual(effects, [.commit(request)])
         XCTAssertEqual(request.note.body, "Quick thought")
         XCTAssertEqual(request.target, target)
         XCTAssertEqual(state.session?.saveAwaitsSelection, false)
@@ -167,21 +163,20 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         var state = CaptureState()
         _ = state.update(.begin(.text, context))
         let emptyTarget = context.target(captured: CapturedSelection(text: ""))
-        XCTAssertEqual(state.update(.failed(context, "no focused element")), [.probe(emptyTarget), .show(.editor)])
+        XCTAssertEqual(state.update(.failed(context, "no focused element")), [.show(.editor)])
         XCTAssertEqual(state.session?.phase, .editing(""))
 
         var early = CaptureState()
         _ = early.update(.begin(.text, context))
         _ = early.update(.selectionPending(context))
-        XCTAssertEqual(early.update(.failed(context, "timed out")), [.probe(emptyTarget)])
+        XCTAssertEqual(early.update(.failed(context, "timed out")), [])
         XCTAssertEqual(early.session?.target, emptyTarget)
     }
 
     private func editing(body: String) throws -> CaptureState {
         var state = CaptureState()
         XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
-        let target = context.target(captured: selection)
-        XCTAssertEqual(state.update(.selection(context, selection)), [.probe(target), .show(.editor)])
+        XCTAssertEqual(state.update(.selection(context, selection)), [.show(.editor)])
         XCTAssertEqual(state.update(.changeNote(body)), [])
         return state
     }
@@ -189,8 +184,8 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     private func saving() throws -> (CaptureState, CaptureSaveRequest) {
         var state = try editing(body: "Draft")
         let effects = state.update(.save)
-        guard case let .save(request)? = effects.first else {
-            throw XCTSkip("Expected a save effect, got \(effects)")
+        guard case let .commit(request)? = effects.first else {
+            throw XCTSkip("Expected a commit effect, got \(effects)")
         }
         return (state, request)
     }

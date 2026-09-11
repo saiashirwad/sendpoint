@@ -48,24 +48,25 @@ final class StorePersistenceTests: XCTestCase {
         XCTAssertTrue(names.contains(where: { $0.hasSuffix(".corrupt") }))
     }
 
-    func testUnknownVersionIsRejectedWithoutQuarantine() async throws {
-        let directory = temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent(StorePersistence.fileName)
-        let unknownVersion = StackDocument.currentVersion + 1
-        try Data(#"{"version":\#(unknownVersion)}"#.utf8).write(to: file)
+    func testUnsupportedVersionsAreRejectedWithoutQuarantine() async throws {
+        for version in [StackDocument.currentVersion - 1, StackDocument.currentVersion + 1] {
+            let directory = temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent(StorePersistence.fileName)
+            try Data(#"{"version":\#(version)}"#.utf8).write(to: file)
 
-        do {
-            _ = try await StorePersistence.live(directory: directory).load()
-            XCTFail("Expected unsupported version")
-        } catch let error as StorePersistenceError {
-            XCTAssertEqual(error, .unsupportedVersion(unknownVersion))
+            do {
+                _ = try await StorePersistence.live(directory: directory).load()
+                XCTFail("Expected unsupported version")
+            } catch let error as StorePersistenceError {
+                XCTAssertEqual(error, .unsupportedVersion(version))
+            }
+
+            XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+            let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            XCTAssertFalse(names.contains(where: { $0.hasSuffix(".corrupt") }))
         }
-
-        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
-        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-        XCTAssertFalse(names.contains(where: { $0.hasSuffix(".corrupt") }))
     }
 
     func testInvalidCommitDoesNotReplaceLastCommittedDocument() async throws {

@@ -55,7 +55,6 @@ nonisolated enum PaletteAction: Hashable {
     case deleteNote(UUID)
     case moveNoteUp(UUID)
     case moveNoteDown(UUID)
-    case openSource(URL)
     case backToStacks
 }
 
@@ -75,7 +74,7 @@ nonisolated struct PaletteActionContext: Equatable {
     enum Focus: Equatable {
         case stack(StackItemFacts)
         case createStack(name: String)
-        case note(id: UUID, index: Int, count: Int, sourceURL: URL?)
+        case note(id: UUID, index: Int, count: Int)
         case nothing
     }
 
@@ -136,13 +135,9 @@ nonisolated enum PaletteActionCatalog {
                 undo()
             }
         case .notes:
-            if case let .note(id, index, count, sourceURL) = context.focus {
+            if case let .note(id, index, count) = context.focus {
                 add(.editNote(id), "Edit Note", "↩")
                 add(.copyNote(id), "Copy Note", "⌘C")
-                if let sourceURL {
-                    add(.openSource(sourceURL), "Open Source", "⌘O",
-                        subtitle: sourceURL.host ?? sourceURL.absoluteString)
-                }
                 if index > 0 { add(.moveNoteUp(id), "Move Note Up", "⌥↑") }
                 if index < count - 1 { add(.moveNoteDown(id), "Move Note Down", "⌥↓") }
                 add(.deleteNote(id), "Delete Note", "⌘⌫", destructive: true)

@@ -12,45 +12,33 @@ final class NoteListingTests: XCTestCase {
             Note(
                 id: firstNoteID,
                 subject: .selection(quote: "OT scales quadratically"),
-                body: "Can you explain why?",
-                provenance: Provenance(
-                    application: ApplicationIdentity(name: "Helium"),
-                    windowTitle: "CRDT deep dive",
-                    url: URL(string: "https://example.com/crdt")
-                )
+                body: "Can you explain why?"
             ),
             Note(
                 id: secondNoteID,
                 subject: .standalone,
-                body: "Monoids and semi-groups",
-                provenance: Provenance(application: ApplicationIdentity(name: "Safari"))
+                body: "Monoids and semi-groups"
             ),
             Note(
                 id: thirdNoteID,
                 subject: .selection(quote: "join-semilattice"),
-                body: "",
-                provenance: Provenance(application: ApplicationIdentity(name: "Helium"))
+                body: ""
             ),
         ]
     }
 
-    func testNoteListingSearchesQuoteNoteAppAndWindow() {
+    func testNoteListingSearchesQuoteAndNote() {
         let all = NoteListing(notes: notes, query: "  ")
         XCTAssertEqual(all.ids, [firstNoteID, secondNoteID, thirdNoteID])
 
         XCTAssertEqual(NoteListing(notes: notes, query: "QUADRAT").ids, [firstNoteID], "quote")
         XCTAssertEqual(NoteListing(notes: notes, query: "monoid").ids, [secondNoteID], "note")
-        XCTAssertEqual(
-            NoteListing(notes: notes, query: "helium").ids, [firstNoteID, thirdNoteID], "app")
-        XCTAssertEqual(NoteListing(notes: notes, query: "deep dive").ids, [firstNoteID], "window")
         XCTAssertTrue(NoteListing(notes: notes, query: "zzz").isEmpty)
     }
 
 
     func testSearchFoldsCaseDiacriticsAndWidthWithoutReordering() {
-        let matching = Note(
-            subject: .standalone, body: "Ｃａｆé", provenance: Provenance(application: ApplicationIdentity(name: "Reader"))
-        )
+        let matching = Note(subject: .standalone, body: "Ｃａｆé")
         let listing = NoteListing(notes: [notes[0], matching, notes[1]], query: "  CAFE  ")
         XCTAssertEqual(listing.notes, [matching])
         XCTAssertTrue(NoteListing(notes: [], query: "anything").isEmpty)

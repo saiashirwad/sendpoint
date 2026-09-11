@@ -6,7 +6,7 @@ import XCTest
 /// Escape must never start a second recording.
 final class CaptureVoiceGestureTests: XCTestCase {
     private let context = NoteCaptureContext(stackID: UUID())
-    private let selection = CapturedSelection(text: "", appName: "Reader", processIdentifier: 42)
+    private let selection = CapturedSelection(text: "")
 
     func testHoldFinishesOnReleaseAndIgnoresRepeatsWhileDown() {
         var state = CaptureState()
@@ -16,7 +16,7 @@ final class CaptureVoiceGestureTests: XCTestCase {
             [.show(.voice), .startRecording(context), .readSelection(context, .voice)])
         XCTAssertEqual(state.update(.voicePressed), [], "key repeat")
         XCTAssertEqual(state.update(.recordingStarted(context)), [])
-        XCTAssertEqual(state.update(.selection(context, selection)), [.probe(context.target(captured: selection))])
+        XCTAssertEqual(state.update(.selection(context, selection)), [])
         XCTAssertEqual(state.session?.phase, .recording)
 
         XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])

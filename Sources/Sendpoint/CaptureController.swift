@@ -75,9 +75,6 @@ final class CaptureController {
     @ObservationIgnored private var isDraining = false
     private enum Work: Hashable { case selection, recording, transcription, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
-    @ObservationIgnored private let probe: ProvenanceProbe
-    @ObservationIgnored private lazy var provenance = PendingProvenanceWorkOwner(
-        probe: probe, lateUpdate: { [weak self] mutation in self?.store?.mutate(mutation) })
 
     var onAccessibilityRequired: (() -> Void)?
     var onStatusChange: (() -> Void)?
@@ -110,7 +107,6 @@ final class CaptureController {
 
     init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionState,
          selection: SelectionCapture, recorder: VoiceRecorder,
-         provenanceProbe: ProvenanceProbe = .live(),
          surfaces: @escaping (CaptureController) -> CaptureSurfaces = {
              .live(CaptureWindows(
                  model: $0, surfaces: SurfaceCoordinator(), hotKeyCenter: HotKeyCenter.processCenter()
@@ -121,7 +117,6 @@ final class CaptureController {
         self.permissionState = permissionState
         self.selection = selection
         self.recorder = recorder
-        self.probe = provenanceProbe
         self.makeSurfaces = surfaces
     }
 
@@ -178,14 +173,13 @@ final class CaptureController {
         guard !isDraining else { return }
         isDraining = true
         while !pending.isEmpty {
-            let previous = state.session
-            for effect in state.update(pending.removeFirst()) { run(effect, previous: previous) }
+            for effect in state.update(pending.removeFirst()) { run(effect) }
         }
         isDraining = false
         onStatusChange?()
     }
 
-    private func run(_ effect: CaptureEffect, previous: CaptureSession?) {
+    private func run(_ effect: CaptureEffect) {
         switch effect {
         case .beginVoice:
             if let context = beginContext() { send(.begin(.voice, context)) } else { send(.voiceRefused) }
@@ -205,25 +199,16 @@ final class CaptureController {
             launch(.transcription, context: context) { [recorder] in
                 .transcript(context, try await recorder.stopAndTranscribe())
             }
-        case let .probe(target): provenance.start(for: target)
-        case let .save(request):
-            let note = provenance.noteForSave(request.note, target: request.target)
-            send(.prepared(request, note))
         case let .commit(request):
             guard let store else { return }
             store.mutate(.addNote(stackID: request.destinationStackID, note: request.note)) {
                 [weak self, weak store] outcome in
                 guard let self, !self.state.isTornDown else { return }
-                switch outcome {
-                case .noOp, .rejected, .cancelled: self.provenance.abandon(for: request.target)
-                case .committed, .commitFailed: break
-                }
                 self.send(.saved(request, outcome, destinationExists: store?.stacks.contains {
                     $0.id == request.destinationStackID
                 } ?? false))
             }
         case .retry: store?.retryPendingMutations()
-        case let .abandon(target): provenance.abandon(for: target)
         case let .show(surface): surfaces.show(surface)
         case .focusEditor: surfaces.focus()
         case let .failureTimer(context):
@@ -276,7 +261,6 @@ final class CaptureController {
         guard !state.isTornDown else { return }
         send(.teardown)
         surfaces.discard()
-        provenance.teardown()
         store = nil
         onAccessibilityRequired = nil
         onStatusChange = nil

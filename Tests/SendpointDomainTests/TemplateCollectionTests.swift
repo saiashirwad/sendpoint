@@ -108,8 +108,7 @@ final class TemplateCollectionTests: XCTestCase {
     }
 
     private func template(id: UUID = UUID(), name: String) -> Template {
-        Template(id: id, name: name, preamble: "", includeApplication: false, includeWindow: false,
-                includeLink: false, includeTimestamps: false, includeHeading: false,
+        Template(id: id, name: name, preamble: "", includeTimestamps: false, includeHeading: false,
                 includeNoteNumbers: false, clearStackAfterExport: false)
     }
 }

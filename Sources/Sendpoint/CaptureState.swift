@@ -64,8 +64,8 @@ nonisolated enum CaptureAction {
     case voiceToggled
     case voiceEscape
     case voiceModeChanged(VoiceRecordingMode)
-    /// The selection reader has done everything that must happen before the
-    /// note box takes over the keyboard; the rest may finish behind it.
+    /// The selection reader can finish against the original app after the note
+    /// box takes over the keyboard.
     case selectionPending(NoteCaptureContext)
     case selection(NoteCaptureContext, CapturedSelection)
     case recordingStarted(NoteCaptureContext)
@@ -78,7 +78,6 @@ nonisolated enum CaptureAction {
     case dismiss
     case retry
     case retarget(UUID)
-    case prepared(CaptureSaveRequest, Note)
     case saved(CaptureSaveRequest, StackMutationOutcome, destinationExists: Bool)
     case failureTimeout(NoteCaptureContext)
     case teardown
@@ -92,11 +91,8 @@ nonisolated enum CaptureEffect: Equatable {
     case readSelection(NoteCaptureContext, CaptureMode)
     case startRecording(NoteCaptureContext)
     case transcribe(NoteCaptureContext)
-    case probe(NoteCaptureTarget)
-    case save(CaptureSaveRequest)
     case commit(CaptureSaveRequest)
     case retry
-    case abandon(NoteCaptureTarget)
     case show(CaptureSurface)
     case focusEditor
     case failureTimer(NoteCaptureContext)
@@ -181,25 +177,23 @@ nonisolated struct CaptureState: Equatable {
             switch session.phase {
             case .selectingText:
                 session.phase = .editing("")
-                effects = [.probe(target), .show(.editor)]
+                effects = [.show(.editor)]
             case let .editing(note) where session.target == nil:
                 // The box opened early; the passage catches up with it.
-                effects = [.probe(target)]
                 if session.saveAwaitsSelection {
                     session.saveAwaitsSelection = false
                     if let note = target.note(body: note) {
                         let request = CaptureSaveRequest(target: target,
                             destinationStackID: target.stackID, note: note)
                         session.phase = .saving(request)
-                        effects.append(.save(request))
+                        effects.append(.commit(request))
                     } else {
-                        effects.append(.beep)
+                        effects = [.beep]
                     }
                 }
             case let .selectingVoice(recording, finishRequested):
                 session.phase = recording ? (finishRequested ? .transcribing : .recording) : .startingVoice
-                effects = [.probe(target)]
-                if finishRequested && recording { effects.append(.transcribe(context)) }
+                effects = finishRequested && recording ? [.transcribe(context)] : []
             default: return []
             }
             session.target = target
@@ -258,7 +252,7 @@ nonisolated struct CaptureState: Equatable {
             let request = CaptureSaveRequest(target: target,
                 destinationStackID: target.stackID, note: note)
             session.phase = .saving(request)
-            effects = [.save(request)]
+            effects = [.commit(request)]
         case let .failed(context, message):
             guard context == session.context else { return [] }
             switch session.phase {
@@ -272,13 +266,6 @@ nonisolated struct CaptureState: Equatable {
                 return update(.selection(context, CapturedSelection(text: "")))
             default: return []
             }
-        case let .prepared(request, note):
-            guard session.phase == .saving(request), note.id == request.note.id,
-                  note.provenance.application == request.target.application else { return [] }
-            let prepared = CaptureSaveRequest(target: request.target,
-                destinationStackID: request.destinationStackID, note: note)
-            session.phase = .saving(prepared)
-            effects = [.commit(prepared)]
         case let .saved(request, outcome, destinationExists):
             let current: CaptureSaveRequest
             switch session.phase {
@@ -287,7 +274,7 @@ nonisolated struct CaptureState: Equatable {
             }
             guard current == request, request.target.context == session.context else { return [] }
             switch outcome {
-            case .committed: return finish(session, abandon: false)
+            case .committed: return finish(session)
             case let .commitFailed(message):
                 session.phase = .saveFailed(request, message: "Couldn’t save the note: \(message)",
                     retryable: true, targetMissing: false)
@@ -309,10 +296,10 @@ nonisolated struct CaptureState: Equatable {
             let request = CaptureSaveRequest(target: old.target, destinationStackID: destination,
                 note: old.note)
             session.phase = .saving(request)
-            effects = [.abandon(old.target), .save(request)]
+            effects = [.commit(request)]
         case .dismiss:
             switch session.phase {
-            case .saving, .saveFailed(_, _, true, _): return finish(session, abandon: false)
+            case .saving, .saveFailed(_, _, true, _): return finish(session)
             default: return finish(session)
             }
         case let .failureTimeout(context):
@@ -351,13 +338,13 @@ nonisolated struct CaptureState: Equatable {
         }
     }
 
-    private mutating func finish(_ session: CaptureSession, abandon: Bool = true) -> [CaptureEffect] {
+    private mutating func finish(_ session: CaptureSession) -> [CaptureEffect] {
         lifecycle = .idle
         // The key is still down after its capture ended; its release must not start another.
         if session.mode == .voice, voice.keyHeld {
             voice.keyHeld = false
             voice.releasePending = true
         }
-        return (abandon ? session.target.map { [CaptureEffect.abandon($0)] } ?? [] : []) + [.close]
+        return [.close]
     }
 }

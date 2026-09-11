@@ -117,8 +117,7 @@ final class StackUITests: XCTestCase {
     private func makeNote(_ body: String) -> Note {
         Note(
             subject: .standalone,
-            body: body,
-            provenance: Provenance(application: ApplicationIdentity(name: "Test"))
+            body: body
         )
     }
 }

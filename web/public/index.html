@@ -793,8 +793,7 @@
         const parts = [b(`## ${i + 1}`)];
         if (n.sel) parts.push(`<span class="q">&gt; ${esc($(n.sel).textContent)}</span>`);
         parts.push(esc(n.said));
-        const where = n.sel ? "Helium · CEK machines · chatgpt.com/c/8f21… · " : "Helium · ";
-        parts.push(`<span class="meta">_${where}${n.time}_</span>`);
+        parts.push(`<span class="meta">_${n.time}_</span>`);
         return parts.join("\n\n");
       }).join("\n\n");
       return `${PREAMBLE}\n\n${b("# Reading notes — September 2, 2026")}\n\n${entries}`;

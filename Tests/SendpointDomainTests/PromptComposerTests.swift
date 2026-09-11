@@ -18,16 +18,13 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertNil(" \n\t".normalizedStackName)
     }
 
-    func testComposerIncludesPreambleHeadingEntriesAndFullMetadata() {
+    func testComposerIncludesPreambleHeadingEntriesAndTimestamp() {
         let output = compose(template: .coherent)
 
         XCTAssertTrue(output.contains("# Reading notes — January 2, 2025"))
         XCTAssertEqual(output.components(separatedBy: Template.coherent.preamble).count - 1, 1)
         XCTAssertFalse(output.contains("## "))
-        XCTAssertEqual(
-            metadata(in: output),
-            ["Helium", "Page title", "https://example.com/article", "/tmp/project", expectedTime]
-        )
+        XCTAssertTrue(output.contains("_\(expectedTime)_"))
     }
 
     func testComposerNumbersEntriesOnlyWhenTheTemplateEnablesIt() {
@@ -38,27 +35,6 @@ final class PromptComposerTests: XCTestCase {
         var unnumbered = Template.pointByPoint
         unnumbered.includeNoteNumbers = false
         XCTAssertFalse(compose(template: unnumbered).contains("## "))
-    }
-
-    func testComposerKeepsAllMetadataFlagsIndependent() {
-        var applicationOnly = Template.plain
-        applicationOnly.includeApplication = true
-        XCTAssertEqual(metadata(in: compose(template: applicationOnly)), ["Helium"])
-
-        var windowOnly = Template.plain
-        windowOnly.includeWindow = true
-        XCTAssertEqual(metadata(in: compose(template: windowOnly)), ["Page title"])
-
-        var linkOnly = Template.plain
-        linkOnly.includeLink = true
-        XCTAssertEqual(
-            metadata(in: compose(template: linkOnly)),
-            ["https://example.com/article", "/tmp/project"]
-        )
-
-        var timestampOnly = Template.plain
-        timestampOnly.includeTimestamps = true
-        XCTAssertEqual(metadata(in: compose(template: timestampOnly)), [expectedTime])
     }
 
     func testComposerOmitsWhitespaceOnlyPreambleWithoutTrimmingNonblankContent() {
@@ -87,52 +63,6 @@ final class PromptComposerTests: XCTestCase {
             """
         )
         XCTAssertFalse(output.contains("Reading notes"))
-        XCTAssertFalse(output.contains("Helium"))
-    }
-
-    func testComposerDisplaysWebFileAndDirectoryLinksWithoutCouplingThem() {
-        var template = Template.plain
-        template.includeLink = true
-
-        let webOnly = makeStack(
-            provenance: Provenance(
-                application: ApplicationIdentity(name: "Browser"),
-                url: URL(string: "https://example.com/article")
-            )
-        )
-        XCTAssertEqual(metadata(in: compose(stack: webOnly, template: template)), ["https://example.com/article"])
-
-        let file = URL(fileURLWithPath: NSHomeDirectory() + "/code/Main.swift")
-        let workspace = URL(fileURLWithPath: NSHomeDirectory() + "/code")
-        let fileAndDirectory = makeStack(
-            provenance: Provenance(
-                application: ApplicationIdentity(name: "Editor"),
-                url: file,
-                workingDirectory: workspace
-            )
-        )
-        XCTAssertEqual(
-            metadata(in: compose(stack: fileAndDirectory, template: template)),
-            ["~/code/Main.swift", "~/code"]
-        )
-    }
-
-    func testBlankProvenanceFactsDoNotCreateEmptyMetadataBlock() {
-        let note = Note(
-            subject: .standalone,
-            body: "Note",
-            provenance: Provenance(
-                application: ApplicationIdentity(name: "  "),
-                windowTitle: "\n"
-            ),
-            createdAt: date
-        )
-        let stack = Stack(name: "Empty facts", notes: [note], createdAt: date)
-        var template = Template.plain
-        template.includeApplication = true
-        template.includeWindow = true
-
-        XCTAssertEqual(compose(stack: stack, template: template), "Note")
     }
 
     private var expectedTime: String {
@@ -143,16 +73,6 @@ final class PromptComposerTests: XCTestCase {
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter.string(from: date)
-    }
-
-    private func metadata(in markdown: String) -> [String] {
-        guard
-            let line = markdown
-                .split(separator: "\n", omittingEmptySubsequences: false)
-                .map(String.init)
-                .first(where: { $0.hasPrefix("_") && $0.hasSuffix("_") })
-        else { return [] }
-        return String(line.dropFirst().dropLast()).components(separatedBy: " · ")
     }
 
     private func compose(template: Template) -> String {
@@ -169,27 +89,18 @@ final class PromptComposerTests: XCTestCase {
         )
     }
 
-    private func makeStack(
-        provenance: Provenance = Provenance(
-            application: ApplicationIdentity(name: "Helium", bundleID: "com.example.helium"),
-            windowTitle: "Page title",
-            url: URL(string: "https://example.com/article"),
-            workingDirectory: URL(fileURLWithPath: "/tmp/project")
-        )
-    ) -> Stack {
+    private func makeStack() -> Stack {
         Stack(
             name: "Reading",
             notes: [
                 Note(
                     subject: .selection(quote: "First line\nSecond line\n\nFourth line"),
                     body: "Response to selection",
-                    provenance: provenance,
                     createdAt: date
                 ),
                 Note(
                     subject: .standalone,
                     body: "A standalone thought",
-                    provenance: provenance,
                     createdAt: date
                 ),
             ],

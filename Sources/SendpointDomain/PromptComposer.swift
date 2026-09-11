@@ -45,13 +45,8 @@ public enum PromptComposer {
 
             noteBlocks.append(note.body)
 
-            let metadata = metadata(
-                for: note,
-                template: template,
-                shortTimeStyle: shortTimeStyle
-            )
-            if !metadata.isEmpty {
-                noteBlocks.append("_\(metadata.joined(separator: " · "))_")
+            if template.includeTimestamps {
+                noteBlocks.append("_\(note.createdAt.formatted(shortTimeStyle))_")
             }
 
             blocks.append(noteBlocks.joined(separator: "\n\n"))
@@ -74,50 +69,5 @@ public enum PromptComposer {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.isEmpty ? ">" : "> \($0)" }
             .joined(separator: "\n")
-    }
-
-    private static func metadata(
-        for note: Note,
-        template: Template,
-        shortTimeStyle: Date.FormatStyle
-    ) -> [String] {
-        var facts: [String] = []
-
-        if template.includeApplication {
-            appendIfPresent(note.provenance.application.name, to: &facts)
-        }
-        if template.includeWindow {
-            appendIfPresent(note.provenance.windowTitle, to: &facts)
-        }
-        if template.includeLink {
-            if let url = note.provenance.url {
-                appendIfPresent(displayLink(url), to: &facts)
-            }
-            if let directory = note.provenance.workingDirectory {
-                appendIfPresent(abbreviatedPath(directory), to: &facts)
-            }
-        }
-
-        if template.includeTimestamps {
-            facts.append(note.createdAt.formatted(shortTimeStyle))
-        }
-
-        return facts
-    }
-
-    private static func appendIfPresent(_ value: String?, to values: inout [String]) {
-        guard
-            let value,
-            !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
-        values.append(value)
-    }
-
-    private static func displayLink(_ url: URL) -> String {
-        url.isFileURL ? abbreviatedPath(url) : url.absoluteString
-    }
-
-    private static func abbreviatedPath(_ url: URL) -> String {
-        (url.path as NSString).abbreviatingWithTildeInPath
     }
 }

@@ -6,7 +6,6 @@ public extension Note {
     static func capturing(
         selection: String,
         body: String,
-        application: ApplicationIdentity,
         id: UUID,
         createdAt: Date
     ) -> Self? {
@@ -15,7 +14,6 @@ public extension Note {
             id: id,
             subject: selection.nonblank == nil ? .standalone : .selection(quote: selection),
             body: body,
-            provenance: Provenance(application: application),
             createdAt: createdAt
         )
     }

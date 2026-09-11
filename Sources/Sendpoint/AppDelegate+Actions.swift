@@ -170,7 +170,6 @@ extension AppDelegate {
             shortcuts: shortcuts,
             voiceSettings: voiceSettings,
             export: exportController,
-            appIcons: environment.appIcons,
             surfaces: surfaces,
             onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }
         )

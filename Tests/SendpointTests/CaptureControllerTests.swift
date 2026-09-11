@@ -69,7 +69,7 @@ final class CaptureControllerTests: XCTestCase {
         var accessibilityRequests = 0
     }
 
-    private let selection = CapturedSelection(text: "A passage", appName: "Reader", processIdentifier: 42)
+    private let selection = CapturedSelection(text: "A passage")
 
     private func makeFixture(accessibility: AccessibilityPermissionState = .granted) async throws -> Fixture {
         let suite = "CaptureControllerTests.\(UUID().uuidString)"
@@ -97,7 +97,6 @@ final class CaptureControllerTests: XCTestCase {
                 paste: { _, _ in false }
             ),
             recorder: recorder.boundary,
-            provenanceProbe: ProvenanceProbe(genericLookup: { _ in ProvenanceFields() }),
             surfaces: { _ in surfaces.boundary }
         )
         controller.configure(store: store)

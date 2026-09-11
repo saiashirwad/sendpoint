@@ -49,8 +49,7 @@ final class StackRecencyTests: XCTestCase {
         XCTAssertEqual(created.stacksByRecency.map(\.id), [fourthID, firstID, secondID, thirdID])
 
         let note = Note(
-            subject: .standalone, body: "note",
-            provenance: Provenance(application: ApplicationIdentity(name: "Test"))
+            subject: .standalone, body: "note"
         )
         let added = applied(.addNote(stackID: secondID, note: note), to: created)
         XCTAssertEqual(added.recentStackIDs, [secondID, fourthID])

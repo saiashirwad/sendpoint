@@ -218,35 +218,6 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .idle)
     }
 
-    func testClearBeforeLateProvenanceThenUndoRestoresEnrichment() async throws {
-        let original = document()
-        let store = try await StackStore(persistence: StorePersistence(
-            load: { original },
-            commit: { _ in }
-        ))
-        let base = makeNote(body: "Keep")
-        let enriched = Provenance(
-            application: base.provenance.application,
-            windowTitle: "Focused window"
-        )
-
-        store.mutate(.addNote(stackID: stackID, note: base))
-        store.mutate(.clearStack(stackID: stackID))
-        store.mutate(.updateNoteProvenance(
-            stackID: stackID,
-            noteID: base.id,
-            expectedApplication: base.provenance.application,
-            provenance: enriched
-        ))
-        store.mutate(.undoClear)
-        await store.waitForIdle()
-
-        XCTAssertEqual(store.currentNotes.count, 1)
-        XCTAssertEqual(store.currentNotes.first?.id, base.id)
-        XCTAssertEqual(store.currentNotes.first?.provenance, enriched)
-        store.teardown()
-    }
-
     func testTeardownReleasesWaitersWhenPersistenceIgnoresCancellation() async throws {
         let original = document()
         let commitStarted = expectation(description: "commit started")
@@ -454,7 +425,6 @@ final class StackStoreTests: XCTestCase {
         Note(
             subject: .standalone,
             body: body,
-            provenance: Provenance(application: ApplicationIdentity(name: "Tests")),
             createdAt: now
         )
     }

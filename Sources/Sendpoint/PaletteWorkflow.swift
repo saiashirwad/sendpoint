@@ -113,7 +113,6 @@ enum PaletteEffect {
     case copyStack(UUID)
     case copyNote(Note)
     case selectTemplate(UUID)
-    case openURL(URL)
     case close
     case beep
 }
@@ -173,8 +172,7 @@ struct PaletteProjection {
         case .notes:
             let listing = noteListing
             if let id = state.noteState.highlight, let index = listing.ids.firstIndex(of: id) {
-                focus = .note(id: id, index: index, count: listing.notes.count,
-                    sourceURL: listing.notes[index].provenance.url)
+                focus = .note(id: id, index: index, count: listing.notes.count)
             } else {
                 focus = .nothing
             }
@@ -335,7 +333,6 @@ struct PaletteUpdate {
             if let stackID = state.level.stackID { enqueue(.removeNote(stackID: stackID, noteID: id)) }
         case let .moveNoteUp(id): moveNote(id, offset: -1)
         case let .moveNoteDown(id): moveNote(id, offset: 1)
-        case let .openSource(url): effects.append(.openURL(url)); update(.close)
         }
     }
 
@@ -523,7 +520,6 @@ struct PaletteUpdate {
             case .command("z"): shortcut = "⌘Z"
             case .command("r"): shortcut = "⌘R"
             case .command("n"): shortcut = "⌘N"
-            case .command("o"): shortcut = "⌘O"
             case .commandDelete: shortcut = "⌘⌫"
             case .shiftCommandDelete: shortcut = "⇧⌘⌫"
             case .optionUp: shortcut = "⌥↑"

@@ -194,6 +194,46 @@ final class StackDocumentMutationTests: XCTestCase {
         XCTAssertEqual(restored.stacks[0].notes, [old, later])
     }
 
+    func testClearExportedNotesRejectsSnapshotsOlderThanAnyNoteField() {
+        let note = makeNote(id: UUID(), body: "original")
+        let initial = StackDocument(
+            stacks: [Stack(id: firstID, name: "First", notes: [note], createdAt: now)],
+            currentStackID: firstID
+        )
+
+        var changedBody = note
+        changedBody.body = "edited"
+        var changedSubject = note
+        changedSubject.subject = .selection(quote: "new quote")
+        let changedDate = Note(
+            id: note.id,
+            subject: note.subject,
+            body: note.body,
+            createdAt: now.addingTimeInterval(1)
+        )
+        let changedID = Note(subject: note.subject, body: note.body, createdAt: note.createdAt)
+
+        for stale in [changedBody, changedSubject, changedDate, changedID] {
+            XCTAssertEqual(
+                StackDocumentMutations.applying(
+                    .clearExportedNotes(stackID: firstID, notes: [stale]),
+                    to: initial
+                ),
+                .noOp
+            )
+        }
+
+        let cleared = StackDocumentMutations.applying(
+            .clearExportedNotes(stackID: firstID, notes: [note]),
+            to: initial
+        )
+        guard case let .applied(document) = cleared else {
+            return XCTFail("Expected the exact export snapshot to clear the note")
+        }
+        XCTAssertTrue(document.stacks[0].notes.isEmpty)
+        XCTAssertEqual(document.lastCleared?.notes, [note])
+    }
+
     func testValidationRejectsDuplicateStackNoteAndClearedBatchIDs() {
         let one = makeNote(id: UUID(), body: "one")
         let duplicateStackIDs = StackDocument(
@@ -267,7 +307,6 @@ final class StackDocumentMutationTests: XCTestCase {
             id: id,
             subject: .standalone,
             body: body,
-            provenance: Provenance(application: ApplicationIdentity(name: "Tests")),
             createdAt: now
         )
     }

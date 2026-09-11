@@ -74,12 +74,6 @@ struct SettingsTemplatesPane: View {
                 SettingsRowGroup {
                     SettingsToggleRow("Number each note", isOn: $editor.draft.includeNoteNumbers)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Application", isOn: $editor.draft.includeApplication)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Window title", isOn: $editor.draft.includeWindow)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Link or working directory", isOn: $editor.draft.includeLink)
-                    SettingsDivider(pastIcon: false)
                     SettingsToggleRow("Time", isOn: $editor.draft.includeTimestamps)
                 }
             }

@@ -181,8 +181,7 @@ final class StatusMenuModelTests: XCTestCase {
     private func makeNote() -> Note {
         Note(
             subject: .standalone,
-            body: "A note",
-            provenance: Provenance(application: ApplicationIdentity(name: "Safari"))
+            body: "A note"
         )
     }
 

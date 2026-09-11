@@ -26,8 +26,6 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Sendpoint asks browsers and terminals for the active tab or session’s title, URL, and working directory so a note records where it came from.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>

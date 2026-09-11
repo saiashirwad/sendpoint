@@ -1,15 +1,14 @@
 import Foundation
 
 /// The notes of one stack that match a query. Matching is case- and
-/// diacritic-insensitive over the quote, the note, the app, and the window.
+/// diacritic-insensitive over the quote and the note.
 public struct NoteListing: Equatable, Sendable {
     public let notes: [Note]
 
     public init(notes: [Note], query: String) {
         self.notes = notes.matching(query) { note in
-            var parts = [note.body, note.provenance.application.name]
+            var parts = [note.body]
             if case let .selection(quote) = note.subject { parts.append(quote) }
-            if let window = note.provenance.windowTitle { parts.append(window) }
             return parts.joined(separator: "\n")
         }
     }

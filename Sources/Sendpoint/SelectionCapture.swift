@@ -4,9 +4,6 @@ import Carbon.HIToolbox
 
 nonisolated struct CapturedSelection: Equatable {
     var text: String
-    var appName: String?
-    var appBundleID: String?
-    var processIdentifier: pid_t = 0
     var screenRect: CGRect?
 }
 
@@ -20,9 +17,8 @@ nonisolated struct CapturedSelection: Equatable {
 ///
 /// Tests substitute the two closures; `live` binds the real monitor and pasteboard.
 struct SelectionCapture {
-    /// `editorMayOpen` is called when the front app no longer needs to be
-    /// frontmost: at once when Accessibility answered, or just after the copy
-    /// keystroke has been delivered. The clipboard may still be read after.
+    /// `editorMayOpen` is called as soon as typed capture can show the editor.
+    /// Clipboard fallback may continue against the original process after that.
     var read: (FallbackPolicy, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
     /// Sends ⌘V to the app that was frontmost when export began.
     var paste: (_ processIdentifier: pid_t, _ expectedRevision: Int) async throws -> Bool
@@ -42,8 +38,8 @@ struct SelectionCapture {
 
     /// How far to go when Accessibility reports no selection.
     enum FallbackPolicy {
-        /// Typed capture: the user has let go of the shortcut, so wait for the
-        /// modifiers and give the app time to copy.
+        /// Typed capture: open the editor, then wait for the shortcut modifiers
+        /// and give the original app time to copy.
         case patient
         /// Hold-to-talk: the modifiers stay down by design, and no selection
         /// usually means a free-standing thought, so only glance at the clipboard.
@@ -71,8 +67,7 @@ struct SelectionCapture {
         editorMayOpen: @escaping @MainActor @Sendable () -> Void
     ) async throws -> CapturedSelection {
         try Task.checkCancellation()
-        let app = NSWorkspace.shared.frontmostApplication
-        let processIdentifier = app?.processIdentifier ?? 0
+        let processIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         var rect: CGRect?
         var text = ""
         defer { monitor.discard() }
@@ -88,7 +83,7 @@ struct SelectionCapture {
                 text = automatic
             } else {
                 text = try await copyViaKeystroke(pasteboard: pasteboard, processIdentifier: processIdentifier,
-                    fallback: fallback, afterKeystroke: editorMayOpen)
+                    fallback: fallback, editorMayOpen: editorMayOpen)
                     ?? monitor.takeSelection(for: processIdentifier) ?? ""
             }
         }
@@ -96,9 +91,6 @@ struct SelectionCapture {
 
         return CapturedSelection(
             text: text,
-            appName: app?.localizedName,
-            appBundleID: app?.bundleIdentifier,
-            processIdentifier: app?.processIdentifier ?? 0,
             screenRect: rect
         )
     }
@@ -171,33 +163,30 @@ struct SelectionCapture {
 
     // MARK: - Clipboard fallback
 
-    /// How long the target app gets to take the copy keystroke before the
-    /// editor is allowed to come forward. Key events are handled well inside
-    /// this in any responsive app; the clipboard poll continues regardless.
-    private static let keystrokeSettleTime: Duration = .milliseconds(40)
-
     private static func copyViaKeystroke(
         pasteboard: NSPasteboard,
         processIdentifier: pid_t,
         fallback: FallbackPolicy,
-        afterKeystroke: @escaping @MainActor @Sendable () -> Void
+        editorMayOpen: @escaping @MainActor @Sendable () -> Void
     ) async throws -> String? {
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
 
+        // Typed capture must feel immediate. The copy remains targeted at the
+        // process that was frontmost when capture began, so the editor can take
+        // focus while we wait for the shortcut modifiers to be released.
+        if fallback == .patient { editorMayOpen() }
         if fallback.waitsForModifierRelease { try await waitForModifierRelease() }
         try Task.checkCancellation()
         postCommandKey(
             CGKeyCode(kVK_ANSI_C),
             processIdentifier: processIdentifier > 0 ? processIdentifier : nil
         )
+        if fallback == .brief { editorMayOpen() }
 
         var copiedChangeCount: Int?
         var result: String?
         let deadline = Date().addingTimeInterval(fallback.clipboardTimeout)
-        try await Task.sleep(for: keystrokeSettleTime)
-        try Task.checkCancellation()
-        afterKeystroke()
         while Date() < deadline {
             if pasteboard.changeCount != changeCountBeforeCopy {
                 copiedChangeCount = pasteboard.changeCount

@@ -24,7 +24,6 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         shortcuts: ShortcutSettings,
         voiceSettings: VoiceSettings,
         export: ExportController,
-        appIcons: AppIconStore,
         surfaces: SurfaceCoordinator,
         onSelectTemplate: @escaping (UUID) -> Void
     ) {
@@ -42,7 +41,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         super.init()
         model.onClose = { [weak surfaces] in surfaces?.dismiss(.palette) }
         panel.onClose = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: StackPaletteView(model: model, appIcons: appIcons))
+        let hosting = NSHostingView(rootView: StackPaletteView(model: model))
         hosting.sizingOptions = []
         panel.contentView = hosting
         panel.delegate = self
@@ -161,7 +160,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 }
 
 extension PaletteKey {
-    private static let commandLetters: Set<Character> = ["c", "k", "n", "o", "p", "r", "z"]
+    private static let commandLetters: Set<Character> = ["c", "k", "n", "p", "r", "z"]
 
     /// Decodes an event by character rather than hardware key code where a
     /// letter is involved, so ⌘R survives non-US keyboard layouts.

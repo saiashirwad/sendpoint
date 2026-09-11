@@ -8,12 +8,6 @@ public enum StackDocumentMutation: Equatable, Sendable {
     case deleteStack(stackID: UUID)
     case addNote(stackID: UUID, note: Note)
     case updateNoteBody(stackID: UUID, noteID: UUID, body: String)
-    case updateNoteProvenance(
-        stackID: UUID,
-        noteID: UUID,
-        expectedApplication: ApplicationIdentity,
-        provenance: Provenance
-    )
     case removeNote(stackID: UUID, noteID: UUID)
 
     /// Moves an note to a final zero-based index in its stack.
@@ -186,36 +180,6 @@ public enum StackDocumentMutations {
             }
             document.stacks[stackIndex].notes[noteIndex].body = note
 
-        case let .updateNoteProvenance(
-            stackID,
-            noteID,
-            expectedApplication,
-            provenance
-        ):
-            guard provenance.application == expectedApplication,
-                  let stackIndex = stackIndex(stackID, in: document)
-            else { return .noOp }
-
-            if let noteIndex = document.stacks[stackIndex].notes.firstIndex(where: {
-                $0.id == noteID
-            }) {
-                guard document.stacks[stackIndex].notes[noteIndex].provenance.application
-                        == expectedApplication,
-                      document.stacks[stackIndex].notes[noteIndex].provenance != provenance
-                else { return .noOp }
-                document.stacks[stackIndex].notes[noteIndex].provenance = provenance
-            } else {
-                guard document.lastCleared?.stackID == stackID,
-                      let noteIndex = document.lastCleared?.notes.firstIndex(where: {
-                          $0.id == noteID
-                      }),
-                      document.lastCleared?.notes[noteIndex].provenance.application
-                        == expectedApplication,
-                      document.lastCleared?.notes[noteIndex].provenance != provenance
-                else { return .noOp }
-                document.lastCleared?.notes[noteIndex].provenance = provenance
-            }
-
         case let .removeNote(stackID, noteID):
             guard let stackIndex = stackIndex(stackID, in: document) else {
                 return .rejected("The target stack no longer exists.")
@@ -256,13 +220,11 @@ public enum StackDocumentMutations {
             guard let index = stackIndex(stackID, in: document) else {
                 return .rejected("The target stack no longer exists.")
             }
-            // Late provenance may enrich the same note. User edits and new notes
-            // must survive cleanup of an older export snapshot.
+            // User edits and new notes must survive cleanup of an older export snapshot.
             let removed = document.stacks[index].notes.filter { note in
                 exported.contains { snapshot in
                     snapshot.id == note.id && snapshot.body == note.body
                         && snapshot.subject == note.subject && snapshot.createdAt == note.createdAt
-                        && snapshot.provenance.application == note.provenance.application
                 }
             }
             guard !removed.isEmpty else { return .noOp }

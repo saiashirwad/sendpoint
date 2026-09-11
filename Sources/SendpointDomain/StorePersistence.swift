@@ -8,7 +8,7 @@ public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .unsupportedVersion:
-            "This notes file was written by a newer version of Sendpoint."
+            "This notes file uses an unsupported format."
         case let .invalidDocument(message):
             message
         case .unavailable:

@@ -8,7 +8,6 @@ struct AppEnvironment {
     let hotKeyCenter: HotKeyCenter
     let voiceService: VoiceNoteService
     let selectionMonitor: AutomaticSelectionMonitor
-    let appIcons: AppIconStore
     let surfaces: SurfaceCoordinator
     let permissionState: PermissionState
     let hotKeyRegistrar: HotKeyRegistrar
@@ -24,7 +23,6 @@ struct AppEnvironment {
         let hotKeyCenter = HotKeyCenter.processCenter()
         let voiceService = VoiceNoteService()
         let selectionMonitor = AutomaticSelectionMonitor()
-        let appIcons = AppIconStore()
         let surfaces = SurfaceCoordinator()
         let permissionState = PermissionState(services: .live(voiceService: voiceService))
         let selection = SelectionCapture.live(monitor: selectionMonitor)
@@ -36,7 +34,6 @@ struct AppEnvironment {
         self.hotKeyCenter = hotKeyCenter
         self.voiceService = voiceService
         self.selectionMonitor = selectionMonitor
-        self.appIcons = appIcons
         self.surfaces = surfaces
         self.permissionState = permissionState
         hotKeyRegistrar = HotKeyRegistrar(settings: shortcutSettings, center: hotKeyCenter)

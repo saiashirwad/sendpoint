@@ -15,24 +15,17 @@ final class StackPaletteTests: XCTestCase {
             Note(
                 id: firstNoteID,
                 subject: .selection(quote: "OT scales quadratically"),
-                body: "Can you explain why?",
-                provenance: Provenance(
-                    application: ApplicationIdentity(name: "Helium"),
-                    windowTitle: "CRDT deep dive",
-                    url: URL(string: "https://example.com/crdt")
-                )
+                body: "Can you explain why?"
             ),
             Note(
                 id: secondNoteID,
                 subject: .standalone,
-                body: "Monoids and semi-groups",
-                provenance: Provenance(application: ApplicationIdentity(name: "Safari"))
+                body: "Monoids and semi-groups"
             ),
             Note(
                 id: thirdNoteID,
                 subject: .selection(quote: "join-semilattice"),
-                body: "",
-                provenance: Provenance(application: ApplicationIdentity(name: "Helium"))
+                body: ""
             ),
         ]
     }
@@ -98,10 +91,9 @@ final class StackPaletteTests: XCTestCase {
     }
 
     func testNoteLevelActionsFollowTheHighlightedNoteAndOpenStack() {
-        let url = URL(string: "https://example.com/crdt")!
         let context = PaletteActionContext(
             level: .notes(stackID),
-            focus: .note(id: secondNoteID, index: 1, count: 3, sourceURL: url),
+            focus: .note(id: secondNoteID, index: 1, count: 3),
             openStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false),
             canDeleteStack: true,
             undo: nil,
@@ -109,7 +101,7 @@ final class StackPaletteTests: XCTestCase {
         )
         let items = PaletteActionCatalog.items(for: context)
         XCTAssertEqual(items.map(\.action), [
-            .editNote(secondNoteID), .copyNote(secondNoteID), .openSource(url),
+            .editNote(secondNoteID), .copyNote(secondNoteID),
             .moveNoteUp(secondNoteID), .moveNoteDown(secondNoteID), .deleteNote(secondNoteID),
             .switchToStack(stackID), .copyStack(stackID), .renameStack(stackID),
             .chooseTemplate, .backToStacks, .clearStack(stackID),
@@ -119,12 +111,11 @@ final class StackPaletteTests: XCTestCase {
 
         let last = PaletteActionCatalog.items(for: PaletteActionContext(
             level: .notes(stackID),
-            focus: .note(id: thirdNoteID, index: 2, count: 3, sourceURL: nil),
+            focus: .note(id: thirdNoteID, index: 2, count: 3),
             openStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: true),
             canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertFalse(last.contains { $0.action == .moveNoteDown(thirdNoteID) }, "last note cannot move down")
-        XCTAssertFalse(last.contains { $0.action == .openSource(url) }, "no source without a link")
         XCTAssertFalse(last.contains { $0.action == .switchToStack(stackID) }, "current stack needs no switch")
 
         let nothing = PaletteActionCatalog.items(for: PaletteActionContext(

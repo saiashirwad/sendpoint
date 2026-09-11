@@ -21,19 +21,14 @@ nonisolated struct NoteCaptureContext: Equatable {
 }
 
 /// Immutable values captured when a panel starts. Delayed saves must use this
-/// target instead of whichever stack or application is current later.
+/// target instead of whichever stack is current later.
 nonisolated struct NoteCaptureTarget: Equatable {
     let context: NoteCaptureContext
     let captured: CapturedSelection
-    let application: ApplicationIdentity
 
     init(context: NoteCaptureContext, captured: CapturedSelection) {
         self.context = context
         self.captured = captured
-        application = ApplicationIdentity(
-            name: captured.appName?.nonblank ?? "Unknown Application",
-            bundleID: captured.appBundleID
-        )
     }
 
     var captureID: UUID { context.captureID }
@@ -45,7 +40,6 @@ nonisolated struct NoteCaptureTarget: Equatable {
         Note.capturing(
             selection: captured.text,
             body: body,
-            application: application,
             id: noteID,
             createdAt: createdAt
         )

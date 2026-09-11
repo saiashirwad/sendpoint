@@ -78,7 +78,6 @@ final class StackPaletteModel {
         case let .copyNote(note):
             export.copyNote(note) { [weak self] message in self?.showFlash(message) }
         case let .selectTemplate(id): onSelectTemplate(id)
-        case let .openURL(url): NSWorkspace.shared.open(url)
         case .close:
             flashTask?.cancel()
             flashTask = nil

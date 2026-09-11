@@ -7,8 +7,7 @@ import XCTest
 final class ExportControllerTests: XCTestCase {
     private let note = Note(
         subject: .standalone,
-        body: "A note",
-        provenance: Provenance(application: ApplicationIdentity(name: "Reader"))
+        body: "A note"
     )
 
     func testClipboardWriteFailureDoesNotClear() async throws {

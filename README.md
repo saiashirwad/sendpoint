@@ -46,26 +46,18 @@ These are my reading notes, captured in order while I read. Each entry is either
 
 wait, doesn't the environment grow forever then? when does anything get pruned
 
-_Helium · Closures in CEK Machines · https://chatgpt.com/c/68b6f2a4 · 2:14 PM_
+_2:14 PM_
 
 ## 2
 
 actually I think I get it. environment is data, continuation is control
 
-_Ghostty · sendpoint — fish · ~/code/sendpoint · 2:17 PM_
+_2:17 PM_
 ```
-
-## Where notes come from
-
-Every note records the app and window title. Some apps give more:
-
-- **Browsers** add the page URL: Safari, Chrome, Chromium, Arc, Brave, Edge, Vivaldi, Helium.
-- **Editors** add the open file: VS Code, VSCodium, Cursor, Windsurf, Antigravity, T3 Code, Trae, Zed.
-- **Terminals** add the working directory: Ghostty, kitty, Terminal.
 
 ## Templates
 
-A template is the preamble plus which metadata to include. Three are built in: **Plain** (default), **Coherent**, **Point by Point**. Edit them or add your own.
+A template is the preamble plus the note formatting options. Three are built in: **Plain** (default), **Coherent**, and **Point by Point**. Edit them or add your own.
 
 ## Privacy
 

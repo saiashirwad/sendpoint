@@ -1,57 +1,25 @@
 import Foundation
 
-public struct ApplicationIdentity: Codable, Hashable, Sendable {
-    public var name: String
-    public var bundleID: String?
-
-    public init(name: String, bundleID: String? = nil) {
-        self.name = name
-        self.bundleID = bundleID
-    }
-}
-
 public enum Subject: Codable, Hashable, Sendable {
     case selection(quote: String)
     case standalone
-}
-
-public struct Provenance: Codable, Hashable, Sendable {
-    public var application: ApplicationIdentity
-    public var windowTitle: String?
-    public var url: URL?
-    public var workingDirectory: URL?
-
-    public init(
-        application: ApplicationIdentity,
-        windowTitle: String? = nil,
-        url: URL? = nil,
-        workingDirectory: URL? = nil
-    ) {
-        self.application = application
-        self.windowTitle = windowTitle
-        self.url = url
-        self.workingDirectory = workingDirectory
-    }
 }
 
 public struct Note: Codable, Hashable, Sendable, Identifiable {
     public let id: UUID
     public var subject: Subject
     public var body: String
-    public var provenance: Provenance
     public let createdAt: Date
 
     public init(
         id: UUID = UUID(),
         subject: Subject,
         body: String,
-        provenance: Provenance,
         createdAt: Date = Date()
     ) {
         self.id = id
         self.subject = subject
         self.body = body
-        self.provenance = provenance
         self.createdAt = createdAt
     }
 }
@@ -86,7 +54,7 @@ public struct ClearedBatch: Codable, Hashable, Sendable {
 }
 
 public struct StackDocument: Codable, Hashable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 
     public var version: Int
     public var stacks: [Stack]

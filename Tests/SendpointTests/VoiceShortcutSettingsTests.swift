@@ -19,13 +19,6 @@ final class VoiceShortcutSettingsTests: XCTestCase {
         }
     }
 
-    func testUnknownModeFallsBackToHold() {
-        withDefaults { defaults in
-            defaults.set("automatic", forKey: "voiceMode")
-            XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .hold)
-        }
-    }
-
     private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         let suite = "SendpointVoiceShortcutTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

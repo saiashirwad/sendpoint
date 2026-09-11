@@ -6,7 +6,6 @@ import SwiftUI
 /// notes previewed beside it, and the same notes opened full-width with →.
 struct StackPaletteView: View {
     @Bindable var model: StackPaletteModel
-    let appIcons: AppIconStore
     @FocusState private var focus: PaletteField?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -390,7 +389,6 @@ struct StackPaletteView: View {
                                 isHighlighted: interactive && model.projection.highlightedNoteID == entry.id,
                                 isEditing: interactive && model.state.inlineEdit?.noteID == entry.id,
                                 interactive: interactive,
-                                appIcons: appIcons,
                                 draft: Binding(
                                     get: {
                                         model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.body
@@ -719,7 +717,6 @@ private struct NoteCard: View {
     let isHighlighted: Bool
     let isEditing: Bool
     let interactive: Bool
-    let appIcons: AppIconStore
     @Binding var draft: String
     var focus: FocusState<PaletteField?>.Binding
     let onSelect: () -> Void
@@ -743,28 +740,7 @@ private struct NoteCard: View {
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous).fill(PaletteTint.chip))
 
-                AppIcon(application: entry.provenance.application, store: appIcons)
-
-                Text(entry.provenance.application.name)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                if let window = entry.provenance.windowTitle?.nonblank {
-                    Text(window)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
                 Spacer(minLength: 8)
-
-                if entry.provenance.url != nil, interactive {
-                    Image(systemName: "link")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .help("Open source (⌘O)")
-                }
 
                 Text(entry.createdAt.formatted(date: .omitted, time: .shortened))
                     .font(.caption.monospacedDigit())
@@ -860,30 +836,6 @@ private struct QuotedPassage: View {
                     .fill(PaletteTint.quoteRule)
                     .frame(width: 2)
             }
-    }
-}
-
-/// The icon of the app a note came from, resolved through the shared store.
-/// Apps we cannot find get a neutral glyph rather than nothing, so the
-/// provenance row keeps its shape.
-private struct AppIcon: View {
-    let application: ApplicationIdentity
-    let store: AppIconStore
-
-    var body: some View {
-        Group {
-            if let image = store.icon(for: application) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-            } else {
-                Image(systemName: "app.dashed")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(width: 16, height: 16)
-        .accessibilityHidden(true)
     }
 }
 
