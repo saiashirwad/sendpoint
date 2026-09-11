@@ -42,16 +42,6 @@ struct SettingsView: View {
     let onSettingsChanged: () -> Void
 
     @State private var tab: SettingsTab = .capture
-    @State private var newTemplate: NewTemplateDraft?
-    @State private var shortcutFeedback: String?
-    @State private var inputDevices = AudioInputDeviceList()
-    @State private var levelMonitor = InputLevelMonitor()
-    @State private var windowIsVisible = false
-
-    private struct NewTemplateDraft: Equatable {
-        var name: String
-        var problem: String?
-    }
 
     /// The smallest the window goes; it can be dragged larger.
     static let size = CGSize(width: 780, height: 620)
@@ -93,13 +83,37 @@ struct SettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
                         if !shortcuts.shortcutRegistrationIssues.isEmpty {
-                            shortcutRegistrationIssues
+                            SettingsShortcutIssues(issues: shortcuts.shortcutRegistrationIssues)
                         }
                         switch tab {
-                        case .shortcuts: shortcutsTab
-                        case .templates: templatesTab
-                        case .capture: captureTab
-                        case .permissions: permissionsTab
+                        case .shortcuts:
+                            SettingsShortcutsPane(
+                                settings: settings,
+                                shortcuts: shortcuts,
+                                voiceSettings: voiceSettings,
+                                hotKeyRegistrar: hotKeyRegistrar,
+                                onSettingsChanged: onSettingsChanged
+                            )
+                        case .templates:
+                            SettingsTemplatesPane(
+                                settings: settings,
+                                editor: templateEditor,
+                                onSelectTemplate: onSelectTemplate
+                            )
+                        case .capture:
+                            SettingsGeneralPane(
+                                settings: settings,
+                                voiceSettings: voiceSettings,
+                                permissionState: permissionState,
+                                captureController: captureController,
+                                onOpenPermissions: { tab = .permissions },
+                                onSettingsChanged: onSettingsChanged
+                            )
+                        case .permissions:
+                            SettingsPermissionsPane(
+                                permissionState: permissionState,
+                                onShowAccessibilityHelper: onShowAccessibilityHelper
+                            )
                         }
                     }
                     .padding(24)
@@ -123,456 +137,12 @@ struct SettingsView: View {
         // Monochrome controls: an "on" toggle or selected segment takes the
         // text colour; off states keep the system grey.
         .tint(Color.primary.opacity(0.85))
-        .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
     }
 
-    // MARK: - Templates
-
-    private var templatesTab: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            templateChips
-            templateEditorPane
-        }
-    }
-
-    private var templateChips: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SettingsCaption("Active template")
-            HStack(spacing: 6) {
-                ForEach(templateEditor.templates) { template in
-                    TemplateChip(
-                        name: template.name,
-                        isSelected: template.id == templateEditor.editedTemplateID,
-                        isDirty: template.id == templateEditor.editedTemplateID && templateEditor.isDirty
-                    ) {
-                        onSelectTemplate(template.id)
-                    }
-                }
-            }
-        }
-    }
-
-    private var templateEditorPane: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            SettingsSection("Name") {
-                TemplateNameField(text: $templateEditor.draft.name) {
-                    templateTitleActions
-                }
-            }
-
-            SettingsSection("Prompt") {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $templateEditor.draft.preamble)
-                        .font(.body)
-                        .lineSpacing(2)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 140, maxHeight: 140)
-                        .accessibilityLabel("Prompt")
-                    if templateEditor.draft.preamble.isEmpty {
-                        Text("Tell the AI what to do with the notes below.")
-                            .font(.body)
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                )
-            }
-
-            SettingsSection("Each note") {
-                SettingsRowGroup {
-                    SettingsToggleRow("Number each note", isOn: $templateEditor.draft.includeNoteNumbers)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Application", isOn: $templateEditor.draft.includeApplication)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Window title", isOn: $templateEditor.draft.includeWindow)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Link or working directory", isOn: $templateEditor.draft.includeLink)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Time", isOn: $templateEditor.draft.includeTimestamps)
-                }
-            }
-
-            SettingsSection(settings.stackExportMode.exportMomentCaption) {
-                SettingsRowGroup {
-                    SettingsToggleRow("Date heading at the top", isOn: $templateEditor.draft.includeHeading)
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Clear the stack afterwards", isOn: $templateEditor.draft.clearStackAfterExport)
-                }
-            }
-        }
-        .animation(.snappy(duration: 0.22), value: templateEditor.isDirty)
-    }
-
-    /// Save and Revert appear beside the name while there are changes;
-    /// New and Delete are always there. Everything shares one baseline.
-    private var templateTitleActions: some View {
-        HStack(spacing: 8) {
-            if templateEditor.isDirty {
-                HStack(spacing: 6) {
-                    Button("Revert", action: templateEditor.revert)
-                    Button("Save", action: saveTemplate)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut("s", modifiers: .command)
-                }
-                .controlSize(.small)
-                .transition(.opacity)
-                Divider()
-                    .frame(height: 16)
-                    .padding(.horizontal, 2)
-                    .transition(.opacity)
-            }
-            CircleIconButton("plus", help: "New template from this draft…", label: "New template") {
-                newTemplate = NewTemplateDraft(name: "\(templateEditor.draft.name) Copy")
-            }
-            .popover(
-                isPresented: Binding(
-                    get: { newTemplate != nil },
-                    set: { if !$0 { newTemplate = nil } }
-                ),
-                arrowEdge: .bottom
-            ) {
-                NewTemplatePopover(
-                    name: Binding(
-                        get: { newTemplate?.name ?? "" },
-                        set: { newTemplate?.name = $0; newTemplate?.problem = nil }
-                    ),
-                    problem: newTemplate?.problem,
-                    onCommit: createTemplate
-                )
-            }
-            CircleIconButton(
-                "trash",
-                help: templateEditor.isDirty
-                    ? "Save or revert changes before deleting."
-                    : "Delete this template…",
-                label: "Delete template",
-                action: deleteTemplate
-            )
-            .disabled(!templateEditor.canDelete || templateEditor.isDirty)
-        }
-    }
-
-    // MARK: - Shortcuts
-
-    private var shortcutRegistrationIssues: some View {
-        SettingsRowGroup {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Shortcut unavailable", systemImage: "exclamationmark.triangle.fill")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.orange)
-                ForEach(shortcuts.shortcutRegistrationIssues) { issue in
-                    Text("• \(issue.id.title): \(issue.message)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SettingsMetrics.rowInset)
-        }
-    }
-
-    /// Restart the meter when the mic, the window's visibility, or the
-    /// permission changes; stop it whenever the tab is not on screen.
-    private var levelMonitorKey: String {
-        "\(windowIsVisible)|\(voiceSettings.inputDeviceUID ?? "default")|\(permissionState.microphone == .granted)"
-    }
-
-    private var microphoneFootnote: String {
-        if voiceSettings.inputDeviceUID != nil, !selectedDeviceIsConnected {
-            return "\(voiceSettings.inputDeviceName ?? "That microphone") is not connected, so the system default is used."
-        }
-        return "The built-in microphone usually sounds better than AirPods."
-    }
-
-    private var selectedDeviceIsConnected: Bool {
-        guard let uid = voiceSettings.inputDeviceUID else { return true }
-        return inputDevices.devices.contains { $0.uid == uid }
-    }
-
-    private var microphonePicker: some View {
-        var items: [InputDevicePopUp.Item] = [.init(uid: nil, title: systemDefaultLabel)]
-        if !inputDevices.devices.isEmpty {
-            items.append(.separator)
-            items += inputDevices.devices.map { .init(uid: $0.uid, title: $0.name) }
-        }
-        if let uid = voiceSettings.inputDeviceUID, !selectedDeviceIsConnected {
-            items.append(.separator)
-            items.append(.init(uid: uid, title: "\(voiceSettings.inputDeviceName ?? "Saved microphone") (not connected)"))
-        }
-        return InputDevicePopUp(items: items, selectedUID: voiceSettings.inputDeviceUID) { uid in
-            let name = inputDevices.devices.first { $0.uid == uid }?.name
-            captureController.chooseMicrophone(uid: uid, name: name)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityLabel("Microphone")
-    }
-
-    private var systemDefaultLabel: String {
-        if let name = inputDevices.systemDefault?.name {
-            return "System default (\(name))"
-        }
-        return "System default"
-    }
-
-    /// Shown only while something voice depends on is missing; the
-    /// details live on the Permissions tab.
-    private var voiceNeedsAttention: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(.orange)
-            Text("Voice needs a permission.")
-            Button("Open Permissions") { tab = .permissions }
-                .buttonStyle(.link)
-        }
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .padding(.leading, 2)
-    }
-
-    private var shortcutsTab: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            SettingsSection("Making notes") {
-                SettingsRowGroup {
-                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: voiceSettings.voiceMode.detail, slot: .voiceCapture)
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "square.and.pencil",
-                        title: "Typed note",
-                        detail: "A note box for the selected text.",
-                        slot: .capture
-                    )
-                }
-            }
-            SettingsSection("Your stack") {
-                SettingsRowGroup {
-                    shortcutRow(
-                        icon: "doc.on.clipboard",
-                        title: settings.stackExportMode.shortcutTitle,
-                        detail: settings.stackExportMode.shortcutDetail,
-                        slot: .copy
-                    )
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "square.stack.3d.up",
-                        title: "Show stack",
-                        detail: "Opens the window with all your notes.",
-                        slot: .stack
-                    )
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "arrow.left.arrow.right",
-                        title: "Switch stack",
-                        detail: "Tap or hold to cycle stacks; ↑/↓ lists all.",
-                        slot: .switchStack
-                    )
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "arrow.right.to.line",
-                        title: "Next stack",
-                        detail: "Steps through stacks; ⌫ removes while recording.",
-                        slot: .nextStack
-                    )
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "arrow.left.to.line",
-                        title: "Previous stack",
-                        detail: "The same walk, backwards.",
-                        slot: .previousStack
-                    )
-                    SettingsDivider()
-                    shortcutRow(
-                        icon: "trash",
-                        title: "Clear stack",
-                        detail: "Empties the stack. Undo with ⌘Z.",
-                        slot: .clear
-                    )
-                }
-            }
-            shortcutFeedbackView
-        }
-    }
-
-    private func shortcutRow(
-        icon: String,
-        title: String,
-        detail: String,
-        slot: ShortcutSlot
-    ) -> some View {
-        SettingsIconRow(icon: icon, title: title, detail: detail) {
-            KeyRecorder(combo: shortcutBinding(for: slot), clearable: slot.isOptional)
-                .fixedSize()
-        }
-    }
-
-    @ViewBuilder
-    private var shortcutFeedbackView: some View {
-        if let shortcutFeedback {
-            Label(shortcutFeedback, systemImage: "exclamationmark.circle")
-                .font(.caption)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func shortcutBinding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {
-        Binding(
-            get: { shortcuts.combo(for: slot) },
-            set: { proposed in
-                guard let proposed else {
-                    hotKeyRegistrar.clear(slot)
-                    shortcutFeedback = nil
-                    onSettingsChanged()
-                    return
-                }
-                do {
-                    try hotKeyRegistrar.rebind(proposed, for: slot)
-                    shortcutFeedback = nil
-                    onSettingsChanged()
-                } catch {
-                    shortcutFeedback = error.localizedDescription
-                }
-            }
-        )
-    }
-
-    // MARK: - Capture
-
-    private var captureTab: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            SettingsSection("Voice") {
-                SettingsRowGroup {
-                    SettingsIconRow(
-                        icon: "hand.tap",
-                        title: "Recording mode",
-                        detail: "How the shortcut starts and stops a recording."
-                    ) {
-                        Picker("Recording mode", selection: Binding(
-                            get: { voiceSettings.voiceMode },
-                            set: { captureController.setVoiceMode($0) }
-                        )) {
-                            ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
-                                Text(mode.title).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                }
-                if !permissionState.isVoiceReady {
-                    voiceNeedsAttention
-                }
-            }
-            SettingsSection("Microphone") {
-                microphonePicker
-                InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
-                Text(microphoneFootnote)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            SettingsSection("Behavior") {
-                SettingsRowGroup {
-                    SettingsToggleRow(
-                        "Paste straight into the app you are in",
-                        subtitle: "The Markdown lands where your cursor is, without a separate paste.",
-                        isOn: Binding(
-                            get: { settings.pasteDirectly },
-                            set: {
-                                self.settings.setPasteDirectly($0)
-                                onSettingsChanged()
-                            }
-                        )
-                    )
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow(
-                        "Return to the previous app after saving",
-                        subtitle: "Hands focus back to where you were reading.",
-                        isOn: Binding(
-                            get: { settings.restoreFocusAfterSave },
-                            set: {
-                                self.settings.setRestoreFocusAfterSave($0)
-                                onSettingsChanged()
-                            }
-                        )
-                    )
-                    SettingsDivider(pastIcon: false)
-                    SettingsToggleRow(
-                        "Launch at login",
-                        subtitle: "Keeps the shortcuts ready as soon as you sign in.",
-                        isOn: Binding(
-                            get: { settings.launchAtLogin },
-                            set: {
-                                settings.setLaunchAtLogin($0)
-                                onSettingsChanged()
-                            }
-                        )
-                    )
-                }
-            }
-        }
-        .task { await permissionState.watchVoiceModel() }
-        .task(id: levelMonitorKey) {
-            guard windowIsVisible else { levelMonitor.stop(); return }
-            levelMonitor.start(preferredUID: voiceSettings.inputDeviceUID)
-        }
-        .onDisappear { levelMonitor.stop() }
-    }
-
-    // MARK: - Permissions
-
-    private var permissionsTab: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            SettingsSection("Permissions") {
-                PermissionCapabilityList(
-                    permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper
-                )
-            }
-        }
-    }
-
-    // MARK: - Actions
-
-    private func saveTemplate() {
-        do {
-            try templateEditor.save()
-        } catch {
-            TemplateDialogs.showError(error)
-        }
-    }
-
-    private func deleteTemplate() {
-        TemplateDialogs.delete(templateEditor)
-    }
-
-    private func createTemplate() {
-        guard let draft = newTemplate else { return }
-        do {
-            let name = try templateEditor.validatedNewTemplateName(draft.name)
-            _ = try templateEditor.saveAsNew(named: name)
-            newTemplate = nil
-        } catch {
-            newTemplate?.problem = error.localizedDescription
-            NSSound.beep()
-        }
-    }
 }
 
 /// A small anchored prompt: type a name, press Return.
-private struct NewTemplatePopover: View {
+struct NewTemplatePopover: View {
     @Binding var name: String
     let problem: String?
     let onCommit: () -> Void
@@ -609,7 +179,7 @@ private struct NewTemplatePopover: View {
 
 /// The input meter from System Settings: a row of pills that fill from the
 /// left as the microphone gets louder.
-private struct InputLevelBar: View {
+struct InputLevelBar: View {
     let level: Float
     let isActive: Bool
 
@@ -646,7 +216,7 @@ private struct InputLevelBar: View {
 
 /// Tells SwiftUI whether the window it lives in is actually on screen, so
 /// live work like the level meter stops when the window is hidden.
-private struct WindowVisibilityReporter: NSViewRepresentable {
+struct WindowVisibilityReporter: NSViewRepresentable {
     @Binding var isVisible: Bool
 
     func makeNSView(context: Context) -> ReporterView {
@@ -690,7 +260,7 @@ private struct WindowVisibilityReporter: NSViewRepresentable {
 
 /// A native pop-up so it fills the width it is given; SwiftUI's menu picker
 /// sizes itself to its title instead.
-private struct InputDevicePopUp: NSViewRepresentable {
+struct InputDevicePopUp: NSViewRepresentable {
     struct Item {
         var uid: String?
         var title: String
@@ -741,7 +311,7 @@ private struct InputDevicePopUp: NSViewRepresentable {
 }
 
 /// A round, quiet icon button for secondary actions beside a title.
-private struct CircleIconButton: View {
+struct CircleIconButton: View {
     let icon: String
     let help: String
     let label: String
@@ -850,7 +420,7 @@ private struct SidebarTile: View {
     }
 }
 
-private struct TemplateChip: View {
+struct TemplateChip: View {
     let name: String
     let isSelected: Bool
     let isDirty: Bool
@@ -883,7 +453,7 @@ private struct TemplateChip: View {
 }
 
 /// The template's name, set as an editable title rather than a form field.
-private struct TemplateNameField<Accessory: View>: View {
+struct TemplateNameField<Accessory: View>: View {
     @Binding var text: String
     @ViewBuilder let accessory: () -> Accessory
     @FocusState private var focused: Bool
