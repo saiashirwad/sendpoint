@@ -4,12 +4,12 @@ import Foundation
 /// stack keeps its row and can be recognised by place. Recency decides only
 /// where a cycle starts: the first press lights the stack used just before
 /// this one, wherever it sits; further presses move down the fixed list.
-struct StackSwitchOrders: Equatable {
+nonisolated struct StackSwitchOrders: Equatable {
     var recent: [UUID]
     var listed: [UUID]
 }
 
-enum StackSwitchEvent: Equatable {
+nonisolated enum StackSwitchEvent: Equatable {
     /// The switch shortcut, or its ⇧ variant when `reverse` is set.
     case press(reverse: Bool)
     /// Every modifier of the switch shortcut is up.
@@ -25,7 +25,7 @@ enum StackSwitchEvent: Equatable {
     case teardown
 }
 
-enum StackSwitchCommand: Equatable {
+nonisolated enum StackSwitchCommand: Equatable {
     case showOverlay
     case hideOverlay
     case switchTo(UUID)
@@ -37,7 +37,7 @@ enum StackSwitchCommand: Equatable {
 /// ⌘Tab for stacks, as a pure transition table. The owner supplies the
 /// current orders with each event and runs the returned commands; the
 /// machine holds the frozen list the overlay draws and which row is lit.
-struct StackSwitchMachine: Equatable {
+nonisolated struct StackSwitchMachine: Equatable {
     enum State: Equatable {
         case idle
         /// Modifiers held; each press moves the highlight.

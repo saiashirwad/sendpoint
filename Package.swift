@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
@@ -22,25 +22,38 @@ let package = Package(
         .target(
             name: "SendpointDomain",
             path: "Sources/SendpointDomain",
-            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableUpcomingFeature("MemberImportVisibility"),
+            ]
         ),
         .executableTarget(
             name: "Sendpoint",
             dependencies: ["SendpointDomain", "FluidAudio"],
             path: "Sources/Sendpoint",
-            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .defaultIsolation(MainActor.self),
+                .enableUpcomingFeature("MemberImportVisibility"),
+            ]
         ),
         .testTarget(
             name: "SendpointDomainTests",
             dependencies: ["SendpointDomain"],
             path: "Tests/SendpointDomainTests",
-            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableUpcomingFeature("MemberImportVisibility"),
+            ]
         ),
         .testTarget(
             name: "SendpointTests",
             dependencies: ["Sendpoint", "SendpointDomain"],
             path: "Tests/SendpointTests",
-            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableUpcomingFeature("MemberImportVisibility"),
+            ]
         ),
     ]
 )

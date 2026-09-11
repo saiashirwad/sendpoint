@@ -1,5 +1,5 @@
 
-extension ProvenanceProvider {
+nonisolated extension ProvenanceProvider {
     static let codeEditorBundleIDs: Set<String> = [
         "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders",
         "com.microsoft.VSCodeExploration", "com.visualstudio.code.oss",

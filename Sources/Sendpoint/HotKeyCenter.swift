@@ -26,7 +26,6 @@ enum HotKeyRegistrationResult: Equatable {
 
 /// Registers system-wide shortcuts through Carbon, which works without
 /// Accessibility permission and fires even when another app is frontmost.
-@MainActor
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
 
@@ -138,7 +137,7 @@ final class HotKeyCenter {
     }
 }
 
-private func hotKeyEventHandler(
+nonisolated private func hotKeyEventHandler(
     _ next: EventHandlerCallRef?,
     _ event: EventRef?,
     _ userData: UnsafeMutableRawPointer?
@@ -151,6 +150,8 @@ private func hotKeyEventHandler(
     guard status == noErr else { return status }
     let hotKeyID = id.id
     let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
-    DispatchQueue.main.async { HotKeyCenter.shared.fire(id: hotKeyID, released: released) }
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated { HotKeyCenter.shared.fire(id: hotKeyID, released: released) }
+    }
     return noErr
 }

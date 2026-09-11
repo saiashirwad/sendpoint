@@ -1,7 +1,7 @@
 import Foundation
 
 /// Partial provenance values read from one system boundary.
-struct ProvenanceFields: Equatable, Sendable {
+nonisolated struct ProvenanceFields: Equatable, Sendable {
     var windowTitle: String?
     var url: URL?
     var workingDirectory: URL?

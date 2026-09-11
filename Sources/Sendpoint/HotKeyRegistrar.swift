@@ -2,7 +2,6 @@ import Foundation
 
 /// Owns the app's system-wide shortcuts: applies the stored bindings to
 /// `HotKeyCenter` and reports the ones the system refused.
-@MainActor
 final class HotKeyRegistrar {
     /// Every configurable shortcut's action, supplied by the composition root.
     struct Actions {

@@ -2,7 +2,7 @@ import Foundation
 import SendpointDomain
 
 /// Where the palette is: the list of every stack, or inside one of them.
-enum PaletteLevel: Equatable, Hashable {
+nonisolated enum PaletteLevel: Equatable, Hashable {
     case stacks
     case notes(UUID)
 
@@ -13,7 +13,7 @@ enum PaletteLevel: Equatable, Hashable {
 }
 
 /// Which note carries the keyboard highlight inside a stack.
-struct NoteHighlightState: Equatable {
+nonisolated struct NoteHighlightState: Equatable {
     private(set) var highlight: UUID?
 
     mutating func select(_ id: UUID?) {
@@ -39,7 +39,7 @@ struct NoteHighlightState: Equatable {
 }
 
 /// Everything the palette can do from the keyboard or the ⌘K menu.
-enum PaletteAction: Hashable {
+nonisolated enum PaletteAction: Hashable {
     case switchToStack(UUID)
     case openStack(UUID)
     case createStack(String)
@@ -60,7 +60,7 @@ enum PaletteAction: Hashable {
 }
 
 /// One entry of the ⌘K menu: the action, how it reads, and its keys.
-struct PaletteActionItem: Equatable, Identifiable {
+nonisolated struct PaletteActionItem: Equatable, Identifiable {
     let action: PaletteAction
     let title: String
     let keys: String
@@ -71,7 +71,7 @@ struct PaletteActionItem: Equatable, Identifiable {
 }
 
 /// What the palette is looking at, reduced to what decides the action list.
-struct PaletteActionContext: Equatable {
+nonisolated struct PaletteActionContext: Equatable {
     enum Focus: Equatable {
         case stack(SessionItemFacts)
         case createStack(name: String)
@@ -90,7 +90,7 @@ struct PaletteActionContext: Equatable {
 
 /// The ⌘K menu, derived from context so the footer, the menu, and the key
 /// handler all agree on what is possible right now.
-enum PaletteActionCatalog {
+nonisolated enum PaletteActionCatalog {
     static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
         func add(_ action: PaletteAction, _ title: String, _ keys: String,
@@ -167,7 +167,7 @@ enum PaletteActionCatalog {
 }
 
 /// The keys the palette claims ahead of its text fields.
-enum PaletteKey: Equatable {
+nonisolated enum PaletteKey: Equatable {
     case up, down, left, right
     case optionUp, optionDown
     case tab, backTab

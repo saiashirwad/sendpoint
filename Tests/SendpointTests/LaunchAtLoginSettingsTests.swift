@@ -12,14 +12,10 @@ final class LaunchAtLoginSettingsTests: XCTestCase {
         let suite = "LaunchAtLoginSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        var registerCount = 0
-        var shouldFail = true
+        let registrar = Registrar()
         let settings = AppSettings(
             defaults: defaults,
-            registerLoginItem: {
-                registerCount += 1
-                if shouldFail { throw TestError.failed }
-            },
+            registerLoginItem: { try registrar.register() },
             unregisterLoginItem: {}
         )
         settings.setLaunchAtLogin(false)
@@ -27,9 +23,19 @@ final class LaunchAtLoginSettingsTests: XCTestCase {
         settings.setLaunchAtLogin(true)
         XCTAssertFalse(settings.launchAtLogin, "a failed registration rolls the toggle back")
 
-        shouldFail = false
+        registrar.shouldFail = false
         settings.setLaunchAtLogin(true)
         XCTAssertTrue(settings.launchAtLogin)
-        XCTAssertEqual(registerCount, 2)
+        XCTAssertEqual(registrar.count, 2)
+    }
+
+    private final class Registrar {
+        var shouldFail = true
+        var count = 0
+
+        func register() throws {
+            count += 1
+            if shouldFail { throw TestError.failed }
+        }
     }
 }

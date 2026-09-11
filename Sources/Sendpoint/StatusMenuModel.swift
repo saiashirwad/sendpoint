@@ -65,7 +65,6 @@ enum StatusMenuStoreStatus: Equatable {
 
 /// Builds the status menu as plain values. `AppDelegate` only supplies the
 /// current store and settings facts, so the menu stays testable without AppKit.
-@MainActor
 enum StatusMenuModel {
     static func items(
         facts: SessionUIFacts?,

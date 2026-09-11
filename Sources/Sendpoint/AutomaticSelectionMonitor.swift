@@ -7,7 +7,6 @@ import AppKit
 /// later synthetic Command-C has nothing to copy. This monitor ties a
 /// pasteboard value to the mouse drag that produced it, rather than treating
 /// arbitrary clipboard text as a selection.
-@MainActor
 final class AutomaticSelectionMonitor {
     static let shared = AutomaticSelectionMonitor()
 
@@ -105,7 +104,7 @@ final class AutomaticSelectionMonitor {
 }
 
 /// Pure transition state for `AutomaticSelectionMonitor`.
-struct AutomaticSelectionTracker {
+nonisolated struct AutomaticSelectionTracker {
     struct SettlementRequest: Equatable {
         fileprivate var token: Int
         fileprivate var processIdentifier: pid_t

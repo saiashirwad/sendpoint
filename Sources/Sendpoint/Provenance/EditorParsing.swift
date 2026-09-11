@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses the common focused-window format used by Code-OSS editor builds.
-enum EditorProvenanceParser {
+nonisolated enum EditorProvenanceParser {
     static func fields(
         windowTitle: String?,
         document: String?,
@@ -53,7 +53,7 @@ enum EditorProvenanceParser {
     }
 }
 
-private struct ParsedCodeEditorTitle {
+private nonisolated struct ParsedCodeEditorTitle {
     var documentHint: URL?
     var directoryHint: URL?
     private var labels: [String] = []

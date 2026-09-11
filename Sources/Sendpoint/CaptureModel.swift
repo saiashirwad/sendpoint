@@ -2,7 +2,7 @@ import SendpointDomain
 import Foundation
 
 /// IDs and time captured before selection reading or recording can delay us.
-struct AnnotationCaptureContext: Equatable {
+nonisolated struct AnnotationCaptureContext: Equatable {
     let captureID: UUID
     let sessionID: UUID
     let annotationID: UUID
@@ -22,7 +22,7 @@ struct AnnotationCaptureContext: Equatable {
 
 /// Immutable values captured when a panel starts. Delayed saves must use this
 /// target instead of whichever session or application is current later.
-struct AnnotationCaptureTarget: Equatable {
+nonisolated struct AnnotationCaptureTarget: Equatable {
     let context: AnnotationCaptureContext
     let captured: CapturedSelection
     let application: ApplicationIdentity

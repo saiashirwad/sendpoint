@@ -6,7 +6,7 @@ extension Notification.Name {
     static let voiceModelDidBecomeReady = Notification.Name("Sendpoint.voiceModelDidBecomeReady")
 }
 
-enum LocalVoiceModelFiles {
+nonisolated enum LocalVoiceModelFiles {
     static func exist() -> Bool {
         AsrModels.modelsExist(
             at: AsrModels.defaultCacheDirectory(for: .v3),
@@ -18,7 +18,6 @@ enum LocalVoiceModelFiles {
 /// Records one short clip and sends it to the same local Parakeet engine that
 /// Hex uses. The model downloads only when the user asks for voice setup or
 /// first makes a voice annotation. Neither the audio nor its transcript leaves the Mac.
-@MainActor
 final class VoiceAnnotationService {
     static let shared = VoiceAnnotationService()
 

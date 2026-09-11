@@ -1,6 +1,6 @@
 import Foundation
 
-extension ProvenanceProvider {
+nonisolated extension ProvenanceProvider {
     static let ghostty = Self(bundleIDs: ["com.mitchellh.ghostty"]) { application in
         try await ProvenanceSystemBoundary.documentDirectoryFields(
             processIdentifier: application.processIdentifier
@@ -14,7 +14,7 @@ extension ProvenanceProvider {
 
 /// The selected tab. Re-read its identity after the process lookup so a tab
 /// switch or closed session cannot mix results.
-struct TerminalSessionSnapshot: Equatable, Sendable {
+nonisolated struct TerminalSessionSnapshot: Equatable, Sendable {
     let windowID: String
     let sessionID: String
     let title: String
@@ -29,7 +29,7 @@ struct TerminalSessionSnapshot: Equatable, Sendable {
     }
 }
 
-struct TerminalSessionLookup: Sendable {
+nonisolated struct TerminalSessionLookup: Sendable {
     var readSession: @Sendable (CapturedApplication) async throws -> TerminalSessionSnapshot?
     var directoryForTTY: @Sendable (String, CapturedApplication) async throws -> URL?
 
@@ -65,7 +65,7 @@ struct TerminalSessionLookup: Sendable {
     )
 }
 
-enum TerminalSessionScript {
+nonisolated enum TerminalSessionScript {
     static let terminal = """
     with timeout of 2 seconds
         tell application id "com.apple.Terminal"

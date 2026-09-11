@@ -7,8 +7,6 @@ enum ProfileEditorError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? { "Save or discard the template changes first." }
 }
-
-@MainActor
 @Observable
 final class ProfileEditorState {
     enum SelectionResult: Equatable {

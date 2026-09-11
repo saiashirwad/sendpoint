@@ -3,7 +3,6 @@ import Observation
 import SendpointDomain
 
 /// Replace these leaves in tests; no microphone, clipboard or windows are required.
-@MainActor
 struct CaptureServices {
     /// Reads the selection. The callback fires once nothing that remains
     /// needs the front app to still be frontmost, so the editor may open.
@@ -35,7 +34,6 @@ private enum CaptureServiceError: LocalizedError {
 }
 
 /// TEA effect owner. The reducer owns workflow state; this owns native resources.
-@MainActor
 @Observable
 final class CaptureController {
     private(set) var state: CaptureState = .idle

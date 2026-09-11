@@ -1,15 +1,15 @@
 import Foundation
 import SendpointDomain
 
-struct CaptureSaveRequest: Equatable {
+nonisolated struct CaptureSaveRequest: Equatable {
     let target: AnnotationCaptureTarget
     let destinationSessionID: UUID
     let annotation: Annotation
 }
 
-enum CaptureMode: Equatable { case text, voice }
+nonisolated enum CaptureMode: Equatable { case text, voice }
 
-enum CapturePhase: Equatable {
+nonisolated enum CapturePhase: Equatable {
     case selectingText
     case selectingVoice(recording: Bool, finishRequested: Bool)
     case startingVoice
@@ -21,7 +21,7 @@ enum CapturePhase: Equatable {
     case failed(String)
 }
 
-struct CaptureSession: Equatable {
+nonisolated struct CaptureSession: Equatable {
     let context: AnnotationCaptureContext
     let mode: CaptureMode
     var target: AnnotationCaptureTarget?
@@ -31,7 +31,7 @@ struct CaptureSession: Equatable {
     var saveAwaitsSelection = false
 }
 
-enum CaptureAction {
+nonisolated enum CaptureAction {
     case begin(CaptureMode, AnnotationCaptureContext)
     /// The selection reader has done everything that must happen before the
     /// note box takes over the keyboard; the rest may finish behind it.
@@ -53,9 +53,9 @@ enum CaptureAction {
     case teardown
 }
 
-enum CaptureSurface { case editor, voice }
+nonisolated enum CaptureSurface { case editor, voice }
 
-enum CaptureEffect: Equatable {
+nonisolated enum CaptureEffect: Equatable {
     case readSelection(AnnotationCaptureContext, CaptureMode)
     case startRecording(AnnotationCaptureContext)
     case transcribe(AnnotationCaptureContext)
@@ -72,7 +72,7 @@ enum CaptureEffect: Equatable {
 }
 
 /// Pure workflow rules. Effects run only after the returned state is installed.
-enum CaptureState: Equatable {
+nonisolated enum CaptureState: Equatable {
     case idle
     case active(CaptureSession)
     case tornDown

@@ -1,6 +1,6 @@
 import Foundation
 
-struct ProvenanceProvider: Sendable {
+nonisolated struct ProvenanceProvider: Sendable {
     let bundleIDs: Set<String>
     let lookup: ProvenanceProbe.Lookup
 

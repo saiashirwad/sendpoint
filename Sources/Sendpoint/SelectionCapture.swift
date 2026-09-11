@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 
-struct CapturedSelection: Equatable {
+nonisolated struct CapturedSelection: Equatable {
     var text: String
     var appName: String?
     var appBundleID: String?
@@ -17,7 +17,6 @@ struct CapturedSelection: Equatable {
 ///     leaves the clipboard alone, but some apps (many Electron ones, Chrome
 ///     with web accessibility off) do not answer.
 ///  2. Synthesise ⌘C, read the pasteboard, then put the old pasteboard back.
-@MainActor
 enum SelectionCapture {
 
     /// How far to go when Accessibility reports no selection.

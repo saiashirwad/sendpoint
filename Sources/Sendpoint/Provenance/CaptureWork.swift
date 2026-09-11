@@ -2,7 +2,6 @@ import SendpointDomain
 import Foundation
 
 /// Retains probe work after a successful save, but not after an unsaved cancel.
-@MainActor
 final class PendingProvenanceWorkOwner {
     typealias LateUpdate = @MainActor (SessionDocumentMutation) -> Void
 

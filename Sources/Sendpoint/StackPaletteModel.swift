@@ -1,8 +1,6 @@
 import AppKit
 import Observation
 import SendpointDomain
-
-@MainActor
 @Observable
 final class StackPaletteModel {
     private(set) var state = PaletteWorkflow()

@@ -3,7 +3,6 @@ import SendpointDomain
 
 /// Owns the menu-bar status item: its glyph, its title and flash, and the
 /// status menu rendered from `StatusMenuModel`.
-@MainActor
 final class StatusItemController {
     /// The action and the ID it was built from, kept together for the single
     /// menu-action entry point.

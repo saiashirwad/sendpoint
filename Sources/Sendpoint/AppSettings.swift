@@ -42,7 +42,7 @@ enum StackExportMode: Equatable, Sendable {
     }
 }
 
-enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
+nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
     case voiceCapture
     case capture
     case copy
@@ -130,8 +130,6 @@ enum ShortcutRegistrationIssue: Equatable, Identifiable {
         }
     }
 }
-
-@MainActor
 @Observable
 final class AppSettings {
     static let shared = AppSettings()

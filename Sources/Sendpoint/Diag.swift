@@ -4,7 +4,7 @@ import Foundation
 /// Unified logging swallows too much for a menu-bar agent; a plain file does not.
 /// Once per launch, a log past `maxBytes` is moved aside to debug.log.1, so the
 /// pair never grows beyond roughly twice that.
-enum Diag {
+nonisolated enum Diag {
     private static let queue = DispatchQueue(label: "app.sendpoint.diag")
     private static let maxBytes = 2_000_000
 

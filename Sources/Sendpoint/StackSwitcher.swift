@@ -5,7 +5,6 @@ import SendpointDomain
 import SwiftUI
 
 /// What the switcher overlay draws: the stacks being walked and the lit one.
-@MainActor
 @Observable
 final class StackSwitcherModel {
     private(set) var rows: [SessionItemFacts] = []
@@ -27,7 +26,6 @@ final class StackSwitcherModel {
 /// modifiers coming up, the temporary Escape and arrow keys that only exist
 /// while cycling, the overlay panel, and the switch itself. One teardown
 /// path releases all of it.
-@MainActor
 final class StackSwitcherController {
     private enum Lifecycle { case active, tornDown }
 

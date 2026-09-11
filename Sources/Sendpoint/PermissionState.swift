@@ -98,7 +98,6 @@ struct PermissionServices: Sendable {
 }
 
 /// App-owned permission readiness. One instance lives as long as AppDelegate.
-@MainActor
 @Observable
 final class PermissionState {
     private let services: PermissionServices

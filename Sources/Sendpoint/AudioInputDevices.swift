@@ -6,7 +6,7 @@ import Observation
 
 /// One microphone the system knows about. The UID survives reboots and
 /// unplugging; the numeric ID does not, so only the UID is ever stored.
-struct AudioInputDevice: Identifiable, Equatable, Sendable {
+nonisolated struct AudioInputDevice: Identifiable, Equatable, Sendable {
     let id: AudioDeviceID
     let uid: String
     let name: String
@@ -14,7 +14,7 @@ struct AudioInputDevice: Identifiable, Equatable, Sendable {
 
 /// Which microphone to record from, given what the user asked for and what
 /// is plugged in right now. Kept free of CoreAudio so it can be tested.
-enum InputDeviceChoice {
+nonisolated enum InputDeviceChoice {
     /// `nil` means "leave the engine on the system default".
     static func resolve(preferredUID: String?, available: [AudioInputDevice]) -> AudioInputDevice? {
         guard let preferredUID else { return nil }
@@ -156,7 +156,6 @@ enum AudioInputDeviceQuery {
 
 /// The live list of microphones, refreshed whenever one is plugged in,
 /// removed, or made the system default.
-@MainActor
 @Observable
 final class AudioInputDeviceList {
     private(set) var devices: [AudioInputDevice] = []

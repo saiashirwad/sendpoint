@@ -3,7 +3,6 @@ import SendpointDomain
 
 /// Caches app icons by bundle ID. A hit is remembered, and so is a miss, so
 /// an app that cannot be found costs one lookup rather than one per render.
-@MainActor
 final class AppIconStore {
     static let shared = AppIconStore()
 

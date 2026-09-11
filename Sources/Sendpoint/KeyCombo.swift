@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 
 /// A global shortcut: one key plus modifiers.
-struct KeyCombo: Codable, Equatable, Hashable {
+nonisolated struct KeyCombo: Codable, Equatable, Hashable {
     var keyCode: UInt16
     /// Raw value of NSEvent.ModifierFlags, masked to the device-independent flags.
     var modifierRawValue: UInt

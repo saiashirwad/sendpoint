@@ -23,7 +23,6 @@ final class CapturePanel: NSPanel {
 }
 
 /// Native windows are resources, never a second source of workflow state.
-@MainActor
 final class CaptureWindows {
     private unowned let model: CaptureController
     private var panel: CapturePanel?

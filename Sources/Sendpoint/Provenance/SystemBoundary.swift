@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import SendpointDomain
 
 @globalActor
 actor ProvenanceSystemActor {

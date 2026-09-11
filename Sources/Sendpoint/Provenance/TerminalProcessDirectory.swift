@@ -3,7 +3,7 @@ import Foundation
 
 /// Only processes on the selected TTY, descended from the captured app, are
 /// candidates. Foreground pipelines must agree on a directory; never guess by PID.
-struct TerminalProcessSnapshot: Sendable {
+nonisolated struct TerminalProcessSnapshot: Sendable {
     let pid: pid_t
     let parentPID: pid_t
     let processGroup: UInt32
@@ -13,7 +13,7 @@ struct TerminalProcessSnapshot: Sendable {
     let startedAtMicroseconds: UInt64
 }
 
-enum TerminalProcessSelection {
+nonisolated enum TerminalProcessSelection {
     static func foregroundProcesses(
         in processes: [TerminalProcessSnapshot], ttyDevice: UInt32, applicationPID: pid_t
     ) -> [TerminalProcessSnapshot] {

@@ -3,7 +3,7 @@ import Foundation
 
 /// A subprocess belongs to the calling task. Nonblocking reads bound memory and
 /// keep cancellation responsive, including when a child never closes stdout.
-enum ProvenanceCommand {
+nonisolated enum ProvenanceCommand {
     enum Failure: Error { case timedOut, outputTooLarge, exited(Int32), readFailed(Int32) }
 
     /// Blocks the calling cooperative thread for at most one second while a

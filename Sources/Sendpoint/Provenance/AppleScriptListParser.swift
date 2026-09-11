@@ -2,7 +2,7 @@ import Foundation
 
 /// Parses only the list-of-strings subset emitted by `osascript -s s`.
 /// No evaluation, delimiter splitting, or coercion of missing values into paths.
-enum AppleScriptListParser {
+nonisolated enum AppleScriptListParser {
     static func values(from source: String) -> [String]? {
         var input = source[...]
         func skipWhitespace() {

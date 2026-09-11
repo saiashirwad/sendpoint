@@ -4,7 +4,6 @@ import SendpointDomain
 import SwiftUI
 
 /// Owns the palette panel, its key handling, and its one teardown path.
-@MainActor
 final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case active

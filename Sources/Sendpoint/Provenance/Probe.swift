@@ -2,13 +2,13 @@ import AppKit
 import SendpointDomain
 import Foundation
 
-struct CapturedApplication: Hashable, Sendable {
+nonisolated struct CapturedApplication: Hashable, Sendable {
     let identity: ApplicationIdentity
     let processIdentifier: pid_t
 }
 
 /// The one injected boundary used to resolve provenance for a captured app.
-struct ProvenanceProbe: Sendable {
+nonisolated struct ProvenanceProbe: Sendable {
     typealias Lookup = @Sendable (CapturedApplication) async throws -> ProvenanceFields
     typealias ApplicationValidator = @Sendable (CapturedApplication) async throws -> Bool
 

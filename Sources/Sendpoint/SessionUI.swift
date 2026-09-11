@@ -2,7 +2,7 @@ import AppKit
 import SendpointDomain
 import Foundation
 
-struct SessionItemFacts: Equatable, Identifiable {
+nonisolated struct SessionItemFacts: Equatable, Identifiable {
     let id: UUID
     let name: String
     let annotationCount: Int
@@ -13,7 +13,7 @@ struct SessionItemFacts: Equatable, Identifiable {
     }
 }
 
-struct SessionUndoFacts: Equatable {
+nonisolated struct SessionUndoFacts: Equatable {
     let sessionID: UUID
     let sessionName: String
     let annotationCount: Int
@@ -27,7 +27,7 @@ struct SessionUndoFacts: Equatable {
     }
 }
 
-struct SessionDeletionFacts: Equatable {
+nonisolated struct SessionDeletionFacts: Equatable {
     let liveAnnotationCount: Int
     let clearedAnnotationCount: Int
 
@@ -43,7 +43,7 @@ struct SessionDeletionFacts: Equatable {
     var requiresConfirmation: Bool { annotationCount > 0 }
 }
 
-struct SessionUIFacts: Equatable {
+nonisolated struct SessionUIFacts: Equatable {
     let sessions: [SessionItemFacts]
     let currentSessionID: UUID
     let undo: SessionUndoFacts?
@@ -90,12 +90,12 @@ struct SessionUIFacts: Equatable {
     }
 }
 
-enum SessionNameValidation: Equatable {
+nonisolated enum SessionNameValidation: Equatable {
     case valid(String)
     case invalid(String)
 }
 
-struct SessionNameDraft: Equatable {
+nonisolated struct SessionNameDraft: Equatable {
     var text: String
     let excludedSessionID: UUID?
 
@@ -117,14 +117,14 @@ struct SessionNameDraft: Equatable {
 
 /// One row in the session palette: an existing session, or the offer to
 /// create one named after the current query.
-enum QuickSwitchRow: Equatable, Hashable {
+nonisolated enum QuickSwitchRow: Equatable, Hashable {
     case session(UUID)
     case create(String)
 }
 
 /// What the palette lists for a query. Matching is case- and diacritic-
 /// insensitive on any part of the name; an empty query lists everything.
-struct QuickSwitchListing: Equatable {
+nonisolated struct QuickSwitchListing: Equatable {
     let sessions: [SessionItemFacts]
     let creatableName: String?
 
@@ -145,7 +145,7 @@ struct QuickSwitchListing: Equatable {
     var isEmpty: Bool { rows.isEmpty }
 }
 
-struct QuickSwitchState: Equatable {
+nonisolated struct QuickSwitchState: Equatable {
     private(set) var highlight: QuickSwitchRow?
 
     var selectedSessionID: UUID? {
@@ -201,8 +201,6 @@ struct QuickSwitchState: Equatable {
         }
     }
 }
-
-@MainActor
 enum SessionDialogs {
     static func confirmsDelete(
         sessionID: UUID,

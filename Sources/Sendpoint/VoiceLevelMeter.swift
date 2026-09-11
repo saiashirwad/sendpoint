@@ -4,7 +4,6 @@ import Observation
 
 /// Live microphone loudness, fed by the recording tap and read by the voice
 /// overlay to size its orb. Rises at once and falls gently.
-@MainActor
 @Observable
 final class VoiceLevelMeter {
     private(set) var current: Float = 0

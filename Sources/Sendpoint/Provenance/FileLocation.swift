@@ -1,6 +1,6 @@
 import Foundation
 
-enum LocalFileLocation {
+nonisolated enum LocalFileLocation {
     static var localHosts: Set<String> {
         Set(Host.current().names + [ProcessInfo.processInfo.hostName, "localhost"])
     }

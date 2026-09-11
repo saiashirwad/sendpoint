@@ -88,8 +88,6 @@ enum ExportState: Equatable {
         return [.report(message)]
     }
 }
-
-@MainActor
 struct ExportServices {
     var write: (String) -> Int?
     var paste: (pid_t, Int) async throws -> Bool
@@ -105,8 +103,6 @@ struct ExportServices {
         })
     }
 }
-
-@MainActor
 @Observable
 final class ExportController {
     private(set) var state: ExportState = .idle

@@ -1,6 +1,7 @@
 import Foundation
+import SendpointDomain
 
-extension ProvenanceProvider {
+nonisolated extension ProvenanceProvider {
     /// Browsers that answer the Chromium AppleScript dictionary. Asking one for
     /// its active tab triggers the macOS Automation prompt for that browser once.
     static let chromiumBundleIDs: Set<String> = [
@@ -35,7 +36,7 @@ extension ProvenanceProvider {
 }
 
 /// Read-only scripts. The probe validates the captured running application before execution.
-enum BrowserActiveTabScript {
+nonisolated enum BrowserActiveTabScript {
     static func chromium(bundleID: String) -> String {
         """
         with timeout of 2 seconds
@@ -61,7 +62,7 @@ enum BrowserActiveTabScript {
     }
 }
 
-enum BrowserActiveTabParser {
+nonisolated enum BrowserActiveTabParser {
     static func fields(from values: [String]) -> ProvenanceFields {
         guard values.count == 2 else { return ProvenanceFields() }
         return ProvenanceFields(windowTitle: nonblank(values[0]), url: absoluteWebURL(values[1]))

@@ -5,7 +5,6 @@ import Observation
 
 /// Live loudness of the chosen microphone, for the level meter on the Voice
 /// tab. Runs only while that tab is on screen; nothing is written anywhere.
-@MainActor
 @Observable
 final class InputLevelMonitor {
     /// 0…1 on the same speech-centred scale as `VoiceLevelMeter`.

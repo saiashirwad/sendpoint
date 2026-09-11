@@ -326,8 +326,6 @@ private struct CapabilityRow: View {
         .accessibilityElement(children: .combine)
     }
 }
-
-@MainActor
 final class SetupWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case active
@@ -431,8 +429,6 @@ private struct AccessibilityHelperView: View {
         .frame(width: 470)
     }
 }
-
-@MainActor
 final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case hidden

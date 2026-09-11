@@ -3,9 +3,7 @@ import AppKit
 @main
 enum Main {
     /// NSApplication.delegate is weak, so this is the one strong reference.
-    @MainActor private static let delegate = AppDelegate()
-
-    @MainActor
+    private static let delegate = AppDelegate()
     static func main() {
         // Two copies would take turns overwriting store.json.
         // SENDPOINT_ALLOW_MULTIPLE=1 lets a development build run beside the installed one.

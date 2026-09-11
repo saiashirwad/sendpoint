@@ -697,8 +697,6 @@ private struct InputDevicePopUp: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect) }
-
-    @MainActor
     final class Coordinator: NSObject {
         var onSelect: (String?) -> Void
 
@@ -877,8 +875,6 @@ private struct ProfileNameField<Accessory: View>: View {
         .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
-
-@MainActor
 enum ProfileDialogs {
     static func resolvePendingSelection(_ editor: ProfileEditorState) -> Bool {
         guard editor.pendingProfileID != nil else { return true }

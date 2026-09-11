@@ -1,5 +1,5 @@
 /// A preference, not a gesture inferred from how long the keys stay down.
-enum VoiceRecordingMode: String, CaseIterable, Sendable {
+nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
     case hold
     case tap
 
@@ -12,7 +12,7 @@ enum VoiceRecordingMode: String, CaseIterable, Sendable {
     }
 }
 
-enum VoiceTriggerEvent: Equatable {
+nonisolated enum VoiceTriggerEvent: Equatable {
     case pressed
     case released
     case menuToggle
@@ -21,7 +21,7 @@ enum VoiceTriggerEvent: Equatable {
     case configurationChanged(VoiceRecordingMode)
 }
 
-enum VoiceTriggerCommand: Equatable {
+nonisolated enum VoiceTriggerCommand: Equatable {
     case beginCapture
     case finishCapture
     case cancelCapture
@@ -29,7 +29,7 @@ enum VoiceTriggerCommand: Equatable {
 
 /// Tracks physical key release separately from capture completion so repeats,
 /// cancellation, and synchronous startup failures cannot retrigger recording.
-struct VoiceTriggerMachine: Equatable {
+nonisolated struct VoiceTriggerMachine: Equatable {
     enum State: Equatable {
         case idle
         case held

@@ -1,13 +1,13 @@
 import AppKit
 import Foundation
 
-extension ProvenanceProvider {
+nonisolated extension ProvenanceProvider {
     static let kitty = Self(bundleIDs: ["net.kovidgoyal.kitty"]) { application in
         try await KittyProvenanceLookup.live.fields(for: application)
     }
 }
 
-struct KittyProvenanceLookup: Sendable {
+nonisolated struct KittyProvenanceLookup: Sendable {
     var socketPaths: @Sendable (CapturedApplication) async throws -> [String]
     var readWindows: @Sendable (CapturedApplication, String) async throws -> Data
 
@@ -68,7 +68,7 @@ extension ProvenanceSystemBoundary {
     }
 }
 
-enum KittySocketParser {
+nonisolated enum KittySocketParser {
     /// lsof's NUL field mode preserves spaces and newlines in socket paths.
     static func paths(from data: Data) -> [String] {
         var seen: Set<String> = []
@@ -82,7 +82,7 @@ enum KittySocketParser {
     }
 }
 
-enum KittyWindowParser {
+nonisolated enum KittyWindowParser {
     struct Selection: Equatable, Sendable {
         let windowID: Int
         let tabID: Int

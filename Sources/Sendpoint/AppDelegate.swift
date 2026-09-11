@@ -1,8 +1,6 @@
 import AppKit
 import SendpointDomain
 import SwiftUI
-
-@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItemController = StatusItemController()
     private var settingsWindow: NSWindow?
