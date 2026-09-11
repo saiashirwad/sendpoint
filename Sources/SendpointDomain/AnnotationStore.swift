@@ -219,7 +219,7 @@ public final class AnnotationStore {
             return .cancelled
         } catch {
             guard state == .processing, !Task.isCancelled else { return .cancelled }
-            let message = String(describing: error)
+            let message = error.localizedDescription
             self.error = .commitFailed(message)
             return .failed(message)
         }

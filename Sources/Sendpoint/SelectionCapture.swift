@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 
 struct CapturedSelection: Equatable {
     var text: String
@@ -168,9 +169,9 @@ enum SelectionCapture {
         if fallback.waitsForModifierRelease { try await waitForModifierRelease() }
         try Task.checkCancellation()
         postCommandKey(
-            8,
+            CGKeyCode(kVK_ANSI_C),
             processIdentifier: processIdentifier > 0 ? processIdentifier : nil
-        ) // kVK_ANSI_C
+        )
 
         var copiedChangeCount: Int?
         var result: String?
@@ -200,7 +201,7 @@ enum SelectionCapture {
         try await waitForModifierRelease()
         try Task.checkCancellation()
         guard NSPasteboard.general.changeCount == expectedRevision else { return false }
-        postCommandKey(9, processIdentifier: processIdentifier)  // kVK_ANSI_V
+        postCommandKey(CGKeyCode(kVK_ANSI_V), processIdentifier: processIdentifier)
         return true
     }
 

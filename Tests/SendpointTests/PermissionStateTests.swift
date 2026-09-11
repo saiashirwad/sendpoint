@@ -291,6 +291,21 @@ final class PermissionStateTests: XCTestCase {
         state.teardown()
     }
 
+    func testVoiceModelReadyNotificationFromBackgroundThreadIsHandledOnMain() async {
+        let state = PermissionState(services: services(modelReady: false))
+        XCTAssertEqual(state.localVoiceModel, .notDownloaded)
+
+        await Task.detached {
+            NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
+        }.value
+        // A main-queue observer runs after the posting thread returns, so
+        // give the main queue a beat before reading the state.
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(state.localVoiceModel, .ready)
+        state.teardown()
+    }
+
     func testVisibleWatcherPicksUpDiskChangesBothWays() async {
         let files = BoolBox(false)
         let state = PermissionState(services: services(

@@ -145,6 +145,8 @@ final class AppSettings {
     private static let unboundMarker = Data()
 
     private let defaults: UserDefaults
+    private let registerLoginItem: @MainActor () throws -> Void
+    private let unregisterLoginItem: @MainActor () throws -> Void
 
     /// One combo per bound slot. Optional slots are absent until set.
     private var combos: [ShortcutSlot: KeyCombo]
@@ -198,15 +200,19 @@ final class AppSettings {
     }
     private(set) var hasCompletedSetup: Bool
 
-    var launchAtLogin: Bool {
-        didSet {
-            guard launchAtLogin != oldValue else { return }
-            do {
-                if launchAtLogin { try SMAppService.mainApp.register() }
-                else { try SMAppService.mainApp.unregister() }
-            } catch {
-                NSLog("Sendpoint: login item change failed — \(error)")
-            }
+    private(set) var launchAtLogin: Bool
+
+    /// The system registration decides whether the change sticks. When it
+    /// fails, the property snaps back so a bound toggle shows the real state.
+    func setLaunchAtLogin(_ enabled: Bool) {
+        guard enabled != launchAtLogin else { return }
+        do {
+            if enabled { try registerLoginItem() }
+            else { try unregisterLoginItem() }
+            launchAtLogin = enabled
+        } catch {
+            NSLog("Sendpoint: login item change failed — \(error)")
+            launchAtLogin = !enabled
         }
     }
 
@@ -217,8 +223,18 @@ final class AppSettings {
     /// Called after the preferred microphone changes.
     var onInputDeviceChanged: (() -> Void)?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        registerLoginItem: @escaping @MainActor () throws -> Void = {
+            try SMAppService.mainApp.register()
+        },
+        unregisterLoginItem: @escaping @MainActor () throws -> Void = {
+            try SMAppService.mainApp.unregister()
+        }
+    ) {
         self.defaults = defaults
+        self.registerLoginItem = registerLoginItem
+        self.unregisterLoginItem = unregisterLoginItem
         combos = Self.defaultCombos.merging(
             ShortcutSlot.allCases.compactMap { slot in
                 AppSettings.read(Key.combo(slot), from: defaults).map { (slot, $0) }

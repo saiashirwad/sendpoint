@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
@@ -147,20 +148,22 @@ extension PaletteKey {
         let option = modifiers == .option
         let shift = modifiers == .shift
         switch event.keyCode {
-        case 126 where plain: self = .up
-        case 125 where plain: self = .down
-        case 123 where plain: self = .left
-        case 124 where plain: self = .right
-        case 126 where option: self = .optionUp
-        case 125 where option: self = .optionDown
-        case 48 where plain: self = .tab
-        case 48 where shift: self = .backTab
-        case 36 where plain, 76 where plain: self = .activate
-        case 36 where command, 76 where command: self = .commandActivate
-        case 53 where plain: self = .escape
-        case 51 where plain: self = .delete
-        case 51 where command: self = .commandDelete
-        case 51 where shiftCommand: self = .shiftCommandDelete
+        case UInt16(kVK_UpArrow) where plain: self = .up
+        case UInt16(kVK_DownArrow) where plain: self = .down
+        case UInt16(kVK_LeftArrow) where plain: self = .left
+        case UInt16(kVK_RightArrow) where plain: self = .right
+        case UInt16(kVK_UpArrow) where option: self = .optionUp
+        case UInt16(kVK_DownArrow) where option: self = .optionDown
+        case UInt16(kVK_Tab) where plain: self = .tab
+        case UInt16(kVK_Tab) where shift: self = .backTab
+        case UInt16(kVK_Return) where plain, UInt16(kVK_ANSI_KeypadEnter) where plain:
+            self = .activate
+        case UInt16(kVK_Return) where command, UInt16(kVK_ANSI_KeypadEnter) where command:
+            self = .commandActivate
+        case UInt16(kVK_Escape) where plain: self = .escape
+        case UInt16(kVK_Delete) where plain: self = .delete
+        case UInt16(kVK_Delete) where command: self = .commandDelete
+        case UInt16(kVK_Delete) where shiftCommand: self = .shiftCommandDelete
         default:
             guard let character = event.charactersIgnoringModifiers?.lowercased().first else {
                 return nil

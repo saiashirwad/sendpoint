@@ -1,9 +1,20 @@
 import Foundation
 
-public enum StorePersistenceError: Error, Equatable, Sendable {
+public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     case unsupportedVersion(Int)
     case invalidDocument(String)
     case unavailable
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedVersion:
+            "This notes file was written by a newer version of Sendpoint."
+        case let .invalidDocument(message):
+            message
+        case .unavailable:
+            "Notes storage is unavailable."
+        }
+    }
 }
 
 /// An injected persistence boundary for the versioned session document.
@@ -105,9 +116,6 @@ private actor AtomicJSONStore {
             let document = try decoder.decode(StoreDocument.self, from: data)
             try SessionDocumentMutations.validate(document)
             return document
-        } catch is SessionDocumentValidationError {
-            try quarantine(using: fileManager)
-            return nil
         } catch {
             try quarantine(using: fileManager)
             return nil

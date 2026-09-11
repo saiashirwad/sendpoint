@@ -378,8 +378,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             let released: (() -> Void)? = slot == .voiceCapture
                 ? { [weak self] in self?.handleVoiceTrigger(.released) } : nil
+            guard let action = actions[slot] else { continue }
             switch HotKeyCenter.shared.register(name: slot.rawValue, combo: combo, released: released,
-                                                action: actions[slot]!) {
+                                                action: action) {
             case .registered:
                 // ⇧ on the switch shortcut walks the cycle backwards. It is
                 // claimed together with the shortcut, so a failure here is

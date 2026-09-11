@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
@@ -48,12 +49,13 @@ final class CaptureWindows {
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
-            if event.keyCode == 53 {
+            if event.keyCode == UInt16(kVK_Escape) {
                 if self.surface == .voice { self.model.voiceEscape() }
                 else { self.model.send(.dismiss) }
                 return nil
             }
-            if (event.keyCode == 36 || event.keyCode == 76), event.modifierFlags.contains(.command) {
+            if (event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter)),
+               event.modifierFlags.contains(.command) {
                 self.model.send(.save)
                 return nil
             }
@@ -101,7 +103,7 @@ final class CaptureWindows {
 
     private func installVoiceEscapeFallback() {
         voiceEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return }
+            guard event.keyCode == UInt16(kVK_Escape) else { return }
             MainActor.assumeIsolated { self?.model.voiceEscape() }
         }
     }
@@ -159,7 +161,7 @@ final class CaptureWindows {
 
         let escapeRegistration = HotKeyCenter.shared.registerRaw(
             name: "voiceEscape",
-            keyCode: 53,
+            keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0,
             pressed: { [weak self] in self?.model.voiceEscape() }
         )

@@ -553,10 +553,11 @@ private struct MutationOutcomeEvent: Equatable {
     let outcome: AnnotationStoreMutationOutcome
 }
 
-private enum TestFailure: Error, CustomStringConvertible {
+private enum TestFailure: LocalizedError, CustomStringConvertible {
     case failed
 
     var description: String { "failed" }
+    var errorDescription: String? { description }
 }
 
 private actor AttemptRecorder {

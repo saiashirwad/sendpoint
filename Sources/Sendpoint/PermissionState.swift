@@ -160,7 +160,7 @@ final class PermissionState {
         readinessObserver = NotificationCenter.default.addObserver(
             forName: .voiceModelDidBecomeReady,
             object: nil,
-            queue: nil
+            queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.voiceModelBecameReady()

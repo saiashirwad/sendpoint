@@ -483,7 +483,10 @@ struct SettingsView: View {
                     SettingsToggleRow(
                         "Launch at login",
                         subtitle: "Keeps the shortcuts ready as soon as you sign in.",
-                        isOn: $settings.launchAtLogin
+                        isOn: Binding(
+                            get: { settings.launchAtLogin },
+                            set: { settings.setLaunchAtLogin($0) }
+                        )
                     )
                 }
             }
