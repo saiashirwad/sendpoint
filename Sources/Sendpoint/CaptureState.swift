@@ -2,9 +2,9 @@ import Foundation
 import SendpointDomain
 
 nonisolated struct CaptureSaveRequest: Equatable {
-    let target: AnnotationCaptureTarget
-    let destinationSessionID: UUID
-    let annotation: Annotation
+    let target: NoteCaptureTarget
+    let destinationStackID: UUID
+    let note: Note
 }
 
 nonisolated enum CaptureMode: Equatable { case text, voice }
@@ -22,9 +22,9 @@ nonisolated enum CapturePhase: Equatable {
 }
 
 nonisolated struct CaptureSession: Equatable {
-    let context: AnnotationCaptureContext
+    let context: NoteCaptureContext
     let mode: CaptureMode
-    var target: AnnotationCaptureTarget?
+    var target: NoteCaptureTarget?
     var phase: CapturePhase
     /// ⌘↩ arrived while the selection was still being read; the save runs
     /// the moment the target exists.
@@ -32,14 +32,14 @@ nonisolated struct CaptureSession: Equatable {
 }
 
 nonisolated enum CaptureAction {
-    case begin(CaptureMode, AnnotationCaptureContext)
+    case begin(CaptureMode, NoteCaptureContext)
     /// The selection reader has done everything that must happen before the
     /// note box takes over the keyboard; the rest may finish behind it.
-    case selectionPending(AnnotationCaptureContext)
-    case selection(AnnotationCaptureContext, CapturedSelection)
-    case recordingStarted(AnnotationCaptureContext)
-    case failed(AnnotationCaptureContext, String)
-    case transcript(AnnotationCaptureContext, String)
+    case selectionPending(NoteCaptureContext)
+    case selection(NoteCaptureContext, CapturedSelection)
+    case recordingStarted(NoteCaptureContext)
+    case failed(NoteCaptureContext, String)
+    case transcript(NoteCaptureContext, String)
     case changeNote(String)
     case save
     case finishVoice
@@ -47,26 +47,26 @@ nonisolated enum CaptureAction {
     case dismiss
     case retry
     case retarget(UUID)
-    case prepared(CaptureSaveRequest, Annotation)
-    case saved(CaptureSaveRequest, AnnotationStoreMutationOutcome, destinationExists: Bool)
-    case failureTimeout(AnnotationCaptureContext)
+    case prepared(CaptureSaveRequest, Note)
+    case saved(CaptureSaveRequest, StackMutationOutcome, destinationExists: Bool)
+    case failureTimeout(NoteCaptureContext)
     case teardown
 }
 
 nonisolated enum CaptureSurface { case editor, voice }
 
 nonisolated enum CaptureEffect: Equatable {
-    case readSelection(AnnotationCaptureContext, CaptureMode)
-    case startRecording(AnnotationCaptureContext)
-    case transcribe(AnnotationCaptureContext)
-    case probe(AnnotationCaptureTarget)
+    case readSelection(NoteCaptureContext, CaptureMode)
+    case startRecording(NoteCaptureContext)
+    case transcribe(NoteCaptureContext)
+    case probe(NoteCaptureTarget)
     case save(CaptureSaveRequest)
     case commit(CaptureSaveRequest)
     case retry
-    case abandon(AnnotationCaptureTarget)
+    case abandon(NoteCaptureTarget)
     case show(CaptureSurface)
     case focusEditor
-    case failureTimer(AnnotationCaptureContext)
+    case failureTimer(NoteCaptureContext)
     case close
     case beep
 }
@@ -117,9 +117,9 @@ nonisolated enum CaptureState: Equatable {
                 effects = [.probe(target)]
                 if session.saveAwaitsSelection {
                     session.saveAwaitsSelection = false
-                    if let annotation = target.annotation(note: note) {
+                    if let note = target.note(body: note) {
                         let request = CaptureSaveRequest(target: target,
-                            destinationSessionID: target.sessionID, annotation: annotation)
+                            destinationStackID: target.stackID, note: note)
                         session.phase = .saving(request)
                         effects.append(.save(request))
                     } else {
@@ -170,7 +170,7 @@ nonisolated enum CaptureState: Equatable {
                 note = text
             }
             guard let target = session.target,
-                  let annotation = target.annotation(note: note)
+                  let note = target.note(body: note)
             else {
                 if session.phase == .transcribing {
                     session.phase = .failed("No speech was found.")
@@ -186,7 +186,7 @@ nonisolated enum CaptureState: Equatable {
                 return [.beep]
             }
             let request = CaptureSaveRequest(target: target,
-                destinationSessionID: target.sessionID, annotation: annotation)
+                destinationStackID: target.stackID, note: note)
             session.phase = .saving(request)
             effects = [.save(request)]
         case let .failed(context, message):
@@ -202,11 +202,11 @@ nonisolated enum CaptureState: Equatable {
                 return update(.selection(context, CapturedSelection(text: "")))
             default: return []
             }
-        case let .prepared(request, annotation):
-            guard session.phase == .saving(request), annotation.id == request.annotation.id,
-                  annotation.provenance.application == request.target.application else { return [] }
+        case let .prepared(request, note):
+            guard session.phase == .saving(request), note.id == request.note.id,
+                  note.provenance.application == request.target.application else { return [] }
             let prepared = CaptureSaveRequest(target: request.target,
-                destinationSessionID: request.destinationSessionID, annotation: annotation)
+                destinationStackID: request.destinationStackID, note: note)
             session.phase = .saving(prepared)
             effects = [.commit(prepared)]
         case let .saved(request, outcome, destinationExists):
@@ -236,8 +236,8 @@ nonisolated enum CaptureState: Equatable {
             effects = [.retry]
         case let .retarget(destination):
             guard case let .saveFailed(old, _, false, true) = session.phase else { return [] }
-            let request = CaptureSaveRequest(target: old.target, destinationSessionID: destination,
-                annotation: old.annotation)
+            let request = CaptureSaveRequest(target: old.target, destinationStackID: destination,
+                note: old.note)
             session.phase = .saving(request)
             effects = [.abandon(old.target), .save(request)]
         case .dismiss:

@@ -7,11 +7,11 @@ import SwiftUI
 /// What the switcher overlay draws: the stacks being walked and the lit one.
 @Observable
 final class StackSwitcherModel {
-    private(set) var rows: [SessionItemFacts] = []
+    private(set) var rows: [StackItemFacts] = []
     private(set) var highlight: UUID?
     private(set) var visible = false
 
-    func show(rows: [SessionItemFacts], highlight: UUID?) {
+    func show(rows: [StackItemFacts], highlight: UUID?) {
         self.rows = rows
         self.highlight = highlight
         visible = true
@@ -29,10 +29,10 @@ final class StackSwitcherModel {
 final class StackSwitcherController {
     private enum Lifecycle { case active, tornDown }
 
-    private let store: AnnotationStore
+    private let store: StackStore
     private let settings: AppSettings
     private let onOpenPalette: (UUID) -> Void
-    private let onSwitched: (SessionItemFacts) -> Void
+    private let onSwitched: (StackItemFacts) -> Void
     private var machine = StackSwitchMachine()
     private let model = StackSwitcherModel()
     private var panel: NSPanel?
@@ -47,9 +47,9 @@ final class StackSwitcherController {
     /// been seen, and the strip goes the instant the keys come up.
     static let minimumVisibleDuration: TimeInterval = 0.3
 
-    init(store: AnnotationStore, settings: AppSettings,
+    init(store: StackStore, settings: AppSettings,
          onOpenPalette: @escaping (UUID) -> Void,
-         onSwitched: @escaping (SessionItemFacts) -> Void) {
+         onSwitched: @escaping (StackItemFacts) -> Void) {
         self.store = store
         self.settings = settings
         self.onOpenPalette = onOpenPalette
@@ -88,8 +88,8 @@ final class StackSwitcherController {
             if elapsed > 4 { Diag.log("switcher \(event) took \(Int(elapsed))ms") }
         }
         let orders = StackSwitchOrders(
-            recent: store.sessionsByRecency.map(\.id),
-            listed: store.sessions.map(\.id)
+            recent: store.stacksByRecency.map(\.id),
+            listed: store.stacks.map(\.id)
         )
         let commands = machine.handle(event, orders: orders)
         // The rows go in before the overlay is shown, so it is sized for them.
@@ -119,11 +119,11 @@ final class StackSwitcherController {
             model.hide()
             panel?.orderOut(nil)
         case let .switchTo(id):
-            store.mutate(.switchSession(sessionID: id)) { [weak self] outcome in
+            store.mutate(.switchStack(stackID: id)) { [weak self] outcome in
                 guard let self, self.lifecycle == .active else { return }
                 switch outcome {
                 case .committed, .noOp:
-                    if let facts = self.facts.session(id: id) { self.onSwitched(facts) }
+                    if let facts = self.facts.stack(id: id) { self.onSwitched(facts) }
                 case .rejected, .commitFailed, .cancelled:
                     NSSound.beep()
                 }
@@ -152,20 +152,20 @@ final class StackSwitcherController {
 
     // MARK: - Facts
 
-    private var facts: SessionUIFacts {
-        SessionUIFacts(sessions: store.sessions, currentSessionID: store.currentSessionID,
+    private var facts: StackUIFacts {
+        StackUIFacts(stacks: store.stacks, currentStackID: store.currentStackID,
             lastCleared: store.lastCleared)
     }
 
-    private func rows(for order: [UUID]) -> [SessionItemFacts] {
+    private func rows(for order: [UUID]) -> [StackItemFacts] {
         let facts = facts
-        return order.compactMap { facts.session(id: $0) }
+        return order.compactMap { facts.stack(id: $0) }
     }
 
     // MARK: - Release detection
 
     private var watchedModifiers: NSEvent.ModifierFlags {
-        settings.switchSessionCombo.modifiers.intersection([.command, .option, .control])
+        settings.switchStackCombo.modifiers.intersection([.command, .option, .control])
     }
 
     /// The moment every modifier of the switch shortcut is up, the lit stack
@@ -212,7 +212,7 @@ final class StackSwitcherController {
     private func registerTemporaryKeys() {
         guard !temporaryKeysRegistered else { return }
         temporaryKeysRegistered = true
-        let modifiers = settings.switchSessionCombo.carbonModifiers
+        let modifiers = settings.switchStackCombo.carbonModifiers
         HotKeyCenter.shared.registerRaw(name: .switchEscape, keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0, pressed: { [weak self] in self?.send(.escape) })
         HotKeyCenter.shared.registerRaw(name: .switchPinUp, keyCode: UInt16(kVK_UpArrow),
@@ -309,7 +309,7 @@ struct StackSwitcherView: View {
                     let lit = row.id == model.highlight
                     StackRow(
                         name: row.name,
-                        annotationCount: row.annotationCount,
+                        noteCount: row.noteCount,
                         isCurrent: row.isCurrent,
                         isHighlighted: lit,
                         position: position,

@@ -2,7 +2,7 @@ import AppKit
 import SendpointDomain
 
 /// One command the status menu can invoke. The associated value, when there is
-/// one, identifies the stack or profile the command applies to.
+/// one, identifies the stack or template the command applies to.
 enum StatusMenuAction: Hashable {
     case voiceNote
     case typedNote
@@ -11,9 +11,9 @@ enum StatusMenuAction: Hashable {
     case quickSwitcher
     case nextStack
     case previousStack
-    case selectProfile(UUID)
+    case selectTemplate(UUID)
     case copyMarkdown
-    case clearSession(UUID)
+    case clearStack(UUID)
     case undoClear
     case retryPendingMutations
     case settings
@@ -67,9 +67,9 @@ enum StatusMenuStoreStatus: Equatable {
 /// current store and settings facts, so the menu stays testable without AppKit.
 enum StatusMenuModel {
     static func items(
-        facts: SessionUIFacts?,
+        facts: StackUIFacts?,
         storeStatus: StatusMenuStoreStatus,
-        error: AnnotationStoreError?,
+        error: StackStoreError?,
         hasPendingMutations: Bool,
         settings: AppSettings
     ) -> [StatusMenuItem] {
@@ -90,41 +90,41 @@ enum StatusMenuModel {
 
         if let facts, facts.current != nil {
             menu.append(.entry(entry(facts.currentTitle)))
-            var sessionMenu: [StatusMenuItem] = []
-            for session in facts.sessions {
-                sessionMenu.append(.entry(entry("\(session.name) — \(session.countLabel)",
-                    action: .switchToStack(session.id),
-                    represents: session.id,
-                    checked: session.isCurrent)))
+            var stackMenu: [StatusMenuItem] = []
+            for stack in facts.stacks {
+                stackMenu.append(.entry(entry("\(stack.name) — \(stack.countLabel)",
+                    action: .switchToStack(stack.id),
+                    represents: stack.id,
+                    checked: stack.isCurrent)))
             }
-            sessionMenu.append(.separator)
-            sessionMenu.append(.entry(entry("Switch Stack…",
+            stackMenu.append(.separator)
+            stackMenu.append(.entry(entry("Switch Stack…",
                 action: .quickSwitcher,
-                combo: settings.switchSessionCombo)))
+                combo: settings.switchStackCombo)))
             if let combo = settings.nextStackCombo {
-                sessionMenu.append(.entry(entry("Next Stack",
+                stackMenu.append(.entry(entry("Next Stack",
                     action: .nextStack,
                     combo: combo)))
             }
             if let combo = settings.previousStackCombo {
-                sessionMenu.append(.entry(entry("Previous Stack",
+                stackMenu.append(.entry(entry("Previous Stack",
                     action: .previousStack,
                     combo: combo)))
             }
-            menu.append(.submenu(title: "Stack", items: sessionMenu))
+            menu.append(.submenu(title: "Stack", items: stackMenu))
         }
 
-        var profileMenu: [StatusMenuItem] = []
-        for profile in settings.profiles {
-            profileMenu.append(.entry(entry(profile.name,
-                action: .selectProfile(profile.id),
-                represents: profile.id,
-                checked: profile.id == settings.activeProfileID)))
+        var templateMenu: [StatusMenuItem] = []
+        for template in settings.templates {
+            templateMenu.append(.entry(entry(template.name,
+                action: .selectTemplate(template.id),
+                represents: template.id,
+                checked: template.id == settings.activeTemplateID)))
         }
-        menu.append(.submenu(title: "Template", items: profileMenu))
+        menu.append(.submenu(title: "Template", items: templateMenu))
         menu.append(.separator)
 
-        let count = facts?.current?.annotationCount ?? 0
+        let count = facts?.current?.noteCount ?? 0
         let verb = settings.pasteDirectly ? "Paste" : "Copy"
         menu.append(.entry(entry(
             count > 0
@@ -136,8 +136,8 @@ enum StatusMenuModel {
             facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
             represents: facts?.current?.id,
             combo: settings.clearCombo)
-        if count > 0, let sessionID = facts?.current?.id {
-            clear.action = .clearSession(sessionID)
+        if count > 0, let stackID = facts?.current?.id {
+            clear.action = .clearStack(stackID)
         }
         menu.append(.entry(clear))
         if let undo = facts?.undo {
@@ -149,7 +149,7 @@ enum StatusMenuModel {
 
         if let error {
             menu.append(.separator)
-            menu.append(.entry(entry(annotationStoreErrorMessage(error))))
+            menu.append(.entry(entry(noteStoreErrorMessage(error))))
             if hasPendingMutations {
                 menu.append(.entry(entry("Retry Pending Stack Changes",
                     action: .retryPendingMutations)))

@@ -8,21 +8,21 @@ final class PromptComposerTests: XCTestCase {
     private let locale = Locale(identifier: "en_US_POSIX")
     private let timeZone = TimeZone(secondsFromGMT: 0)!
 
-    func testTextNormalizationTrimsAndCaseFoldsSessionIdentity() {
+    func testTextNormalizationTrimsAndCaseFoldsStackIdentity() {
         XCTAssertEqual("  Reading Notes \n".nonblank, "Reading Notes")
-        XCTAssertEqual("  Reading Notes \n".normalizedSessionName, "reading notes")
-        XCTAssertEqual("READING NOTES".normalizedSessionName, "reading notes")
-        XCTAssertEqual("Résumé".normalizedSessionName, "resume")
-        XCTAssertEqual("ＲＥＡＤＩＮＧ".normalizedSessionName, "reading")
+        XCTAssertEqual("  Reading Notes \n".normalizedStackName, "reading notes")
+        XCTAssertEqual("READING NOTES".normalizedStackName, "reading notes")
+        XCTAssertEqual("Résumé".normalizedStackName, "resume")
+        XCTAssertEqual("ＲＥＡＤＩＮＧ".normalizedStackName, "reading")
         XCTAssertNil(" \n\t".nonblank)
-        XCTAssertNil(" \n\t".normalizedSessionName)
+        XCTAssertNil(" \n\t".normalizedStackName)
     }
 
     func testComposerIncludesPreambleHeadingEntriesAndFullMetadata() {
-        let output = compose(profile: .coherent)
+        let output = compose(template: .coherent)
 
         XCTAssertTrue(output.contains("# Reading notes — January 2, 2025"))
-        XCTAssertEqual(output.components(separatedBy: Profile.coherent.preamble).count - 1, 1)
+        XCTAssertEqual(output.components(separatedBy: Template.coherent.preamble).count - 1, 1)
         XCTAssertFalse(output.contains("## "))
         XCTAssertEqual(
             metadata(in: output),
@@ -30,48 +30,48 @@ final class PromptComposerTests: XCTestCase {
         )
     }
 
-    func testComposerNumbersEntriesOnlyWhenTheProfileEnablesIt() {
-        let numbered = compose(profile: .pointByPoint)
+    func testComposerNumbersEntriesOnlyWhenTheTemplateEnablesIt() {
+        let numbered = compose(template: .pointByPoint)
         XCTAssertTrue(numbered.contains("## 1"))
         XCTAssertTrue(numbered.contains("## 2"))
 
-        var unnumbered = Profile.pointByPoint
-        unnumbered.includeEntryNumbers = false
-        XCTAssertFalse(compose(profile: unnumbered).contains("## "))
+        var unnumbered = Template.pointByPoint
+        unnumbered.includeNoteNumbers = false
+        XCTAssertFalse(compose(template: unnumbered).contains("## "))
     }
 
     func testComposerKeepsAllMetadataFlagsIndependent() {
-        var applicationOnly = Profile.plain
+        var applicationOnly = Template.plain
         applicationOnly.includeApplication = true
-        XCTAssertEqual(metadata(in: compose(profile: applicationOnly)), ["Helium"])
+        XCTAssertEqual(metadata(in: compose(template: applicationOnly)), ["Helium"])
 
-        var windowOnly = Profile.plain
+        var windowOnly = Template.plain
         windowOnly.includeWindow = true
-        XCTAssertEqual(metadata(in: compose(profile: windowOnly)), ["Page title"])
+        XCTAssertEqual(metadata(in: compose(template: windowOnly)), ["Page title"])
 
-        var linkOnly = Profile.plain
+        var linkOnly = Template.plain
         linkOnly.includeLink = true
         XCTAssertEqual(
-            metadata(in: compose(profile: linkOnly)),
+            metadata(in: compose(template: linkOnly)),
             ["https://example.com/article", "/tmp/project"]
         )
 
-        var timestampOnly = Profile.plain
+        var timestampOnly = Template.plain
         timestampOnly.includeTimestamps = true
-        XCTAssertEqual(metadata(in: compose(profile: timestampOnly)), [expectedTime])
+        XCTAssertEqual(metadata(in: compose(template: timestampOnly)), [expectedTime])
     }
 
     func testComposerOmitsWhitespaceOnlyPreambleWithoutTrimmingNonblankContent() {
-        var profile = Profile.plain
-        profile.preamble = "  \n\t"
-        XCTAssertEqual(compose(profile: profile), compose(profile: .plain))
+        var template = Template.plain
+        template.preamble = "  \n\t"
+        XCTAssertEqual(compose(template: template), compose(template: .plain))
 
-        profile.preamble = "  Keep this spacing  "
-        XCTAssertTrue(compose(profile: profile).hasPrefix("  Keep this spacing  \n\n> First line"))
+        template.preamble = "  Keep this spacing  "
+        XCTAssertTrue(compose(template: template).hasPrefix("  Keep this spacing  \n\n> First line"))
     }
 
     func testPlainComposerFormatsSelectionAndStandaloneEntriesExactly() {
-        let output = compose(profile: .plain)
+        let output = compose(template: .plain)
 
         XCTAssertEqual(
             output,
@@ -91,20 +91,20 @@ final class PromptComposerTests: XCTestCase {
     }
 
     func testComposerDisplaysWebFileAndDirectoryLinksWithoutCouplingThem() {
-        var profile = Profile.plain
-        profile.includeLink = true
+        var template = Template.plain
+        template.includeLink = true
 
-        let webOnly = makeSession(
+        let webOnly = makeStack(
             provenance: Provenance(
                 application: ApplicationIdentity(name: "Browser"),
                 url: URL(string: "https://example.com/article")
             )
         )
-        XCTAssertEqual(metadata(in: compose(session: webOnly, profile: profile)), ["https://example.com/article"])
+        XCTAssertEqual(metadata(in: compose(stack: webOnly, template: template)), ["https://example.com/article"])
 
         let file = URL(fileURLWithPath: NSHomeDirectory() + "/code/Main.swift")
         let workspace = URL(fileURLWithPath: NSHomeDirectory() + "/code")
-        let fileAndDirectory = makeSession(
+        let fileAndDirectory = makeStack(
             provenance: Provenance(
                 application: ApplicationIdentity(name: "Editor"),
                 url: file,
@@ -112,27 +112,27 @@ final class PromptComposerTests: XCTestCase {
             )
         )
         XCTAssertEqual(
-            metadata(in: compose(session: fileAndDirectory, profile: profile)),
+            metadata(in: compose(stack: fileAndDirectory, template: template)),
             ["~/code/Main.swift", "~/code"]
         )
     }
 
     func testBlankProvenanceFactsDoNotCreateEmptyMetadataBlock() {
-        let annotation = Annotation(
+        let note = Note(
             subject: .standalone,
-            note: "Note",
+            body: "Note",
             provenance: Provenance(
                 application: ApplicationIdentity(name: "  "),
                 windowTitle: "\n"
             ),
             createdAt: date
         )
-        let session = Session(name: "Empty facts", entries: [annotation], createdAt: date)
-        var profile = Profile.plain
-        profile.includeApplication = true
-        profile.includeWindow = true
+        let stack = Stack(name: "Empty facts", notes: [note], createdAt: date)
+        var template = Template.plain
+        template.includeApplication = true
+        template.includeWindow = true
 
-        XCTAssertEqual(compose(session: session, profile: profile), "Note")
+        XCTAssertEqual(compose(stack: stack, template: template), "Note")
     }
 
     private var expectedTime: String {
@@ -155,40 +155,40 @@ final class PromptComposerTests: XCTestCase {
         return String(line.dropFirst().dropLast()).components(separatedBy: " · ")
     }
 
-    private func compose(profile: Profile) -> String {
-        compose(session: makeSession(), profile: profile)
+    private func compose(template: Template) -> String {
+        compose(stack: makeStack(), template: template)
     }
 
-    private func compose(session: Session, profile: Profile) -> String {
+    private func compose(stack: Stack, template: Template) -> String {
         PromptComposer.markdown(
-            session: session,
-            profile: profile,
+            stack: stack,
+            template: template,
             calendar: Calendar(identifier: .gregorian),
             locale: locale,
             timeZone: timeZone
         )
     }
 
-    private func makeSession(
+    private func makeStack(
         provenance: Provenance = Provenance(
             application: ApplicationIdentity(name: "Helium", bundleID: "com.example.helium"),
             windowTitle: "Page title",
             url: URL(string: "https://example.com/article"),
             workingDirectory: URL(fileURLWithPath: "/tmp/project")
         )
-    ) -> Session {
-        Session(
+    ) -> Stack {
+        Stack(
             name: "Reading",
-            entries: [
-                Annotation(
+            notes: [
+                Note(
                     subject: .selection(quote: "First line\nSecond line\n\nFourth line"),
-                    note: "Response to selection",
+                    body: "Response to selection",
                     provenance: provenance,
                     createdAt: date
                 ),
-                Annotation(
+                Note(
                     subject: .standalone,
-                    note: "A standalone thought",
+                    body: "A standalone thought",
                     provenance: provenance,
                     createdAt: date
                 ),

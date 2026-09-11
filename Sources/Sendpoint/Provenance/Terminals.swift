@@ -16,32 +16,32 @@ nonisolated extension ProvenanceProvider {
 /// switch or closed session cannot mix results.
 nonisolated struct TerminalSessionSnapshot: Equatable, Sendable {
     let windowID: String
-    let sessionID: String
+    let stackID: String
     let title: String
     let tty: String
 
     init?(values: [String]) {
         guard values.count == 4, !values[0].isEmpty, !values[1].isEmpty else { return nil }
         windowID = values[0]
-        sessionID = values[1]
+        stackID = values[1]
         title = values[2]
         tty = values[3]
     }
 }
 
 nonisolated struct TerminalSessionLookup: Sendable {
-    var readSession: @Sendable (CapturedApplication) async throws -> TerminalSessionSnapshot?
+    var readStack: @Sendable (CapturedApplication) async throws -> TerminalSessionSnapshot?
     var directoryForTTY: @Sendable (String, CapturedApplication) async throws -> URL?
 
     func fields(for application: CapturedApplication) async throws -> ProvenanceFields {
         try Task.checkCancellation()
-        guard let session = try await readSession(application) else { return ProvenanceFields() }
+        guard let session = try await readStack(application) else { return ProvenanceFields() }
         try Task.checkCancellation()
         let directory = try await directoryForTTY(session.tty, application)
         try Task.checkCancellation()
-        guard let current = try await readSession(application),
+        guard let current = try await readStack(application),
               current.windowID == session.windowID,
-              current.sessionID == session.sessionID,
+              current.stackID == session.stackID,
               current.tty == session.tty else { return ProvenanceFields() }
         try Task.checkCancellation()
         return ProvenanceFields(
@@ -51,7 +51,7 @@ nonisolated struct TerminalSessionLookup: Sendable {
     }
 
     static let live = Self(
-        readSession: { application in
+        readStack: { application in
             guard try await ProvenanceSystemBoundary.matchesCapturedApplication(application),
                   let values = try await ProvenanceSystemBoundary.appleScriptValues(TerminalSessionScript.terminal)
             else { return nil }

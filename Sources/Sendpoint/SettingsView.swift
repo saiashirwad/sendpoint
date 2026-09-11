@@ -5,7 +5,7 @@ import SwiftUI
 enum SettingsTab: String, CaseIterable, Identifiable {
     case capture
     case shortcuts
-    case profiles
+    case templates
     case permissions
 
     var id: String { rawValue }
@@ -13,7 +13,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .shortcuts: "Shortcuts"
-        case .profiles: "Templates"
+        case .templates: "Templates"
         case .capture: "General"
         case .permissions: "Permissions"
         }
@@ -22,7 +22,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .shortcuts: "keyboard.fill"
-        case .profiles: "text.quote"
+        case .templates: "text.quote"
         case .capture: "gearshape.fill"
         case .permissions: "checkmark.shield.fill"
         }
@@ -31,19 +31,19 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Bindable var settings: AppSettings
-    @Bindable var profileEditor: ProfileEditorState
+    @Bindable var templateEditor: TemplateEditorState
     @Bindable var permissionState: PermissionState
-    let onSelectProfile: (UUID) -> Void
+    let onSelectTemplate: (UUID) -> Void
     let onShowAccessibilityHelper: () -> Void
 
     @State private var tab: SettingsTab = .capture
-    @State private var newProfile: NewProfileDraft?
+    @State private var newTemplate: NewTemplateDraft?
     @State private var shortcutFeedback: String?
     @State private var inputDevices = AudioInputDeviceList()
     @State private var levelMonitor = InputLevelMonitor()
     @State private var windowIsVisible = false
 
-    private struct NewProfileDraft: Equatable {
+    private struct NewTemplateDraft: Equatable {
         var name: String
         var problem: String?
     }
@@ -57,15 +57,15 @@ struct SettingsView: View {
 
     init(
         settings: AppSettings,
-        profileEditor: ProfileEditorState,
+        templateEditor: TemplateEditorState,
         permissionState: PermissionState,
-        onSelectProfile: @escaping (UUID) -> Void,
+        onSelectTemplate: @escaping (UUID) -> Void,
         onShowAccessibilityHelper: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
-        _profileEditor = Bindable(wrappedValue: profileEditor)
+        _templateEditor = Bindable(wrappedValue: templateEditor)
         _permissionState = Bindable(wrappedValue: permissionState)
-        self.onSelectProfile = onSelectProfile
+        self.onSelectTemplate = onSelectTemplate
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
     }
 
@@ -82,7 +82,7 @@ struct SettingsView: View {
                         }
                         switch tab {
                         case .shortcuts: shortcutsTab
-                        case .profiles: profilesTab
+                        case .templates: templatesTab
                         case .capture: captureTab
                         case .permissions: permissionsTab
                         }
@@ -111,43 +111,43 @@ struct SettingsView: View {
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
     }
 
-    // MARK: - Profiles
+    // MARK: - Templates
 
-    private var profilesTab: some View {
+    private var templatesTab: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            profileChips
-            profileEditorPane
+            templateChips
+            templateEditorPane
         }
     }
 
-    private var profileChips: some View {
+    private var templateChips: some View {
         VStack(alignment: .leading, spacing: 8) {
             SettingsCaption("Active template")
             HStack(spacing: 6) {
-                ForEach(profileEditor.profiles) { profile in
-                    ProfileChip(
-                        name: profile.name,
-                        isSelected: profile.id == profileEditor.editedProfileID,
-                        isDirty: profile.id == profileEditor.editedProfileID && profileEditor.isDirty
+                ForEach(templateEditor.templates) { template in
+                    TemplateChip(
+                        name: template.name,
+                        isSelected: template.id == templateEditor.editedTemplateID,
+                        isDirty: template.id == templateEditor.editedTemplateID && templateEditor.isDirty
                     ) {
-                        onSelectProfile(profile.id)
+                        onSelectTemplate(template.id)
                     }
                 }
             }
         }
     }
 
-    private var profileEditorPane: some View {
+    private var templateEditorPane: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Name") {
-                ProfileNameField(text: $profileEditor.draft.name) {
-                    profileTitleActions
+                TemplateNameField(text: $templateEditor.draft.name) {
+                    templateTitleActions
                 }
             }
 
             SettingsSection("Prompt") {
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $profileEditor.draft.preamble)
+                    TextEditor(text: $templateEditor.draft.preamble)
                         .font(.body)
                         .lineSpacing(2)
                         .scrollContentBackground(.hidden)
@@ -155,7 +155,7 @@ struct SettingsView: View {
                         .padding(.vertical, 8)
                         .frame(minHeight: 140, maxHeight: 140)
                         .accessibilityLabel("Prompt")
-                    if profileEditor.draft.preamble.isEmpty {
+                    if templateEditor.draft.preamble.isEmpty {
                         Text("Tell the AI what to do with the notes below.")
                             .font(.body)
                             .foregroundStyle(.tertiary)
@@ -176,37 +176,37 @@ struct SettingsView: View {
 
             SettingsSection("Each note") {
                 SettingsRowGroup {
-                    SettingsToggleRow("Number each note", isOn: $profileEditor.draft.includeEntryNumbers)
+                    SettingsToggleRow("Number each note", isOn: $templateEditor.draft.includeNoteNumbers)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Application", isOn: $profileEditor.draft.includeApplication)
+                    SettingsToggleRow("Application", isOn: $templateEditor.draft.includeApplication)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Window title", isOn: $profileEditor.draft.includeWindow)
+                    SettingsToggleRow("Window title", isOn: $templateEditor.draft.includeWindow)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Link or working directory", isOn: $profileEditor.draft.includeLink)
+                    SettingsToggleRow("Link or working directory", isOn: $templateEditor.draft.includeLink)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Time", isOn: $profileEditor.draft.includeTimestamps)
+                    SettingsToggleRow("Time", isOn: $templateEditor.draft.includeTimestamps)
                 }
             }
 
             SettingsSection(settings.stackExportMode.exportMomentCaption) {
                 SettingsRowGroup {
-                    SettingsToggleRow("Date heading at the top", isOn: $profileEditor.draft.includeHeading)
+                    SettingsToggleRow("Date heading at the top", isOn: $templateEditor.draft.includeHeading)
                     SettingsDivider(pastIcon: false)
-                    SettingsToggleRow("Clear the stack afterwards", isOn: $profileEditor.draft.clearSessionAfterExport)
+                    SettingsToggleRow("Clear the stack afterwards", isOn: $templateEditor.draft.clearStackAfterExport)
                 }
             }
         }
-        .animation(.snappy(duration: 0.22), value: profileEditor.isDirty)
+        .animation(.snappy(duration: 0.22), value: templateEditor.isDirty)
     }
 
     /// Save and Revert appear beside the name while there are changes;
     /// New and Delete are always there. Everything shares one baseline.
-    private var profileTitleActions: some View {
+    private var templateTitleActions: some View {
         HStack(spacing: 8) {
-            if profileEditor.isDirty {
+            if templateEditor.isDirty {
                 HStack(spacing: 6) {
-                    Button("Revert", action: profileEditor.revert)
-                    Button("Save", action: saveProfile)
+                    Button("Revert", action: templateEditor.revert)
+                    Button("Save", action: saveTemplate)
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut("s", modifiers: .command)
                 }
@@ -218,33 +218,33 @@ struct SettingsView: View {
                     .transition(.opacity)
             }
             CircleIconButton("plus", help: "New template from this draft…", label: "New template") {
-                newProfile = NewProfileDraft(name: "\(profileEditor.draft.name) Copy")
+                newTemplate = NewTemplateDraft(name: "\(templateEditor.draft.name) Copy")
             }
             .popover(
                 isPresented: Binding(
-                    get: { newProfile != nil },
-                    set: { if !$0 { newProfile = nil } }
+                    get: { newTemplate != nil },
+                    set: { if !$0 { newTemplate = nil } }
                 ),
                 arrowEdge: .bottom
             ) {
-                NewProfilePopover(
+                NewTemplatePopover(
                     name: Binding(
-                        get: { newProfile?.name ?? "" },
-                        set: { newProfile?.name = $0; newProfile?.problem = nil }
+                        get: { newTemplate?.name ?? "" },
+                        set: { newTemplate?.name = $0; newTemplate?.problem = nil }
                     ),
-                    problem: newProfile?.problem,
-                    onCommit: createProfile
+                    problem: newTemplate?.problem,
+                    onCommit: createTemplate
                 )
             }
             CircleIconButton(
                 "trash",
-                help: profileEditor.isDirty
+                help: templateEditor.isDirty
                     ? "Save or revert changes before deleting."
                     : "Delete this template…",
                 label: "Delete template",
-                action: deleteProfile
+                action: deleteTemplate
             )
-            .disabled(!profileEditor.canDelete || profileEditor.isDirty)
+            .disabled(!templateEditor.canDelete || templateEditor.isDirty)
         }
     }
 
@@ -360,7 +360,7 @@ struct SettingsView: View {
                         icon: "arrow.left.arrow.right",
                         title: "Switch stack",
                         detail: "Tap or hold to cycle stacks; ↑/↓ lists all.",
-                        slot: .switchSession
+                        slot: .switchStack
                     )
                     SettingsDivider()
                     shortcutRow(
@@ -514,33 +514,33 @@ struct SettingsView: View {
 
     // MARK: - Actions
 
-    private func saveProfile() {
+    private func saveTemplate() {
         do {
-            try profileEditor.save()
+            try templateEditor.save()
         } catch {
-            ProfileDialogs.showError(error)
+            TemplateDialogs.showError(error)
         }
     }
 
-    private func deleteProfile() {
-        ProfileDialogs.delete(profileEditor)
+    private func deleteTemplate() {
+        TemplateDialogs.delete(templateEditor)
     }
 
-    private func createProfile() {
-        guard let draft = newProfile else { return }
+    private func createTemplate() {
+        guard let draft = newTemplate else { return }
         do {
-            let name = try profileEditor.validatedNewProfileName(draft.name)
-            _ = try profileEditor.saveAsNew(named: name)
-            newProfile = nil
+            let name = try templateEditor.validatedNewTemplateName(draft.name)
+            _ = try templateEditor.saveAsNew(named: name)
+            newTemplate = nil
         } catch {
-            newProfile?.problem = error.localizedDescription
+            newTemplate?.problem = error.localizedDescription
             NSSound.beep()
         }
     }
 }
 
 /// A small anchored prompt: type a name, press Return.
-private struct NewProfilePopover: View {
+private struct NewTemplatePopover: View {
     @Binding var name: String
     let problem: String?
     let onCommit: () -> Void
@@ -818,7 +818,7 @@ private struct SidebarTile: View {
     }
 }
 
-private struct ProfileChip: View {
+private struct TemplateChip: View {
     let name: String
     let isSelected: Bool
     let isDirty: Bool
@@ -850,8 +850,8 @@ private struct ProfileChip: View {
     }
 }
 
-/// The profile's name, set as an editable title rather than a form field.
-private struct ProfileNameField<Accessory: View>: View {
+/// The template's name, set as an editable title rather than a form field.
+private struct TemplateNameField<Accessory: View>: View {
     @Binding var text: String
     @ViewBuilder let accessory: () -> Accessory
     @FocusState private var focused: Bool
@@ -875,9 +875,9 @@ private struct ProfileNameField<Accessory: View>: View {
         .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
-enum ProfileDialogs {
-    static func resolvePendingSelection(_ editor: ProfileEditorState) -> Bool {
-        guard editor.pendingProfileID != nil else { return true }
+enum TemplateDialogs {
+    static func resolvePendingSelection(_ editor: TemplateEditorState) -> Bool {
+        guard editor.pendingTemplateID != nil else { return true }
         guard let decision = dirtyDecision(for: editor) else {
             editor.cancelPendingSelection()
             return false
@@ -885,14 +885,14 @@ enum ProfileDialogs {
         return resolve(decision, editor: editor, closesWindow: false)
     }
 
-    static func shouldClose(_ editor: ProfileEditorState) -> Bool {
+    static func shouldClose(_ editor: TemplateEditorState) -> Bool {
         guard editor.isDirty else { return true }
         guard let decision = dirtyDecision(for: editor) else { return false }
         return resolve(decision, editor: editor, closesWindow: true)
     }
 
-    static func delete(_ editor: ProfileEditorState) {
-        guard let stored = editor.storedProfile else { return }
+    static func delete(_ editor: TemplateEditorState) {
+        guard let stored = editor.storedTemplate else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Delete “\(stored.name)”?"
@@ -917,8 +917,8 @@ enum ProfileDialogs {
     }
 
     private static func dirtyDecision(
-        for editor: ProfileEditorState
-    ) -> ProfileEditorState.DirtyDecision? {
+        for editor: TemplateEditorState
+    ) -> TemplateEditorState.DirtyDecision? {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Save changes to “\(editor.draft.name)”?"
@@ -942,8 +942,8 @@ enum ProfileDialogs {
     }
 
     private static func resolve(
-        _ decision: ProfileEditorState.DirtyDecision,
-        editor: ProfileEditorState,
+        _ decision: TemplateEditorState.DirtyDecision,
+        editor: TemplateEditorState,
         closesWindow: Bool
     ) -> Bool {
         do {
@@ -958,7 +958,7 @@ enum ProfileDialogs {
         }
     }
 
-    private static func requestNewName(for editor: ProfileEditorState) -> String? {
+    private static func requestNewName(for editor: TemplateEditorState) -> String? {
         var proposedName = "\(editor.draft.name) Copy"
         while true {
             let alert = NSAlert()
@@ -976,7 +976,7 @@ enum ProfileDialogs {
             guard alert.runModal() == .alertFirstButtonReturn else { return nil }
             proposedName = field.stringValue
             do {
-                return try editor.validatedNewProfileName(proposedName)
+                return try editor.validatedNewTemplateName(proposedName)
             } catch {
                 showError(error)
             }

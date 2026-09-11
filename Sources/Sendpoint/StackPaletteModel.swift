@@ -4,30 +4,30 @@ import SendpointDomain
 @Observable
 final class StackPaletteModel {
     private(set) var state = PaletteWorkflow()
-    let store: AnnotationStore
+    let store: StackStore
     let settings: AppSettings
-    @ObservationIgnored private let onSelectProfile: (UUID) -> Void
+    @ObservationIgnored private let onSelectTemplate: (UUID) -> Void
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored private let export: ExportController
-    @ObservationIgnored private let confirmDelete: (UUID, [Session], ClearedBatch?) -> Bool
+    @ObservationIgnored private let confirmDelete: (UUID, [Stack], ClearedBatch?) -> Bool
     @ObservationIgnored private var flashTask: Task<Void, Never>?
 
-    init(store: AnnotationStore, settings: AppSettings, export: ExportController,
-         onSelectProfile: @escaping (UUID) -> Void,
-         confirmDelete: ((UUID, [Session], ClearedBatch?) -> Bool)? = nil) {
+    init(store: StackStore, settings: AppSettings, export: ExportController,
+         onSelectTemplate: @escaping (UUID) -> Void,
+         confirmDelete: ((UUID, [Stack], ClearedBatch?) -> Bool)? = nil) {
         self.store = store
         self.settings = settings
         self.export = export
-        self.onSelectProfile = onSelectProfile
+        self.onSelectTemplate = onSelectTemplate
         self.confirmDelete = confirmDelete ?? {
-            SessionDialogs.confirmsDelete(sessionID: $0, sessions: $1, lastCleared: $2)
+            StackDialogs.confirmsDelete(stackID: $0, stacks: $1, lastCleared: $2)
         }
     }
 
     var projection: PaletteProjection {
-        PaletteProjection(state: state, context: PaletteContext(sessions: store.sessions,
-            currentSessionID: store.currentSessionID, lastCleared: store.lastCleared,
-            profiles: settings.profiles, activeProfile: settings.activeProfile))
+        PaletteProjection(state: state, context: PaletteContext(stacks: store.stacks,
+            currentStackID: store.currentStackID, lastCleared: store.lastCleared,
+            templates: settings.templates, activeTemplate: settings.activeTemplate))
     }
     var query: String {
         get { state.query }
@@ -53,15 +53,15 @@ final class StackPaletteModel {
             store.mutate(mutation) { [weak self] outcome in self?.send(.mutationResult(id, outcome)) }
         case .retry: store.retryPendingMutations()
         case let .confirmDelete(id):
-            let confirmed = confirmDelete(id, store.sessions, store.lastCleared)
+            let confirmed = confirmDelete(id, store.stacks, store.lastCleared)
             send(.deleteDecision(id, confirmed: confirmed))
         case let .copyStack(id):
-            export.copy(store: store, sessionID: id, profile: settings.activeProfile) { [weak self] message in
+            export.copy(store: store, stackID: id, template: settings.activeTemplate) { [weak self] message in
                 self?.showFlash(message)
             }
         case let .copyNote(note):
             export.copyNote(note) { [weak self] message in self?.showFlash(message) }
-        case let .selectProfile(id): onSelectProfile(id)
+        case let .selectTemplate(id): onSelectTemplate(id)
         case let .openURL(url): NSWorkspace.shared.open(url)
         case .close:
             flashTask?.cancel()

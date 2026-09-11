@@ -1,15 +1,15 @@
 import Foundation
 import Observation
 
-/// A failure from a queued annotation-store transition.
-public enum AnnotationStoreError: Error, Equatable, Sendable {
+/// A failure from a queued note-store transition.
+public enum StackStoreError: Error, Equatable, Sendable {
     case mutationRejected(String)
     case commitFailed(String)
     case tornDown
 }
 
 /// The result reported for one queued mutation attempt.
-public enum AnnotationStoreMutationOutcome: Equatable, Sendable {
+public enum StackMutationOutcome: Equatable, Sendable {
     case committed
     case noOp
     case rejected(String)
@@ -17,10 +17,10 @@ public enum AnnotationStoreMutationOutcome: Equatable, Sendable {
     case cancelled
 }
 
-/// Owns the last committed session document and serializes all changes to it.
+/// Owns the last committed stack document and serializes all changes to it.
 @MainActor
 @Observable
-public final class AnnotationStore {
+public final class StackStore {
     public enum State: Equatable, Sendable {
         case idle
         case processing
@@ -35,11 +35,11 @@ public final class AnnotationStore {
     }
 
     private struct QueuedMutation {
-        let mutation: SessionDocumentMutation
-        let outcome: (@MainActor @Sendable (AnnotationStoreMutationOutcome) -> Void)?
+        let mutation: StackDocumentMutation
+        let outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)?
     }
 
-    private var document: StoreDocument
+    private var document: StackDocument
     private let persistence: StorePersistence
     private let onChange: @MainActor @Sendable () -> Void
 
@@ -47,29 +47,29 @@ public final class AnnotationStore {
     @ObservationIgnored private var processingTask: Task<Void, Never>?
     @ObservationIgnored private var idleWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
-    public private(set) var error: AnnotationStoreError?
+    public private(set) var error: StackStoreError?
     public private(set) var state: State = .idle
 
-    public var sessions: [Session] {
-        document.sessions
+    public var stacks: [Stack] {
+        document.stacks
     }
 
-    public var currentSessionID: UUID {
-        document.currentSessionID
+    public var currentStackID: UUID {
+        document.currentStackID
     }
 
-    /// The current session first, then the rest by how recently they were used.
-    public var sessionsByRecency: [Session] {
-        document.sessionsByRecency
+    /// The current stack first, then the rest by how recently they were used.
+    public var stacksByRecency: [Stack] {
+        document.stacksByRecency
     }
 
-    public var currentSession: Session {
-        // StoreDocument validation guarantees this lookup succeeds.
-        document.sessions.first { $0.id == document.currentSessionID }!
+    public var currentStack: Stack {
+        // StackDocument validation guarantees this lookup succeeds.
+        document.stacks.first { $0.id == document.currentStackID }!
     }
 
-    public var currentEntries: [Annotation] {
-        currentSession.entries
+    public var currentEntries: [Note] {
+        currentStack.notes
     }
 
     public var lastCleared: ClearedBatch? {
@@ -84,22 +84,22 @@ public final class AnnotationStore {
     /// before making the store available to its caller.
     public init(
         persistence: StorePersistence,
-        defaultSession: Session = Session(name: "Default"),
+        defaultStack: Stack = Stack(name: "Default"),
         onChange: @escaping @MainActor @Sendable () -> Void = {}
     ) async throws {
         try Task.checkCancellation()
         let loaded = try await persistence.load()
         try Task.checkCancellation()
-        let initialDocument: StoreDocument
+        let initialDocument: StackDocument
         if let loaded {
-            try SessionDocumentMutations.validate(loaded)
+            try StackDocumentMutations.validate(loaded)
             initialDocument = loaded
         } else {
-            let candidate = StoreDocument(
-                sessions: [defaultSession],
-                currentSessionID: defaultSession.id
+            let candidate = StackDocument(
+                stacks: [defaultStack],
+                currentStackID: defaultStack.id
             )
-            try SessionDocumentMutations.validate(candidate)
+            try StackDocumentMutations.validate(candidate)
             try Task.checkCancellation()
             try await persistence.commit(candidate)
             try Task.checkCancellation()
@@ -114,8 +114,8 @@ public final class AnnotationStore {
     /// Enqueues one pure document transition. The next candidate always starts
     /// from the last document whose commit completed successfully.
     public func mutate(
-        _ mutation: SessionDocumentMutation,
-        outcome: (@MainActor @Sendable (AnnotationStoreMutationOutcome) -> Void)? = nil
+        _ mutation: StackDocumentMutation,
+        outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)? = nil
     ) {
         guard state != .tornDown else {
             error = .tornDown
@@ -191,7 +191,7 @@ public final class AnnotationStore {
 
     private func processQueue() async {
         while state == .processing, !Task.isCancelled, let queuedMutation = queuedMutations.first {
-            switch SessionDocumentMutations.applying(queuedMutation.mutation, to: document) {
+            switch StackDocumentMutations.applying(queuedMutation.mutation, to: document) {
             case let .applied(candidate):
                 switch await commit(candidate) {
                 case .committed:
@@ -228,7 +228,7 @@ public final class AnnotationStore {
         finishProcessing()
     }
 
-    private func commit(_ candidate: StoreDocument) async -> CommitOutcome {
+    private func commit(_ candidate: StackDocument) async -> CommitOutcome {
         do {
             try Task.checkCancellation()
             try await persistence.commit(candidate)

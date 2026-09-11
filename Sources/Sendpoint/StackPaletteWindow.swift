@@ -19,10 +19,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private let onDismiss: () -> Void
 
     init(
-        store: AnnotationStore,
+        store: StackStore,
         settings: AppSettings,
         export: ExportController,
-        onSelectProfile: @escaping (UUID) -> Void,
+        onSelectTemplate: @escaping (UUID) -> Void,
         onDismiss: @escaping () -> Void
     ) {
         self.onDismiss = onDismiss
@@ -47,7 +47,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         self.panel = panel
 
         let model = StackPaletteModel(
-            store: store, settings: settings, export: export, onSelectProfile: onSelectProfile
+            store: store, settings: settings, export: export, onSelectTemplate: onSelectTemplate
         )
         self.model = model
         super.init()
@@ -60,10 +60,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         installKeyMonitor()
     }
 
-    func show(at level: PaletteLevel, highlighting sessionID: UUID? = nil) {
+    func show(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
         guard lifecycle == .active else { return }
         model.send(.open(level))
-        if let sessionID, level == .stacks { model.send(.chooseStack(sessionID)) }
+        if let stackID, level == .stacks { model.send(.chooseStack(stackID)) }
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()

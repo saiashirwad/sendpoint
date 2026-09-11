@@ -59,9 +59,9 @@ final class StatusItemController {
     }
 
     func rebuildMenu(
-        facts: SessionUIFacts?,
+        facts: StackUIFacts?,
         storeStatus: StatusMenuStoreStatus,
-        error: AnnotationStoreError?,
+        error: StackStoreError?,
         hasPendingMutations: Bool,
         settings: AppSettings
     ) {

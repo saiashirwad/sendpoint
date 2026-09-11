@@ -30,7 +30,7 @@ final class HotKeyRegistrar {
     @discardableResult
     func register(_ actions: Actions) -> [ShortcutRegistrationIssue] {
         var issues: [ShortcutRegistrationIssue] = []
-        center.unregister(name: .switchSessionReverse)
+        center.unregister(name: .switchStackReverse)
         for slot in ShortcutSlot.allCases {
             // A rejected replacement must not leave the previous binding live.
             center.unregister(name: slot.hotKeyName)
@@ -50,7 +50,7 @@ final class HotKeyRegistrar {
             case .capture: action = actions.typedNote
             case .copy: action = actions.copy
             case .stack: action = actions.showStack
-            case .switchSession: action = { actions.switchStack(false) }
+            case .switchStack: action = { actions.switchStack(false) }
             case .nextStack: action = actions.nextStack
             case .previousStack: action = actions.previousStack
             case .clear: action = actions.clear
@@ -61,8 +61,8 @@ final class HotKeyRegistrar {
                 // ⇧ on the switch shortcut walks the cycle backwards. It is
                 // claimed together with the shortcut, so a failure here is
                 // only logged: the forward direction still works.
-                if slot == .switchSession, let reverse = settings.switchSessionReverseCombo {
-                    center.register(name: .switchSessionReverse, combo: reverse) {
+                if slot == .switchStack, let reverse = settings.switchStackReverseCombo {
+                    center.register(name: .switchStackReverse, combo: reverse) {
                         actions.switchStack(true)
                     }
                 }

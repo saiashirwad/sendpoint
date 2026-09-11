@@ -9,7 +9,7 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
         try withDefaults { defaults in
             let settings = AppSettings(defaults: defaults)
             let shiftU = KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command, .shift])
-            XCTAssertEqual(settings.shortcutConflict(for: shiftU, excluding: .clear), .duplicate(.switchSession))
+            XCTAssertEqual(settings.shortcutConflict(for: shiftU, excluding: .clear), .duplicate(.switchStack))
             XCTAssertThrowsError(try settings.setShortcut(shiftU, for: .nextStack))
 
             // And the other way round: a switch shortcut whose ⇧ variant is taken.
@@ -17,7 +17,7 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
                 KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.command, .shift]), for: .clear)
             XCTAssertEqual(
                 settings.shortcutConflict(for: KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.command]),
-                    excluding: .switchSession),
+                    excluding: .switchStack),
                 .duplicate(.clear))
             XCTAssertEqual(
                 settings.shortcutConflict(for: KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command, .shift]),
@@ -30,8 +30,8 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
         try withDefaults { defaults in
             let settings = AppSettings(defaults: defaults)
             try settings.setShortcut(KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command, .shift]),
-                for: .switchSession)
-            XCTAssertNil(settings.switchSessionReverseCombo)
+                for: .switchStack)
+            XCTAssertNil(settings.switchStackReverseCombo)
         }
     }
 
@@ -51,8 +51,8 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
             settings.clearShortcut(for: .nextStack)
             XCTAssertEqual(changes, 2, "clearing an already clear slot notifies nobody")
 
-            settings.clearShortcut(for: .switchSession)
-            XCTAssertNotNil(settings.combo(for: .switchSession), "required slots cannot be cleared")
+            settings.clearShortcut(for: .switchStack)
+            XCTAssertNotNil(settings.combo(for: .switchStack), "required slots cannot be cleared")
             XCTAssertEqual(changes, 2)
         }
     }

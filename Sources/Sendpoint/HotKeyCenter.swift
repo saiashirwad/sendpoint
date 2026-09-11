@@ -7,11 +7,11 @@ enum HotKeyName: String, CaseIterable, Hashable {
     case capture
     case copy
     case stack
-    case switchSession
+    case switchStack
     case nextStack
     case previousStack
     case clear
-    case switchSessionReverse
+    case switchStackReverse
     case voiceEscape
     case switchEscape
     case switchPinUp

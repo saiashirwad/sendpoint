@@ -48,12 +48,12 @@ final class TerminalProvenanceTests: XCTestCase {
         XCTAssertEqual(result.windowTitle, "Baseline")
     }
 
-    func testTerminalUsesSelectedTTYAndChecksSessionAgain() async throws {
+    func testTerminalUsesSelectedTTYAndChecksStackAgain() async throws {
         let snapshot = session()
         let renamed = TerminalSessionSnapshot(values: ["window", "pane", "Running", "/dev/ttys123"])!
         let reads = Sequence<TerminalSessionSnapshot?>([snapshot, renamed])
         let lookup = TerminalSessionLookup(
-            readSession: { _ in await reads.next() },
+            readStack: { _ in await reads.next() },
             directoryForTTY: { tty, app in
                 XCTAssertEqual(tty, "/dev/ttys123")
                 XCTAssertEqual(app.processIdentifier, 42)
@@ -66,11 +66,11 @@ final class TerminalProvenanceTests: XCTestCase {
         XCTAssertEqual(remaining, 0)
     }
 
-    func testSessionSwitchAndCloseRejectResult() async throws {
+    func testStackSwitchAndCloseRejectResult() async throws {
         for changed in [session(id: "other"), nil] {
             let reads = Sequence<TerminalSessionSnapshot?>([session(), changed])
             let lookup = TerminalSessionLookup(
-                readSession: { _ in await reads.next() },
+                readStack: { _ in await reads.next() },
                 directoryForTTY: { _, _ in URL(fileURLWithPath: "/tmp/project") }
             )
             let fields = try await lookup.fields(for: application)
@@ -78,9 +78,9 @@ final class TerminalProvenanceTests: XCTestCase {
         }
     }
 
-    func testMissingSessionDoesNotInspectProcesses() async throws {
+    func testMissingStackDoesNotInspectProcesses() async throws {
         let lookup = TerminalSessionLookup(
-            readSession: { _ in nil },
+            readStack: { _ in nil },
             directoryForTTY: { _, _ in XCTFail("No session"); return nil }
         )
         let fields = try await lookup.fields(for: application)
@@ -88,10 +88,10 @@ final class TerminalProvenanceTests: XCTestCase {
         XCTAssertNil(TerminalSessionSnapshot(values: ["window", "pane"]))
     }
 
-    func testCancellationAfterTTYLookupDoesNotReadAnotherSession() async {
+    func testCancellationAfterTTYLookupDoesNotReadAnotherStack() async {
         let reads = Sequence<TerminalSessionSnapshot?>([session(), session()])
         let lookup = TerminalSessionLookup(
-            readSession: { _ in await reads.next() },
+            readStack: { _ in await reads.next() },
             directoryForTTY: { _, _ in
                 withUnsafeCurrentTask { $0?.cancel() }
                 return URL(fileURLWithPath: "/tmp/project")

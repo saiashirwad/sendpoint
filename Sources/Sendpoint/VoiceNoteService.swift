@@ -17,9 +17,9 @@ nonisolated enum LocalVoiceModelFiles {
 
 /// Records one short clip and sends it to the same local Parakeet engine that
 /// Hex uses. The model downloads only when the user asks for voice setup or
-/// first makes a voice annotation. Neither the audio nor its transcript leaves the Mac.
-final class VoiceAnnotationService {
-    static let shared = VoiceAnnotationService()
+/// first makes a voice note. Neither the audio nor its transcript leaves the Mac.
+final class VoiceNoteService {
+    static let shared = VoiceNoteService()
 
     private let transcriber = LocalVoiceTranscriber()
     let levelMeter = VoiceLevelMeter()
@@ -85,11 +85,11 @@ final class VoiceAnnotationService {
         selectInputDevice(on: input)
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw VoiceAnnotationError.noInputDevice
+            throw VoiceNoteError.noInputDevice
         }
 
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("clipboard-annotation-\(UUID().uuidString).caf")
+            .appendingPathComponent("clipboard-note-\(UUID().uuidString).caf")
         let file = try AVAudioFile(
             forWriting: url,
             settings: format.settings,
@@ -183,7 +183,7 @@ final class VoiceAnnotationService {
 
     private func stopRecording() throws -> (url: URL, duration: TimeInterval) {
         guard let engine, let url = recordingURL else {
-            throw VoiceAnnotationError.noActiveRecording
+            throw VoiceNoteError.noActiveRecording
         }
 
         engine.inputNode.removeTap(onBus: 0)
@@ -201,7 +201,7 @@ final class VoiceAnnotationService {
     }
 }
 
-private enum VoiceAnnotationError: LocalizedError {
+private enum VoiceNoteError: LocalizedError {
     case noInputDevice
     case noActiveRecording
 

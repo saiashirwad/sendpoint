@@ -113,7 +113,7 @@ struct CaptureView: View {
                     Button("Retry") { model.send(.retry) }.buttonStyle(.borderedProminent)
                 } else {
                     if missing {
-                        Button("Save to Current Stack") { model.saveToCurrentSession() }
+                        Button("Save to Current Stack") { model.saveToCurrentStack() }
                             .buttonStyle(.borderedProminent)
                     }
                     Button("Discard", role: .destructive) { model.send(.dismiss) }
@@ -141,7 +141,7 @@ struct CaptureView: View {
 /// Where the note is going, said once and quietly: the stack's name and how
 /// many notes are already in it.
 struct StackBadge: View {
-    let stack: SessionItemFacts
+    let stack: StackItemFacts
 
     var body: some View {
         HStack(spacing: 6) {
@@ -152,7 +152,7 @@ struct StackBadge: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Text("\(stack.annotationCount)")
+            Text("\(stack.noteCount)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.tertiary)
         }

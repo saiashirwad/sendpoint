@@ -6,7 +6,7 @@ nonisolated enum PaletteLevel: Equatable, Hashable {
     case stacks
     case notes(UUID)
 
-    var sessionID: UUID? {
+    var stackID: UUID? {
         if case let .notes(id) = self { return id }
         return nil
     }
@@ -73,7 +73,7 @@ nonisolated struct PaletteActionItem: Equatable, Identifiable {
 /// What the palette is looking at, reduced to what decides the action list.
 nonisolated struct PaletteActionContext: Equatable {
     enum Focus: Equatable {
-        case stack(SessionItemFacts)
+        case stack(StackItemFacts)
         case createStack(name: String)
         case note(id: UUID, index: Int, count: Int, sourceURL: URL?)
         case nothing
@@ -82,9 +82,9 @@ nonisolated struct PaletteActionContext: Equatable {
     var level: PaletteLevel
     var focus: Focus
     /// The stack the notes level is inside, when it is.
-    var openStack: SessionItemFacts?
+    var openStack: StackItemFacts?
     var canDeleteStack: Bool
-    var undo: SessionUndoFacts?
+    var undo: StackUndoFacts?
     var templateName: String
 }
 
@@ -100,13 +100,13 @@ nonisolated enum PaletteActionCatalog {
         }
         func template() { add(.chooseTemplate, "Template: \(context.templateName)", "⌘P") }
         func undo() { if let undo = context.undo { add(.undoClear, undo.title, "⌘Z") } }
-        func copy(_ stack: SessionItemFacts, keys: String) {
-            guard stack.annotationCount > 0 else { return }
+        func copy(_ stack: StackItemFacts, keys: String) {
+            guard stack.noteCount > 0 else { return }
             add(.copyStack(stack.id), "Copy “\(stack.name)” as Markdown", keys,
                 subtitle: "Shaped by the \(context.templateName) template")
         }
-        func clear(_ stack: SessionItemFacts) {
-            guard stack.annotationCount > 0 else { return }
+        func clear(_ stack: StackItemFacts) {
+            guard stack.noteCount > 0 else { return }
             add(.clearStack(stack.id), "Clear “\(stack.name)”", "⇧⌘⌫",
                 subtitle: "Sets the notes aside; undo with ⌘Z", destructive: true)
         }

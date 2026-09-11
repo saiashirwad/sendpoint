@@ -2,13 +2,13 @@ import SendpointDomain
 import Foundation
 import Observation
 
-enum ProfileEditorError: Error, Equatable, LocalizedError {
+enum TemplateEditorError: Error, Equatable, LocalizedError {
     case unsavedChanges
 
     var errorDescription: String? { "Save or discard the template changes first." }
 }
 @Observable
-final class ProfileEditorState {
+final class TemplateEditorState {
     enum SelectionResult: Equatable {
         case selected
         case unchanged
@@ -26,47 +26,47 @@ final class ProfileEditorState {
     private let settings: AppSettings
     private let makeID: () -> UUID
 
-    private(set) var editedProfileID: UUID
-    var draft: Profile
-    private(set) var pendingProfileID: UUID?
+    private(set) var editedTemplateID: UUID
+    var draft: Template
+    private(set) var pendingTemplateID: UUID?
 
     init(settings: AppSettings, makeID: @escaping () -> UUID = UUID.init) {
         self.settings = settings
         self.makeID = makeID
-        let profile = settings.activeProfile
-        editedProfileID = profile.id
-        draft = profile
+        let template = settings.activeTemplate
+        editedTemplateID = template.id
+        draft = template
     }
 
-    var storedProfile: Profile? { settings.profile(id: editedProfileID) }
-    var isDirty: Bool { storedProfile != draft }
-    var canDelete: Bool { settings.profiles.count > 1 }
-    var profiles: [Profile] { settings.profiles }
+    var storedTemplate: Template? { settings.template(id: editedTemplateID) }
+    var isDirty: Bool { storedTemplate != draft }
+    var canDelete: Bool { settings.templates.count > 1 }
+    var templates: [Template] { settings.templates }
 
     @discardableResult
     func requestSelection(_ id: UUID) -> SelectionResult {
-        guard settings.profile(id: id) != nil else { return .rejected }
-        guard id != editedProfileID else { return .unchanged }
+        guard settings.template(id: id) != nil else { return .rejected }
+        guard id != editedTemplateID else { return .unchanged }
         guard isDirty else {
             selectImmediately(id)
             return .selected
         }
-        pendingProfileID = id
+        pendingTemplateID = id
         return .needsDecision
     }
 
-    func validatedNewProfileName(_ name: String) throws -> String {
+    func validatedNewTemplateName(_ name: String) throws -> String {
         try settings.validatedName(name, excluding: nil)
     }
 
     func save() throws {
-        try settings.updateProfile(draft)
-        draft = settings.profile(id: editedProfileID) ?? draft
+        try settings.updateTemplate(draft)
+        draft = settings.template(id: editedTemplateID) ?? draft
     }
 
     @discardableResult
     func saveAsNew(named name: String) throws -> UUID {
-        let clone = Profile(
+        let clone = Template(
             id: makeID(),
             name: name,
             preamble: draft.preamble,
@@ -75,56 +75,56 @@ final class ProfileEditorState {
             includeLink: draft.includeLink,
             includeTimestamps: draft.includeTimestamps,
             includeHeading: draft.includeHeading,
-            includeEntryNumbers: draft.includeEntryNumbers,
-            clearSessionAfterExport: draft.clearSessionAfterExport
+            includeNoteNumbers: draft.includeNoteNumbers,
+            clearStackAfterExport: draft.clearStackAfterExport
         )
-        try settings.addProfile(clone)
+        try settings.addTemplate(clone)
         selectImmediately(clone.id)
         return clone.id
     }
 
     func revert() {
-        guard let storedProfile else { return }
-        draft = storedProfile
-        pendingProfileID = nil
+        guard let storedTemplate else { return }
+        draft = storedTemplate
+        pendingTemplateID = nil
     }
 
     func delete() throws {
-        guard !isDirty else { throw ProfileEditorError.unsavedChanges }
-        let oldProfiles = settings.profiles
-        guard let oldIndex = oldProfiles.firstIndex(where: { $0.id == editedProfileID }) else {
-            throw ProfileMutationError.unknownProfile
+        guard !isDirty else { throw TemplateEditorError.unsavedChanges }
+        let oldTemplates = settings.templates
+        guard let oldIndex = oldTemplates.firstIndex(where: { $0.id == editedTemplateID }) else {
+            throw TemplateError.unknownTemplate
         }
-        let deletedID = editedProfileID
-        _ = try settings.deleteProfile(id: deletedID)
-        let nextIndex = min(oldIndex, settings.profiles.count - 1)
-        selectImmediately(settings.profiles[nextIndex].id)
+        let deletedID = editedTemplateID
+        _ = try settings.deleteTemplate(id: deletedID)
+        let nextIndex = min(oldIndex, settings.templates.count - 1)
+        selectImmediately(settings.templates[nextIndex].id)
     }
 
     func saveAndSelectPending() throws {
-        guard let pendingProfileID else { return }
+        guard let pendingTemplateID else { return }
         try save()
-        selectImmediately(pendingProfileID)
+        selectImmediately(pendingTemplateID)
     }
 
     func saveAsNewAndSelectPending(named name: String) throws {
-        guard let destination = pendingProfileID else { return }
+        guard let destination = pendingTemplateID else { return }
         _ = try saveAsNew(named: name)
         selectImmediately(destination)
     }
 
     func discardAndSelectPending() {
-        guard let pendingProfileID else { return }
-        selectImmediately(pendingProfileID)
+        guard let pendingTemplateID else { return }
+        selectImmediately(pendingTemplateID)
     }
 
     func cancelPendingSelection() {
-        pendingProfileID = nil
+        pendingTemplateID = nil
     }
 
     @discardableResult
     func resolvePendingSelection(_ decision: DirtyDecision) throws -> Bool {
-        guard pendingProfileID != nil else { return true }
+        guard pendingTemplateID != nil else { return true }
         switch decision {
         case .save:
             try saveAndSelectPending()
@@ -156,15 +156,15 @@ final class ProfileEditorState {
     }
 
     func synchronize() {
-        guard settings.profile(id: editedProfileID) == nil else { return }
-        selectImmediately(settings.activeProfile.id)
+        guard settings.template(id: editedTemplateID) == nil else { return }
+        selectImmediately(settings.activeTemplate.id)
     }
 
     private func selectImmediately(_ id: UUID) {
-        guard let profile = settings.profile(id: id) else { return }
-        try? settings.selectProfile(id: id)
-        editedProfileID = id
-        draft = profile
-        pendingProfileID = nil
+        guard let template = settings.template(id: id) else { return }
+        try? settings.selectTemplate(id: id)
+        editedTemplateID = id
+        draft = template
+        pendingTemplateID = nil
     }
 }

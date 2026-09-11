@@ -3,7 +3,7 @@ import SwiftUI
 /// The name, command-digit, and note-count row shared by the stack palette
 /// and the stack switcher. Callers supply the surrounding chrome.
 struct StackRow<Name: View>: View {
-    let annotationCount: Int
+    let noteCount: Int
     let isHighlighted: Bool
     let position: Int
     let showsDigit: Bool
@@ -22,9 +22,9 @@ struct StackRow<Name: View>: View {
                     .opacity(isHighlighted ? 1 : 0.7)
             }
 
-            Text("\(annotationCount)")
+            Text("\(noteCount)")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(annotationCount == 0
+                .foregroundStyle(noteCount == 0
                     ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.secondary))
                 .frame(minWidth: 18, alignment: .trailing)
                 .accessibilityLabel(countLabel)
@@ -33,7 +33,7 @@ struct StackRow<Name: View>: View {
     }
 
     private var countLabel: String {
-        "\(annotationCount) note\(annotationCount == 1 ? "" : "s")"
+        "\(noteCount) note\(noteCount == 1 ? "" : "s")"
     }
 }
 
@@ -41,14 +41,14 @@ extension StackRow where Name == StackRowName {
     /// The common case: a plain stack name, styled and labelled for the row.
     init(
         name: String,
-        annotationCount: Int,
+        noteCount: Int,
         isCurrent: Bool,
         isHighlighted: Bool,
         position: Int,
         showsDigit: Bool
     ) {
         self.init(
-            annotationCount: annotationCount,
+            noteCount: noteCount,
             isHighlighted: isHighlighted,
             position: position,
             showsDigit: showsDigit

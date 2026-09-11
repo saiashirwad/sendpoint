@@ -1,20 +1,20 @@
 import Foundation
 
-public extension Annotation {
-    /// Creates a note from captured values. Whitespace-only notes are rejected;
+public extension Note {
+    /// Creates a note from captured values. Whitespace-only bodies are rejected;
     /// quotes retain their original formatting and IDs/timestamps are never regenerated.
     static func capturing(
         selection: String,
-        note: String,
+        body: String,
         application: ApplicationIdentity,
         id: UUID,
         createdAt: Date
     ) -> Self? {
-        guard let note = note.nonblank else { return nil }
+        guard let body = body.nonblank else { return nil }
         return Self(
             id: id,
             subject: selection.nonblank == nil ? .standalone : .selection(quote: selection),
-            note: note,
+            body: body,
             provenance: Provenance(application: application),
             createdAt: createdAt
         )

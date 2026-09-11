@@ -5,55 +5,55 @@ import XCTest
 
 @MainActor
 final class ExportControllerTests: XCTestCase {
-    private let annotation = Annotation(
+    private let note = Note(
         subject: .standalone,
-        note: "A note",
+        body: "A note",
         provenance: Provenance(application: ApplicationIdentity(name: "Reader"))
     )
 
     func testClipboardWriteFailureDoesNotClear() async throws {
-        let session = Session(name: "Default", entries: [annotation])
-        let store = try await AnnotationStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultSession: session
+        let stack = Stack(name: "Default", notes: [note])
+        let store = try await StackStore(
+            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultStack: stack
         )
-        var profile = Profile.plain
-        profile.clearSessionAfterExport = true
+        var template = Template.plain
+        template.clearStackAfterExport = true
         var attemptedText = ""
         let exporter = ExportController(services: ExportServices(
             write: { text in attemptedText = text; return nil },
             paste: { _, _ in XCTFail("Must not paste"); return false }
         ))
 
-        exporter.copy(store: store, sessionID: session.id, profile: profile) { _ in }
+        exporter.copy(store: store, stackID: stack.id, template: template) { _ in }
         await store.waitForIdle()
 
         if case .failed = exporter.state {} else { XCTFail("Expected clipboard failure") }
         XCTAssertFalse(attemptedText.isEmpty)
-        XCTAssertEqual(store.currentEntries, [annotation])
+        XCTAssertEqual(store.currentEntries, [note])
         store.teardown()
     }
 
-    func testSuccessfulWriteUsesTheProfileAndClearsTheSession() async throws {
-        let session = Session(name: "Default", entries: [annotation])
-        let store = try await AnnotationStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultSession: session
+    func testSuccessfulWriteUsesTheTemplateAndClearsTheStack() async throws {
+        let stack = Stack(name: "Default", notes: [note])
+        let store = try await StackStore(
+            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultStack: stack
         )
-        var profile = Profile.plain
-        profile.preamble = "Use this profile"
-        profile.clearSessionAfterExport = true
+        var template = Template.plain
+        template.preamble = "Use this template"
+        template.clearStackAfterExport = true
         var written = ""
         let exporter = ExportController(services: ExportServices(
             write: { markdown in written = markdown; return 1 },
             paste: { _, _ in XCTFail("Must not paste"); return false }
         ))
 
-        exporter.copy(store: store, sessionID: session.id, profile: profile) { _ in }
+        exporter.copy(store: store, stackID: stack.id, template: template) { _ in }
         await store.waitForIdle()
 
         XCTAssertEqual(exporter.state, .idle)
-        XCTAssertEqual(written, "Use this profile\n\nA note")
+        XCTAssertEqual(written, "Use this template\n\nA note")
         XCTAssertTrue(store.currentEntries.isEmpty)
-        XCTAssertEqual(store.lastCleared?.entries, [annotation])
+        XCTAssertEqual(store.lastCleared?.notes, [note])
         store.teardown()
     }
 }

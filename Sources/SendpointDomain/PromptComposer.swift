@@ -2,8 +2,8 @@ import Foundation
 
 public enum PromptComposer {
     public static func markdown(
-        session: Session,
-        profile: Profile,
+        stack: Stack,
+        template: Template,
         calendar: Calendar = .current,
         locale: Locale = .current,
         timeZone: TimeZone = .current
@@ -24,48 +24,48 @@ public enum PromptComposer {
         )
         var blocks: [String] = []
 
-        if !profile.preamble.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            blocks.append(profile.preamble)
+        if !template.preamble.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.append(template.preamble)
         }
 
-        if profile.includeHeading {
-            blocks.append("# Reading notes — \(session.createdAt.formatted(longDateStyle))")
+        if template.includeHeading {
+            blocks.append("# Reading notes — \(stack.createdAt.formatted(longDateStyle))")
         }
 
-        for (offset, entry) in session.entries.enumerated() {
-            var entryBlocks: [String] = []
+        for (offset, note) in stack.notes.enumerated() {
+            var noteBlocks: [String] = []
 
-            if profile.includeEntryNumbers {
-                entryBlocks.append("## \(offset + 1)")
+            if template.includeNoteNumbers {
+                noteBlocks.append("## \(offset + 1)")
             }
 
-            if case let .selection(quote) = entry.subject {
-                entryBlocks.append(blockquote(quote))
+            if case let .selection(quote) = note.subject {
+                noteBlocks.append(blockquote(quote))
             }
 
-            entryBlocks.append(entry.note)
+            noteBlocks.append(note.body)
 
             let metadata = metadata(
-                for: entry,
-                profile: profile,
+                for: note,
+                template: template,
                 shortTimeStyle: shortTimeStyle
             )
             if !metadata.isEmpty {
-                entryBlocks.append("_\(metadata.joined(separator: " · "))_")
+                noteBlocks.append("_\(metadata.joined(separator: " · "))_")
             }
 
-            blocks.append(entryBlocks.joined(separator: "\n\n"))
+            blocks.append(noteBlocks.joined(separator: "\n\n"))
         }
 
         return blocks.joined(separator: "\n\n")
     }
 
-    public static func noteMarkdown(_ entry: Annotation) -> String {
+    public static func noteMarkdown(_ note: Note) -> String {
         var parts: [String] = []
-        if case let .selection(quote) = entry.subject, let quote = quote.nonblank {
+        if case let .selection(quote) = note.subject, let quote = quote.nonblank {
             parts.append(blockquote(quote))
         }
-        if let note = entry.note.nonblank { parts.append(note) }
+        if let body = note.body.nonblank { parts.append(body) }
         return parts.joined(separator: "\n\n")
     }
 
@@ -77,29 +77,29 @@ public enum PromptComposer {
     }
 
     private static func metadata(
-        for entry: Annotation,
-        profile: Profile,
+        for note: Note,
+        template: Template,
         shortTimeStyle: Date.FormatStyle
     ) -> [String] {
         var facts: [String] = []
 
-        if profile.includeApplication {
-            appendIfPresent(entry.provenance.application.name, to: &facts)
+        if template.includeApplication {
+            appendIfPresent(note.provenance.application.name, to: &facts)
         }
-        if profile.includeWindow {
-            appendIfPresent(entry.provenance.windowTitle, to: &facts)
+        if template.includeWindow {
+            appendIfPresent(note.provenance.windowTitle, to: &facts)
         }
-        if profile.includeLink {
-            if let url = entry.provenance.url {
+        if template.includeLink {
+            if let url = note.provenance.url {
                 appendIfPresent(displayLink(url), to: &facts)
             }
-            if let directory = entry.provenance.workingDirectory {
+            if let directory = note.provenance.workingDirectory {
                 appendIfPresent(abbreviatedPath(directory), to: &facts)
             }
         }
 
-        if profile.includeTimestamps {
-            facts.append(entry.createdAt.formatted(shortTimeStyle))
+        if template.includeTimestamps {
+            facts.append(note.createdAt.formatted(shortTimeStyle))
         }
 
         return facts

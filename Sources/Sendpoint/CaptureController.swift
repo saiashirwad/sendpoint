@@ -17,14 +17,14 @@ struct CaptureServices {
                     editorMayOpen: editorMayOpen)
             },
             startRecording: {
-                guard await VoiceAnnotationService.shared.requestMicrophoneAccess() else {
+                guard await VoiceNoteService.shared.requestMicrophoneAccess() else {
                     throw CaptureServiceError.microphoneDenied
                 }
                 try Task.checkCancellation()
-                try VoiceAnnotationService.shared.startRecording()
+                try VoiceNoteService.shared.startRecording()
             },
-            transcribe: { try await VoiceAnnotationService.shared.stopAndTranscribe() },
-            discardRecording: { VoiceAnnotationService.shared.discardRecording() })
+            transcribe: { try await VoiceNoteService.shared.stopAndTranscribe() },
+            discardRecording: { VoiceNoteService.shared.discardRecording() })
     }
 }
 
@@ -37,7 +37,7 @@ private enum CaptureServiceError: LocalizedError {
 @Observable
 final class CaptureController {
     private(set) var state: CaptureState = .idle
-    @ObservationIgnored private var store: AnnotationStore?
+    @ObservationIgnored private var store: StackStore?
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let permissionState: PermissionState
     @ObservationIgnored private let services: CaptureServices
@@ -57,14 +57,14 @@ final class CaptureController {
     /// windows can get out of the way instead of being dragged forward.
     var onWillPresentEditor: (() -> Void)?
 
-    var levelMeter: VoiceLevelMeter { VoiceAnnotationService.shared.levelMeter }
+    var levelMeter: VoiceLevelMeter { VoiceNoteService.shared.levelMeter }
     /// The stack this note lands in: the one fixed when the capture began,
     /// so switching stacks mid-note does not change what the pill says.
-    var targetStack: SessionItemFacts? {
+    var targetStack: StackItemFacts? {
         guard let store else { return nil }
-        let id = state.session?.context.sessionID ?? store.currentSessionID
-        return SessionUIFacts(sessions: store.sessions, currentSessionID: store.currentSessionID,
-            lastCleared: store.lastCleared).session(id: id)
+        let id = state.session?.context.stackID ?? store.currentStackID
+        return StackUIFacts(stacks: store.stacks, currentStackID: store.currentStackID,
+            lastCleared: store.lastCleared).stack(id: id)
     }
     var isOpen: Bool { state.session != nil }
     var captured: CapturedSelection? { state.session?.target?.captured }
@@ -72,7 +72,7 @@ final class CaptureController {
         get {
             switch state.session?.phase {
             case let .editing(note): return note
-            case let .saving(request), let .saveFailed(request, _, _, _): return request.annotation.note
+            case let .saving(request), let .saveFailed(request, _, _, _): return request.note.body
             default: return ""
             }
         }
@@ -91,7 +91,7 @@ final class CaptureController {
         self.services = services ?? .live
     }
 
-    func configure(store: AnnotationStore) {
+    func configure(store: StackStore) {
         guard state != .tornDown else { return }
         precondition(self.store == nil || self.store === store)
         self.store = store
@@ -110,8 +110,8 @@ final class CaptureController {
     func voiceEscape() {
         if let onVoiceEscape { onVoiceEscape() } else { send(.cancelVoice) }
     }
-    func saveToCurrentSession() {
-        if let store { send(.retarget(store.currentSessionID)) }
+    func saveToCurrentStack() {
+        if let store { send(.retarget(store.currentStackID)) }
     }
 
     private func begin(_ mode: CaptureMode) {
@@ -128,7 +128,7 @@ final class CaptureController {
         }
         let wasOpen = isOpen
         if !wasOpen { previousApp = NSWorkspace.shared.frontmostApplication }
-        send(.begin(mode, AnnotationCaptureContext(sessionID: store.currentSessionID)))
+        send(.begin(mode, NoteCaptureContext(stackID: store.currentStackID)))
         if wasOpen && mode == .voice { onVoiceCaptureEnded?() }
     }
 
@@ -159,19 +159,19 @@ final class CaptureController {
             }
         case let .probe(target): provenance.start(for: target)
         case let .save(request):
-            let annotation = provenance.annotationForSave(request.annotation, target: request.target)
-            send(.prepared(request, annotation))
+            let note = provenance.noteForSave(request.note, target: request.target)
+            send(.prepared(request, note))
         case let .commit(request):
             guard let store else { return }
-            store.mutate(.addAnnotation(sessionID: request.destinationSessionID, annotation: request.annotation)) {
+            store.mutate(.addNote(stackID: request.destinationStackID, note: request.note)) {
                 [weak self, weak store] outcome in
                 guard let self, self.state != .tornDown else { return }
                 switch outcome {
                 case .noOp, .rejected, .cancelled: self.provenance.abandon(for: request.target)
                 case .committed, .commitFailed: break
                 }
-                self.send(.saved(request, outcome, destinationExists: store?.sessions.contains {
-                    $0.id == request.destinationSessionID
+                self.send(.saved(request, outcome, destinationExists: store?.stacks.contains {
+                    $0.id == request.destinationStackID
                 } ?? false))
             }
         case .retry: store?.retryPendingMutations()
@@ -197,7 +197,7 @@ final class CaptureController {
         }
     }
 
-    private func launch(_ work: Work, context: AnnotationCaptureContext,
+    private func launch(_ work: Work, context: NoteCaptureContext,
                         operation: @escaping @MainActor () async throws -> CaptureAction) {
         guard state.session?.context == context else { return }
         tasks[work]?.cancel()

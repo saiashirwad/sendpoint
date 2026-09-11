@@ -3,25 +3,25 @@ import XCTest
 @testable import SendpointDomain
 
 final class ProvenanceMutationTests: XCTestCase {
-    func testProvenanceOnlyMutationRequiresExactAnnotationAndApplication() throws {
+    func testProvenanceOnlyMutationRequiresExactNoteAndApplication() throws {
         let app = ApplicationIdentity(name: "Editor", bundleID: "com.microsoft.VSCode")
-        let annotation = Annotation(
+        let note = Note(
             subject: .standalone,
-            note: "Keep this note",
+            body: "Keep this note",
             provenance: Provenance(application: app)
         )
-        let session = Session(name: "Default", entries: [annotation])
-        let document = StoreDocument(sessions: [session], currentSessionID: session.id)
+        let stack = Stack(name: "Default", notes: [note])
+        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
         let enriched = Provenance(
             application: app,
             windowTitle: "Main.swift — project",
             url: URL(fileURLWithPath: "/tmp/project/Main.swift")
         )
 
-        let result = SessionDocumentMutations.applying(
-            .updateAnnotationProvenance(
-                sessionID: session.id,
-                annotationID: annotation.id,
+        let result = StackDocumentMutations.applying(
+            .updateNoteProvenance(
+                stackID: stack.id,
+                noteID: note.id,
                 expectedApplication: app,
                 provenance: enriched
             ),
@@ -30,13 +30,13 @@ final class ProvenanceMutationTests: XCTestCase {
         guard case let .applied(updated) = result else {
             return XCTFail("Expected provenance update")
         }
-        XCTAssertEqual(updated.sessions[0].entries[0].note, annotation.note)
-        XCTAssertEqual(updated.sessions[0].entries[0].provenance, enriched)
+        XCTAssertEqual(updated.stacks[0].notes[0].body, note.body)
+        XCTAssertEqual(updated.stacks[0].notes[0].provenance, enriched)
 
-        let stale = SessionDocumentMutations.applying(
-            .updateAnnotationProvenance(
-                sessionID: session.id,
-                annotationID: annotation.id,
+        let stale = StackDocumentMutations.applying(
+            .updateNoteProvenance(
+                stackID: stack.id,
+                noteID: note.id,
                 expectedApplication: ApplicationIdentity(name: "Other"),
                 provenance: Provenance(application: ApplicationIdentity(name: "Other"))
             ),
@@ -47,64 +47,64 @@ final class ProvenanceMutationTests: XCTestCase {
 
     func testNoteOnlyAndClearedProvenanceUpdatesNoOpForMissingOrStaleTargets() throws {
         let app = ApplicationIdentity(name: "Editor", bundleID: "com.microsoft.VSCode")
-        let annotation = Annotation(
+        let note = Note(
             subject: .standalone,
-            note: "Original",
+            body: "Original",
             provenance: Provenance(application: app)
         )
-        let session = Session(name: "Default", entries: [annotation])
-        let document = StoreDocument(sessions: [session], currentSessionID: session.id)
+        let stack = Stack(name: "Default", notes: [note])
+        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
 
         XCTAssertEqual(
-            SessionDocumentMutations.applying(
-                .updateAnnotationNote(
-                    sessionID: session.id,
-                    annotationID: UUID(),
-                    note: "Stale"
+            StackDocumentMutations.applying(
+                .updateNoteBody(
+                    stackID: stack.id,
+                    noteID: UUID(),
+                    body: "Stale"
                 ),
                 to: document
             ),
             .noOp
         )
         XCTAssertEqual(
-            SessionDocumentMutations.applying(
-                .updateAnnotationNote(
-                    sessionID: UUID(),
-                    annotationID: annotation.id,
-                    note: "Stale"
+            StackDocumentMutations.applying(
+                .updateNoteBody(
+                    stackID: UUID(),
+                    noteID: note.id,
+                    body: "Stale"
                 ),
                 to: document
             ),
             .noOp
         )
 
-        guard case let .applied(cleared) = SessionDocumentMutations.applying(
-            .clearSession(sessionID: session.id),
+        guard case let .applied(cleared) = StackDocumentMutations.applying(
+            .clearStack(stackID: stack.id),
             to: document
         ) else { return XCTFail("Expected clear") }
         let enriched = Provenance(application: app, windowTitle: "Focused window")
         let wrongApp = ApplicationIdentity(name: "Other")
         for mutation in [
-            SessionDocumentMutation.updateAnnotationProvenance(
-                sessionID: UUID(),
-                annotationID: annotation.id,
+            StackDocumentMutation.updateNoteProvenance(
+                stackID: UUID(),
+                noteID: note.id,
                 expectedApplication: app,
                 provenance: enriched
             ),
-            .updateAnnotationProvenance(
-                sessionID: session.id,
-                annotationID: UUID(),
+            .updateNoteProvenance(
+                stackID: stack.id,
+                noteID: UUID(),
                 expectedApplication: app,
                 provenance: enriched
             ),
-            .updateAnnotationProvenance(
-                sessionID: session.id,
-                annotationID: annotation.id,
+            .updateNoteProvenance(
+                stackID: stack.id,
+                noteID: note.id,
                 expectedApplication: wrongApp,
                 provenance: Provenance(application: wrongApp, windowTitle: "Wrong")
             ),
         ] {
-            XCTAssertEqual(SessionDocumentMutations.applying(mutation, to: cleared), .noOp)
+            XCTAssertEqual(StackDocumentMutations.applying(mutation, to: cleared), .noOp)
         }
     }
 

@@ -6,7 +6,7 @@ public extension String {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    var normalizedSessionName: String? {
+    var normalizedStackName: String? {
         guard let trimmed = nonblank else { return nil }
         let locale = Locale(identifier: "en_US_POSIX")
         let normalized = trimmed
@@ -23,7 +23,7 @@ public extension Sequence {
     /// The elements whose `text` contains `query`, compared case-, diacritic-,
     /// and width-insensitively. A blank query keeps everything.
     func matching(_ query: String, text: (Element) -> String) -> [Element] {
-        guard let needle = query.normalizedSessionName else { return Array(self) }
-        return filter { text($0).normalizedSessionName?.contains(needle) == true }
+        guard let needle = query.normalizedStackName else { return Array(self) }
+        return filter { text($0).normalizedStackName?.contains(needle) == true }
     }
 }

@@ -77,13 +77,13 @@ struct PermissionServices: Sendable {
                 PermissionCheck.microphonePermissionState
             },
             requestMicrophone: {
-                await VoiceAnnotationService.shared.requestMicrophoneAccess()
+                await VoiceNoteService.shared.requestMicrophoneAccess()
             },
             voiceModelFilesExist: {
                 LocalVoiceModelFiles.exist()
             },
             downloadVoiceModel: { onProgress in
-                try await VoiceAnnotationService.shared.downloadVoiceModel(
+                try await VoiceNoteService.shared.downloadVoiceModel(
                     onProgress: onProgress
                 )
             },

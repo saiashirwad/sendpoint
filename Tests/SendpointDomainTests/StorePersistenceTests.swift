@@ -4,21 +4,21 @@ import XCTest
 
 final class StorePersistenceTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
 
     func testLiveRoundTripUsesVersionedStoreJSON() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let persistence = StorePersistence.live(directory: directory)
-        let first = document(name: "Round trip").sessions[0]
-        let second = Session(
+        let first = document(name: "Round trip").stacks[0]
+        let second = Stack(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!,
             name: "Second",
             createdAt: now
         )
-        let expected = StoreDocument(
-            sessions: [first, second],
-            currentSessionID: second.id
+        let expected = StackDocument(
+            stacks: [first, second],
+            currentStackID: second.id
         )
 
         try await persistence.commit(expected)
@@ -37,7 +37,7 @@ final class StorePersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(StorePersistence.fileName)
-        try Data(#"{"version":1}"#.utf8).write(to: file)
+        try Data(#"{"version":\#(StackDocument.currentVersion)}"#.utf8).write(to: file)
         let fixedNow = now
         let persistence = StorePersistence.live(directory: directory, now: { fixedNow })
 
@@ -53,7 +53,7 @@ final class StorePersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(StorePersistence.fileName)
-        let unknownVersion = StoreDocument.currentVersion + 1
+        let unknownVersion = StackDocument.currentVersion + 1
         try Data(#"{"version":\#(unknownVersion)}"#.utf8).write(to: file)
 
         do {
@@ -74,9 +74,9 @@ final class StorePersistenceTests: XCTestCase {
         let persistence = StorePersistence.live(directory: directory)
         let original = document()
         try await persistence.commit(original)
-        let invalid = StoreDocument(
-            sessions: original.sessions,
-            currentSessionID: UUID()
+        let invalid = StackDocument(
+            stacks: original.stacks,
+            currentStackID: UUID()
         )
 
         do {
@@ -92,10 +92,10 @@ final class StorePersistenceTests: XCTestCase {
         XCTAssertEqual(loaded, original)
     }
 
-    private func document(name: String = "First") -> StoreDocument {
-        StoreDocument(
-            sessions: [Session(id: sessionID, name: name, createdAt: now)],
-            currentSessionID: sessionID
+    private func document(name: String = "First") -> StackDocument {
+        StackDocument(
+            stacks: [Stack(id: stackID, name: name, createdAt: now)],
+            currentStackID: stackID
         )
     }
 

@@ -2,32 +2,32 @@ import SendpointDomain
 import Foundation
 
 /// IDs and time captured before selection reading or recording can delay us.
-nonisolated struct AnnotationCaptureContext: Equatable {
+nonisolated struct NoteCaptureContext: Equatable {
     let captureID: UUID
-    let sessionID: UUID
-    let annotationID: UUID
+    let stackID: UUID
+    let noteID: UUID
     let createdAt: Date
 
-    init(sessionID: UUID, captureID: UUID = UUID(), annotationID: UUID = UUID(), createdAt: Date = Date()) {
+    init(stackID: UUID, captureID: UUID = UUID(), noteID: UUID = UUID(), createdAt: Date = Date()) {
         self.captureID = captureID
-        self.sessionID = sessionID
-        self.annotationID = annotationID
+        self.stackID = stackID
+        self.noteID = noteID
         self.createdAt = createdAt
     }
 
-    func target(captured: CapturedSelection) -> AnnotationCaptureTarget {
-        AnnotationCaptureTarget(context: self, captured: captured)
+    func target(captured: CapturedSelection) -> NoteCaptureTarget {
+        NoteCaptureTarget(context: self, captured: captured)
     }
 }
 
 /// Immutable values captured when a panel starts. Delayed saves must use this
-/// target instead of whichever session or application is current later.
-nonisolated struct AnnotationCaptureTarget: Equatable {
-    let context: AnnotationCaptureContext
+/// target instead of whichever stack or application is current later.
+nonisolated struct NoteCaptureTarget: Equatable {
+    let context: NoteCaptureContext
     let captured: CapturedSelection
     let application: ApplicationIdentity
 
-    init(context: AnnotationCaptureContext, captured: CapturedSelection) {
+    init(context: NoteCaptureContext, captured: CapturedSelection) {
         self.context = context
         self.captured = captured
         application = ApplicationIdentity(
@@ -37,16 +37,16 @@ nonisolated struct AnnotationCaptureTarget: Equatable {
     }
 
     var captureID: UUID { context.captureID }
-    var sessionID: UUID { context.sessionID }
-    var annotationID: UUID { context.annotationID }
+    var stackID: UUID { context.stackID }
+    var noteID: UUID { context.noteID }
     var createdAt: Date { context.createdAt }
 
-    func annotation(note: String) -> Annotation? {
-        Annotation.capturing(
+    func note(body: String) -> Note? {
+        Note.capturing(
             selection: captured.text,
-            note: note,
+            body: body,
             application: application,
-            id: annotationID,
+            id: noteID,
             createdAt: createdAt
         )
     }

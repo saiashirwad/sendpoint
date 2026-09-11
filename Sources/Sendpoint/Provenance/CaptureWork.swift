@@ -3,18 +3,18 @@ import Foundation
 
 /// Retains probe work after a successful save, but not after an unsaved cancel.
 final class PendingProvenanceWorkOwner {
-    typealias LateUpdate = @MainActor (SessionDocumentMutation) -> Void
+    typealias LateUpdate = @MainActor (StackDocumentMutation) -> Void
 
     private struct Route: Equatable, Sendable {
         let captureID: UUID
-        let annotationID: UUID
-        let sessionID: UUID
+        let noteID: UUID
+        let stackID: UUID
         let application: ApplicationIdentity
 
-        init(target: AnnotationCaptureTarget) {
+        init(target: NoteCaptureTarget) {
             captureID = target.captureID
-            annotationID = target.annotationID
-            sessionID = target.sessionID
+            noteID = target.noteID
+            stackID = target.stackID
             application = target.application
         }
     }
@@ -23,7 +23,7 @@ final class PendingProvenanceWorkOwner {
         let route: Route
         var task: Task<Void, Never>?
         var provenance: Provenance?
-        var savedAnnotation: Annotation?
+        var savedNote: Note?
     }
 
     private let probe: ProvenanceProbe
@@ -46,7 +46,7 @@ final class PendingProvenanceWorkOwner {
         await withCheckedContinuation { idleWaiters.append($0) }
     }
 
-    func start(for target: AnnotationCaptureTarget) {
+    func start(for target: NoteCaptureTarget) {
         guard !isTornDown,
               workByCaptureID[target.captureID] == nil,
               !activeTaskCaptureIDs.contains(target.captureID)
@@ -60,7 +60,7 @@ final class PendingProvenanceWorkOwner {
             route: route,
             task: nil,
             provenance: nil,
-            savedAnnotation: nil
+            savedNote: nil
         )
         activeTaskCaptureIDs.insert(route.captureID)
 
@@ -76,34 +76,34 @@ final class PendingProvenanceWorkOwner {
 
     /// Marks the capture saved and returns the best provenance available now.
     /// If work is still pending, the retained task will send one exact late update.
-    func annotationForSave(
-        _ annotation: Annotation,
-        target: AnnotationCaptureTarget
-    ) -> Annotation {
+    func noteForSave(
+        _ note: Note,
+        target: NoteCaptureTarget
+    ) -> Note {
         guard !isTornDown,
               var work = workByCaptureID[target.captureID],
               work.route == Route(target: target),
-              annotation.id == target.annotationID,
-              annotation.provenance.application == target.application
-        else { return annotation }
+              note.id == target.noteID,
+              note.provenance.application == target.application
+        else { return note }
 
         if let provenance = work.provenance,
            provenance.application == target.application {
-            var enriched = annotation
+            var enriched = note
             enriched.provenance = provenance
             work.task?.cancel()
             workByCaptureID.removeValue(forKey: target.captureID)
             return enriched
         }
 
-        work.savedAnnotation = annotation
+        work.savedNote = note
         workByCaptureID[target.captureID] = work
-        return annotation
+        return note
     }
 
     /// Cancels matching work, even after it was prepared for a save: the save
     /// was rejected, the user chose a new destination, or the capture was dropped.
-    func abandon(for target: AnnotationCaptureTarget) {
+    func abandon(for target: NoteCaptureTarget) {
         guard let work = workByCaptureID[target.captureID],
               work.route == Route(target: target)
         else { return }
@@ -134,12 +134,12 @@ final class PendingProvenanceWorkOwner {
             return
         }
 
-        guard let saved = work.savedAnnotation else {
+        guard let saved = work.savedNote else {
             work.provenance = provenance
             workByCaptureID[route.captureID] = work
             return
         }
-        guard saved.id == route.annotationID,
+        guard saved.id == route.noteID,
               saved.provenance.application == route.application
         else {
             workByCaptureID.removeValue(forKey: route.captureID)
@@ -147,9 +147,9 @@ final class PendingProvenanceWorkOwner {
         }
 
         workByCaptureID.removeValue(forKey: route.captureID)
-        lateUpdate(.updateAnnotationProvenance(
-            sessionID: route.sessionID,
-            annotationID: route.annotationID,
+        lateUpdate(.updateNoteProvenance(
+            stackID: route.stackID,
+            noteID: route.noteID,
             expectedApplication: route.application,
             provenance: provenance
         ))

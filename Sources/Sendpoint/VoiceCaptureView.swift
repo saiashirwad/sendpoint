@@ -16,7 +16,7 @@ struct VoiceCaptureView: View {
     @Environment(\.colorScheme) private var systemScheme
 
     /// The overlay window is built once at launch and kept, so the entrance
-    /// animation keys off the session rather than the view's first appearance.
+    /// animation keys off the stack rather than the view's first appearance.
     private var appeared: Bool { model.state.session?.mode == .voice }
 
     private var palette: OverlayPalette { .against(systemScheme) }
@@ -30,7 +30,7 @@ struct VoiceCaptureView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 160, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
-                Text("\(stack.annotationCount)")
+                Text("\(stack.noteCount)")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(palette.ink.opacity(0.45))
                     .padding(.leading, -4)
@@ -118,10 +118,10 @@ struct VoiceCaptureView: View {
     private var accessibilityLabel: String {
         let destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
         switch model.state.session?.phase {
-        case .selectingVoice, .startingVoice, .recording: return "Voice note: listening.\(destination)"
-        case .transcribing: return "Voice note: transcribing.\(destination)"
-        case let .failed(message): return "Voice note: \(message)"
-        case .saving: return "Voice note: saving.\(destination)"
+        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)"
+        case .transcribing: return "Voice body: transcribing.\(destination)"
+        case let .failed(message): return "Voice body: \(message)"
+        case .saving: return "Voice body: saving.\(destination)"
         default: return ""
         }
     }

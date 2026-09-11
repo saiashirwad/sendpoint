@@ -48,7 +48,7 @@ nonisolated struct StackSwitchMachine: Equatable {
     }
 
     private(set) var state: State = .idle
-    /// The sessions the overlay lists, in the fixed listed order.
+    /// The stacks the overlay lists, in the fixed listed order.
     private(set) var order: [UUID] = []
     private(set) var highlight: UUID?
 

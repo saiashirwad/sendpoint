@@ -3,9 +3,9 @@ import XCTest
 @testable import SendpointDomain
 
 @MainActor
-final class AnnotationStoreTests: XCTestCase {
+final class StackStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
 
     func testLoadsExistingDocumentWithoutReplacingOrCommittingIt() async throws {
         let original = document(name: "Existing")
@@ -15,11 +15,11 @@ final class AnnotationStoreTests: XCTestCase {
             commit: { document in await recorder.record(document) }
         )
 
-        let store = try await AnnotationStore(persistence: persistence)
+        let store = try await StackStore(persistence: persistence)
 
         XCTAssertEqual(store.state, .idle)
-        XCTAssertEqual(store.currentSessionID, sessionID)
-        XCTAssertEqual(store.currentSession, original.sessions[0])
+        XCTAssertEqual(store.currentStackID, stackID)
+        XCTAssertEqual(store.currentStack, original.stacks[0])
         XCTAssertEqual(store.currentEntries, [])
         XCTAssertNil(store.lastCleared)
         let commits = await recorder.documents()
@@ -32,17 +32,17 @@ final class AnnotationStoreTests: XCTestCase {
             load: { nil },
             commit: { document in await recorder.record(document) }
         )
-        let defaultSession = Session(id: sessionID, name: "Default", createdAt: now)
+        let defaultStack = Stack(id: stackID, name: "Default", createdAt: now)
 
-        let store = try await AnnotationStore(
+        let store = try await StackStore(
             persistence: persistence,
-            defaultSession: defaultSession
+            defaultStack: defaultStack
         )
 
-        XCTAssertEqual(store.currentSession, defaultSession)
+        XCTAssertEqual(store.currentStack, defaultStack)
         let commits = await recorder.documents()
         XCTAssertEqual(commits, [
-            StoreDocument(sessions: [defaultSession], currentSessionID: sessionID)
+            StackDocument(stacks: [defaultStack], currentStackID: stackID)
         ])
     }
 
@@ -54,17 +54,17 @@ final class AnnotationStoreTests: XCTestCase {
             commit: { document in try await recorder.commit(document) }
         )
         var callbackCount = 0
-        let store = try await AnnotationStore(persistence: persistence) {
+        let store = try await StackStore(persistence: persistence) {
             callbackCount += 1
         }
-        let first = annotation(note: "first")
-        let second = annotation(note: "second")
+        let first = makeNote(body: "first")
+        let second = makeNote(body: "second")
         var outcomeEvents: [MutationOutcomeEvent] = []
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: first), outcome: {
+        store.mutate(.addNote(stackID: stackID, note: first), outcome: {
             outcomeEvents.append(MutationOutcomeEvent(mutation: "first", outcome: $0))
         })
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: second), outcome: {
+        store.mutate(.addNote(stackID: stackID, note: second), outcome: {
             outcomeEvents.append(MutationOutcomeEvent(mutation: "second", outcome: $0))
         })
         await store.waitForIdle()
@@ -78,7 +78,7 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertTrue(store.hasPendingMutations)
         XCTAssertEqual(callbackCount, 0)
         var attempts = await recorder.documents()
-        XCTAssertEqual(attempts.map { $0.sessions[0].entries.map(\.note) }, [["first"]])
+        XCTAssertEqual(attempts.map { $0.stacks[0].notes.map(\.body) }, [["first"]])
 
         store.retryPendingMutations()
         XCTAssertEqual(store.state, .processing)
@@ -95,44 +95,44 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertFalse(store.hasPendingMutations)
         XCTAssertEqual(callbackCount, 2)
         attempts = await recorder.documents()
-        XCTAssertEqual(attempts.map { $0.sessions[0].entries.map(\.note) }, [
+        XCTAssertEqual(attempts.map { $0.stacks[0].notes.map(\.body) }, [
             ["first"],
             ["first"],
             ["first", "second"],
         ])
     }
 
-    func testDeleteThenAddToDeletedSessionRejectsInQueueOrder() async throws {
-        let first = document(name: "First").sessions[0]
-        let second = Session(
+    func testDeleteThenAddToDeletedStackRejectsInQueueOrder() async throws {
+        let first = document(name: "First").stacks[0]
+        let second = Stack(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!,
             name: "Second",
             createdAt: now
         )
-        let original = StoreDocument(
-            sessions: [first, second],
-            currentSessionID: first.id
+        let original = StackDocument(
+            stacks: [first, second],
+            currentStackID: first.id
         )
         let recorder = CommitRecorder()
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { document in await recorder.record(document) }
         ))
-        var outcomes: [AnnotationStoreMutationOutcome] = []
+        var outcomes: [StackMutationOutcome] = []
 
-        store.mutate(.deleteSession(sessionID: first.id), outcome: { outcomes.append($0) })
+        store.mutate(.deleteStack(stackID: first.id), outcome: { outcomes.append($0) })
         store.mutate(
-            .addAnnotation(sessionID: first.id, annotation: annotation(note: "too late")),
+            .addNote(stackID: first.id, note: makeNote(body: "too late")),
             outcome: { outcomes.append($0) }
         )
         await store.waitForIdle()
 
         XCTAssertEqual(outcomes, [
             .committed,
-            .rejected("The target session no longer exists."),
+            .rejected("The target stack no longer exists."),
         ])
-        XCTAssertEqual(store.sessions, [second])
-        XCTAssertEqual(store.error, .mutationRejected("The target session no longer exists."))
+        XCTAssertEqual(store.stacks, [second])
+        XCTAssertEqual(store.error, .mutationRejected("The target stack no longer exists."))
         let commits = await recorder.documents()
         XCTAssertEqual(commits.count, 1)
     }
@@ -140,14 +140,14 @@ final class AnnotationStoreTests: XCTestCase {
     func testNoOpOutcomeFiresOnceAfterMutationIsRemoved() async throws {
         let original = document()
         let recorder = CommitRecorder()
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { document in await recorder.record(document) }
         ))
-        var outcomes: [AnnotationStoreMutationOutcome] = []
+        var outcomes: [StackMutationOutcome] = []
         var pendingStates: [Bool] = []
 
-        store.mutate(.switchSession(sessionID: sessionID), outcome: { outcome in
+        store.mutate(.switchStack(stackID: stackID), outcome: { outcome in
             outcomes.append(outcome)
             pendingStates.append(store.hasPendingMutations)
         })
@@ -166,17 +166,17 @@ final class AnnotationStoreTests: XCTestCase {
             load: { original },
             commit: { document in try await recorder.recordAfterDelay(document) }
         )
-        let store = try await AnnotationStore(persistence: persistence)
-        let annotations = [annotation(note: "one"), annotation(note: "two"), annotation(note: "three")]
+        let store = try await StackStore(persistence: persistence)
+        let notes = [makeNote(body: "one"), makeNote(body: "two"), makeNote(body: "three")]
 
-        for annotation in annotations {
-            store.mutate(.addAnnotation(sessionID: sessionID, annotation: annotation))
+        for note in notes {
+            store.mutate(.addNote(stackID: stackID, note: note))
         }
         await store.waitForIdle()
 
-        XCTAssertEqual(store.currentEntries, annotations)
+        XCTAssertEqual(store.currentEntries, notes)
         let commits = await recorder.documents()
-        XCTAssertEqual(commits.map { $0.sessions[0].entries.map(\.note) }, [
+        XCTAssertEqual(commits.map { $0.stacks[0].notes.map(\.body) }, [
             ["one"],
             ["one", "two"],
             ["one", "two", "three"],
@@ -196,14 +196,14 @@ final class AnnotationStoreTests: XCTestCase {
                 await gate.wait()
             }
         )
-        var callbackSnapshots: [[Annotation]] = []
-        var store: AnnotationStore!
-        store = try await AnnotationStore(persistence: persistence) {
+        var callbackSnapshots: [[Note]] = []
+        var store: StackStore!
+        store = try await StackStore(persistence: persistence) {
             callbackSnapshots.append(store.currentEntries)
         }
-        let added = annotation(note: "committed")
+        let added = makeNote(body: "committed")
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: added))
+        store.mutate(.addNote(stackID: stackID, note: added))
         await fulfillment(of: [commitStarted], timeout: 1)
         XCTAssertEqual(store.state, .processing)
         store.retryPendingMutations()
@@ -220,21 +220,21 @@ final class AnnotationStoreTests: XCTestCase {
 
     func testClearBeforeLateProvenanceThenUndoRestoresEnrichment() async throws {
         let original = document()
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { _ in }
         ))
-        let base = annotation(note: "Keep")
+        let base = makeNote(body: "Keep")
         let enriched = Provenance(
             application: base.provenance.application,
             windowTitle: "Focused window"
         )
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: base))
-        store.mutate(.clearSession(sessionID: sessionID))
-        store.mutate(.updateAnnotationProvenance(
-            sessionID: sessionID,
-            annotationID: base.id,
+        store.mutate(.addNote(stackID: stackID, note: base))
+        store.mutate(.clearStack(stackID: stackID))
+        store.mutate(.updateNoteProvenance(
+            stackID: stackID,
+            noteID: base.id,
             expectedApplication: base.provenance.application,
             provenance: enriched
         ))
@@ -264,17 +264,17 @@ final class AnnotationStoreTests: XCTestCase {
         )
         var callbackCount = 0
         var outcomeEvents: [MutationOutcomeEvent] = []
-        let store = try await AnnotationStore(persistence: persistence) {
+        let store = try await StackStore(persistence: persistence) {
             callbackCount += 1
         }
 
         store.mutate(
-            .addAnnotation(sessionID: sessionID, annotation: annotation(note: "in flight")),
+            .addNote(stackID: stackID, note: makeNote(body: "in flight")),
             outcome: { outcomeEvents.append(MutationOutcomeEvent(mutation: "active", outcome: $0)) }
         )
         await fulfillment(of: [commitStarted], timeout: 1)
         store.mutate(
-            .addAnnotation(sessionID: sessionID, annotation: annotation(note: "queued")),
+            .addNote(stackID: stackID, note: makeNote(body: "queued")),
             outcome: { outcomeEvents.append(MutationOutcomeEvent(mutation: "queued", outcome: $0)) }
         )
         let idleWaiter = Task { await store.waitForIdle() }
@@ -295,7 +295,7 @@ final class AnnotationStoreTests: XCTestCase {
         var commitAttemptCount = await attempts.count()
         XCTAssertEqual(commitAttemptCount, 1)
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: annotation(note: "late")))
+        store.mutate(.addNote(stackID: stackID, note: makeNote(body: "late")))
         XCTAssertEqual(store.error, .tornDown)
 
         await gate.open()
@@ -316,15 +316,15 @@ final class AnnotationStoreTests: XCTestCase {
     func testFailureCallbackCanRetryAfterObservingHaltedState() async throws {
         let original = document()
         let recorder = AttemptRecorder(failingAttempts: [1])
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { try await recorder.commit($0) }
         ))
         let completed = expectation(description: "retry committed")
-        var states: [AnnotationStore.State] = []
-        var outcomes: [AnnotationStoreMutationOutcome] = []
-        let added = annotation(note: "retry from callback")
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: added)) { outcome in
+        var states: [StackStore.State] = []
+        var outcomes: [StackMutationOutcome] = []
+        let added = makeNote(body: "retry from callback")
+        store.mutate(.addNote(stackID: stackID, note: added)) { outcome in
             states.append(store.state)
             outcomes.append(outcome)
             if case .commitFailed = outcome {
@@ -347,19 +347,19 @@ final class AnnotationStoreTests: XCTestCase {
     func testEnqueueWhileHaltedWaitsForRetryAndTeardownIsTerminal() async throws {
         let original = document()
         let recorder = AttemptRecorder(failingAttempts: [1])
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { try await recorder.commit($0) }
         ))
-        var outcomes: [AnnotationStoreMutationOutcome] = []
-        store.mutate(.renameSession(sessionID: sessionID, name: "Failed")) { outcomes.append($0) }
+        var outcomes: [StackMutationOutcome] = []
+        store.mutate(.renameStack(stackID: stackID, name: "Failed")) { outcomes.append($0) }
         await store.waitForIdle()
-        store.mutate(.renameSession(sessionID: sessionID, name: "Queued")) { outcomes.append($0) }
+        store.mutate(.renameStack(stackID: stackID, name: "Queued")) { outcomes.append($0) }
         await store.waitForIdle()
         XCTAssertEqual(store.state, .halted)
         let attempts = await recorder.documents()
         XCTAssertEqual(attempts.count, 1)
-        XCTAssertEqual(store.currentSession.name, "First")
+        XCTAssertEqual(store.currentStack.name, "First")
         store.teardown()
         store.teardown()
         store.retryPendingMutations()
@@ -371,13 +371,13 @@ final class AnnotationStoreTests: XCTestCase {
     func testDrainReturnsOnceAQueuedCommitLands() async throws {
         let original = document()
         let gate = AsyncGate()
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { _ in await gate.wait() }
         ))
-        let added = annotation(note: "queued at quit")
+        let added = makeNote(body: "queued at quit")
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: added))
+        store.mutate(.addNote(stackID: stackID, note: added))
         let drain = Task { await store.drain(timeout: .seconds(5)) }
         await Task.yield()
         XCTAssertEqual(store.state, .processing)
@@ -392,12 +392,12 @@ final class AnnotationStoreTests: XCTestCase {
     func testDrainGivesUpAfterTheTimeoutAndLeavesTheStoreProcessing() async throws {
         let original = document()
         let gate = AsyncGate()
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { _ in await gate.wait() }
         ))
 
-        store.mutate(.addAnnotation(sessionID: sessionID, annotation: annotation(note: "slow")))
+        store.mutate(.addNote(stackID: stackID, note: makeNote(body: "slow")))
         await store.drain(timeout: .milliseconds(20))
 
         XCTAssertEqual(store.state, .processing)
@@ -410,14 +410,14 @@ final class AnnotationStoreTests: XCTestCase {
     func testDrainReturnsAtOnceForAnIdleOrHaltedStore() async throws {
         let original = document()
         let recorder = AttemptRecorder(failingAttempts: [1])
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { original },
             commit: { try await recorder.commit($0) }
         ))
         await store.drain(timeout: .seconds(5))
         XCTAssertEqual(store.state, .idle)
 
-        store.mutate(.renameSession(sessionID: sessionID, name: "Fails"))
+        store.mutate(.renameStack(stackID: stackID, name: "Fails"))
         await store.waitForIdle()
         XCTAssertEqual(store.state, .halted)
         await store.drain(timeout: .seconds(5))
@@ -427,7 +427,7 @@ final class AnnotationStoreTests: XCTestCase {
     func testCancelledLoadCannotReturnAnActiveStore() async {
         let original = document()
         let task = Task {
-            try await AnnotationStore(persistence: StorePersistence(
+            try await StackStore(persistence: StorePersistence(
                 load: {
                     withUnsafeCurrentTask { $0?.cancel() }
                     return original
@@ -443,17 +443,17 @@ final class AnnotationStoreTests: XCTestCase {
         }
     }
 
-    private func document(name: String = "First") -> StoreDocument {
-        StoreDocument(
-            sessions: [Session(id: sessionID, name: name, createdAt: now)],
-            currentSessionID: sessionID
+    private func document(name: String = "First") -> StackDocument {
+        StackDocument(
+            stacks: [Stack(id: stackID, name: name, createdAt: now)],
+            currentStackID: stackID
         )
     }
 
-    private func annotation(note: String) -> Annotation {
-        Annotation(
+    private func makeNote(body: String) -> Note {
+        Note(
             subject: .standalone,
-            note: note,
+            body: body,
             provenance: Provenance(application: ApplicationIdentity(name: "Tests")),
             createdAt: now
         )
@@ -462,7 +462,7 @@ final class AnnotationStoreTests: XCTestCase {
 
 private struct MutationOutcomeEvent: Equatable {
     let mutation: String
-    let outcome: AnnotationStoreMutationOutcome
+    let outcome: StackMutationOutcome
 }
 
 private enum TestFailure: LocalizedError, CustomStringConvertible {
@@ -474,26 +474,26 @@ private enum TestFailure: LocalizedError, CustomStringConvertible {
 
 private actor AttemptRecorder {
     private let failingAttempts: Set<Int>
-    private var attemptedDocuments: [StoreDocument] = []
+    private var attemptedDocuments: [StackDocument] = []
 
     init(failingAttempts: Set<Int>) {
         self.failingAttempts = failingAttempts
     }
 
-    func commit(_ document: StoreDocument) throws {
+    func commit(_ document: StackDocument) throws {
         attemptedDocuments.append(document)
         if failingAttempts.contains(attemptedDocuments.count) {
             throw TestFailure.failed
         }
     }
 
-    func documents() -> [StoreDocument] {
+    func documents() -> [StackDocument] {
         attemptedDocuments
     }
 }
 
 private actor CommitRecorder {
-    private var committed: [StoreDocument] = []
+    private var committed: [StackDocument] = []
     private var inFlightCommitCount = 0
     private var maximumInFlightCount = 0
     private let delayNanoseconds: UInt64
@@ -502,11 +502,11 @@ private actor CommitRecorder {
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func record(_ document: StoreDocument) {
+    func record(_ document: StackDocument) {
         committed.append(document)
     }
 
-    func recordAfterDelay(_ document: StoreDocument) async throws {
+    func recordAfterDelay(_ document: StackDocument) async throws {
         inFlightCommitCount += 1
         maximumInFlightCount = max(maximumInFlightCount, inFlightCommitCount)
         defer { inFlightCommitCount -= 1 }
@@ -514,7 +514,7 @@ private actor CommitRecorder {
         committed.append(document)
     }
 
-    func documents() -> [StoreDocument] {
+    func documents() -> [StackDocument] {
         committed
     }
 

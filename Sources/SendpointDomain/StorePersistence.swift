@@ -17,26 +17,26 @@ public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-/// An injected persistence boundary for the versioned session document.
+/// An injected persistence boundary for the versioned stack document.
 public struct StorePersistence: Sendable {
     public static let fileName = "store.json"
 
-    private let loadOperation: @Sendable () async throws -> StoreDocument?
-    private let commitOperation: @Sendable (StoreDocument) async throws -> Void
+    private let loadOperation: @Sendable () async throws -> StackDocument?
+    private let commitOperation: @Sendable (StackDocument) async throws -> Void
 
     public init(
-        load: @escaping @Sendable () async throws -> StoreDocument?,
-        commit: @escaping @Sendable (StoreDocument) async throws -> Void
+        load: @escaping @Sendable () async throws -> StackDocument?,
+        commit: @escaping @Sendable (StackDocument) async throws -> Void
     ) {
         self.loadOperation = load
         self.commitOperation = commit
     }
 
-    public func load() async throws -> StoreDocument? {
+    public func load() async throws -> StackDocument? {
         try await loadOperation()
     }
 
-    public func commit(_ document: StoreDocument) async throws {
+    public func commit(_ document: StackDocument) async throws {
         try await commitOperation(document)
     }
 
@@ -89,7 +89,7 @@ private actor AtomicJSONStore {
         self.quarantineDateFormatter = ISO8601DateFormatter()
     }
 
-    func load() throws -> StoreDocument? {
+    func load() throws -> StackDocument? {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
 
@@ -108,13 +108,13 @@ private actor AtomicJSONStore {
             try quarantine(using: fileManager)
             return nil
         }
-        guard version == StoreDocument.currentVersion else {
+        guard version == StackDocument.currentVersion else {
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
         do {
-            let document = try decoder.decode(StoreDocument.self, from: data)
-            try SessionDocumentMutations.validate(document)
+            let document = try decoder.decode(StackDocument.self, from: data)
+            try StackDocumentMutations.validate(document)
             return document
         } catch {
             try quarantine(using: fileManager)
@@ -122,13 +122,13 @@ private actor AtomicJSONStore {
         }
     }
 
-    func commit(_ document: StoreDocument) throws {
-        guard document.version == StoreDocument.currentVersion else {
+    func commit(_ document: StackDocument) throws {
+        guard document.version == StackDocument.currentVersion else {
             throw StorePersistenceError.unsupportedVersion(document.version)
         }
         do {
-            try SessionDocumentMutations.validate(document)
-        } catch let error as SessionDocumentValidationError {
+            try StackDocumentMutations.validate(document)
+        } catch let error as StackDocumentValidationError {
             throw StorePersistenceError.invalidDocument(error.message)
         }
 

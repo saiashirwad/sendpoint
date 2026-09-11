@@ -4,7 +4,7 @@ import SendpointDomain
 
 struct ExportRequest: Equatable {
     let id: UUID
-    let session: Session
+    let stack: Stack
     let markdown: String
     let clearAfterCopy: Bool
     let pasteTarget: pid_t?
@@ -14,7 +14,7 @@ enum ExportAction {
     case begin(ExportRequest)
     case copied(UUID, revision: Int?)
     case pasted(UUID, dispatched: Bool)
-    case cleared(UUID, AnnotationStoreMutationOutcome)
+    case cleared(UUID, StackMutationOutcome)
     case retry, teardown
 }
 
@@ -79,7 +79,7 @@ enum ExportState: Equatable {
 
     private mutating func finishCopy(_ request: ExportRequest) -> [ExportEffect] {
         let verb = request.pasteTarget == nil ? "Copied" : "Paste sent for"
-        let report = ExportEffect.report("\(verb) \(request.session.entries.count) notes")
+        let report = ExportEffect.report("\(verb) \(request.stack.notes.count) notes")
         self = request.clearAfterCopy ? .clearing(request) : .idle
         return request.clearAfterCopy ? [report, .clear(request)] : [report]
     }
@@ -108,25 +108,25 @@ final class ExportController {
     private(set) var state: ExportState = .idle
     @ObservationIgnored private let services: ExportServices
     @ObservationIgnored private var pasteTask: Task<Void, Never>?
-    @ObservationIgnored private weak var store: AnnotationStore?
+    @ObservationIgnored private weak var store: StackStore?
     @ObservationIgnored private var report: (String) -> Void = { _ in }
 
     init(services: ExportServices? = nil) { self.services = services ?? .live }
 
-    func copy(store: AnnotationStore, sessionID: UUID, profile: Profile,
+    func copy(store: StackStore, stackID: UUID, template: Template,
               pasteTarget: pid_t? = nil, report: @escaping (String) -> Void) {
-        guard let session = store.sessions.first(where: { $0.id == sessionID }), !session.entries.isEmpty else {
+        guard let stack = store.stacks.first(where: { $0.id == stackID }), !stack.notes.isEmpty else {
             report("Nothing to copy")
             return
         }
         self.store = store
         self.report = report
-        send(.begin(ExportRequest(id: UUID(), session: session,
-            markdown: PromptComposer.markdown(session: session, profile: profile),
-            clearAfterCopy: profile.clearSessionAfterExport, pasteTarget: pasteTarget)))
+        send(.begin(ExportRequest(id: UUID(), stack: stack,
+            markdown: PromptComposer.markdown(stack: stack, template: template),
+            clearAfterCopy: template.clearStackAfterExport, pasteTarget: pasteTarget)))
     }
 
-    func copyNote(_ note: Annotation, report: (String) -> Void) {
+    func copyNote(_ note: Note, report: (String) -> Void) {
         guard state != .tornDown else { return }
         // Changing the clipboard explicitly aborts any delayed stack paste.
         pasteTask?.cancel()
@@ -158,7 +158,7 @@ final class ExportController {
                     }
                 }
             case let .clear(request):
-                store?.mutate(.clearExportedAnnotations(sessionID: request.session.id, entries: request.session.entries)) {
+                store?.mutate(.clearExportedNotes(stackID: request.stack.id, notes: request.stack.notes)) {
                     [weak self] outcome in self?.send(.cleared(request.id, outcome))
                 }
             case let .report(message): report(message)

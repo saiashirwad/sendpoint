@@ -16,7 +16,7 @@ final class StatusMenuModelTests: XCTestCase {
             XCTAssertNotNil(loadingCopy)
             XCTAssertNil(loadingCopy?.action)
 
-            let empty = facts(sessions: [Session(id: firstStackID, name: "Default")], current: firstStackID)
+            let empty = facts(stacks: [Stack(id: firstStackID, name: "Default")], current: firstStackID)
             let available = items(facts: empty, status: .available, settings: settings)
             let emptyCopy = entry(titled: "Nothing captured yet", in: available)
             XCTAssertNotNil(emptyCopy)
@@ -30,30 +30,30 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
-    func testProfileSubmenuChecksActiveProfileAndCarriesSelection() {
+    func testTemplateSubmenuChecksActiveTemplateAndCarriesSelection() {
         withSettings { settings in
             let menu = items(facts: nil, status: .loading, settings: settings)
-            guard let profiles = submenu(titled: "Template", in: menu) else {
+            guard let templates = submenu(titled: "Template", in: menu) else {
                 return XCTFail("expected a Template submenu")
             }
 
-            XCTAssertEqual(entries(in: profiles).map(\.title), settings.profiles.map(\.name))
-            for profile in settings.profiles {
-                let profileEntry = entry(titled: profile.name, in: profiles)
-                XCTAssertEqual(profileEntry?.action, .selectProfile(profile.id))
-                XCTAssertEqual(profileEntry?.representedID, profile.id)
-                XCTAssertEqual(profileEntry?.checked, profile.id == settings.activeProfileID)
+            XCTAssertEqual(entries(in: templates).map(\.title), settings.templates.map(\.name))
+            for template in settings.templates {
+                let templateEntry = entry(titled: template.name, in: templates)
+                XCTAssertEqual(templateEntry?.action, .selectTemplate(template.id))
+                XCTAssertEqual(templateEntry?.representedID, template.id)
+                XCTAssertEqual(templateEntry?.checked, template.id == settings.activeTemplateID)
             }
-            XCTAssertEqual(entries(in: profiles).filter(\.checked).count, 1)
+            XCTAssertEqual(entries(in: templates).filter(\.checked).count, 1)
         }
     }
 
-    func testStackSubmenuListsSessionsWithCountsAndSwitchActions() {
+    func testStackSubmenuListsStacksWithCountsAndSwitchActions() {
         withSettings { settings in
-            let first = session(id: firstStackID, name: "First", noteCount: 1)
-            let second = session(id: secondStackID, name: "Second", noteCount: 2)
+            let first = stack(id: firstStackID, name: "First", noteCount: 1)
+            let second = stack(id: secondStackID, name: "Second", noteCount: 2)
             let menu = items(
-                facts: facts(sessions: [first, second], current: firstStackID),
+                facts: facts(stacks: [first, second], current: firstStackID),
                 status: .available,
                 settings: settings
             )
@@ -72,15 +72,15 @@ final class StatusMenuModelTests: XCTestCase {
 
     func testUndoItemAppearsOnlyWithAClearedBatch() {
         withSettings { settings in
-            let session = session(id: firstStackID, name: "First", noteCount: 1)
-            let withoutUndo = facts(sessions: [session], current: firstStackID)
+            let stack = stack(id: firstStackID, name: "First", noteCount: 1)
+            let withoutUndo = facts(stacks: [stack], current: firstStackID)
             XCTAssertNil(entry(
                 titled: "Undo Clear (1)",
                 in: items(facts: withoutUndo, status: .available, settings: settings)
             ))
 
-            let cleared = ClearedBatch(sessionID: firstStackID, entries: [annotation()])
-            let withUndo = facts(sessions: [session], current: firstStackID, lastCleared: cleared)
+            let cleared = ClearedBatch(stackID: firstStackID, notes: [makeNote()])
+            let withUndo = facts(stacks: [stack], current: firstStackID, lastCleared: cleared)
             let undo = entry(titled: "Undo Clear (1)", in: items(facts: withUndo, status: .available, settings: settings))
             XCTAssertEqual(undo?.action, .undoClear)
             XCTAssertEqual(undo?.keyEquivalent, "z")
@@ -89,13 +89,13 @@ final class StatusMenuModelTests: XCTestCase {
 
     func testErrorAndRetryItemsRequireErrorAndPendingMutations() {
         withSettings { settings in
-            let session = session(id: firstStackID, name: "First", noteCount: 1)
-            let current = facts(sessions: [session], current: firstStackID)
+            let stack = stack(id: firstStackID, name: "First", noteCount: 1)
+            let current = facts(stacks: [stack], current: firstStackID)
             let noError = items(facts: current, status: .available, settings: settings)
             XCTAssertNil(entry(titled: "Couldn't save the stack change: disk full", in: noError))
             XCTAssertNil(entry(titled: "Retry Pending Stack Changes", in: noError))
 
-            let error: AnnotationStoreError = .commitFailed("disk full")
+            let error: StackStoreError = .commitFailed("disk full")
             let errorOnly = items(facts: current, status: .available, settings: settings, error: error)
             XCTAssertNotNil(entry(titled: "Couldn't save the stack change: disk full", in: errorOnly))
             XCTAssertNil(entry(titled: "Retry Pending Stack Changes", in: errorOnly))
@@ -117,7 +117,7 @@ final class StatusMenuModelTests: XCTestCase {
 
     func testNextAndPreviousStackAppearOnlyWhenTheirCombosAreSet() throws {
         try withSettings { settings in
-            let current = facts(sessions: [session(id: firstStackID, name: "First", noteCount: 1)], current: firstStackID)
+            let current = facts(stacks: [stack(id: firstStackID, name: "First", noteCount: 1)], current: firstStackID)
             let unbound = submenu(titled: "Stack", in: items(facts: current, status: .available, settings: settings))
             XCTAssertNotNil(unbound)
             XCTAssertNil(entry(titled: "Next Stack", in: unbound ?? []))
@@ -141,10 +141,10 @@ final class StatusMenuModelTests: XCTestCase {
     }
 
     private func items(
-        facts: SessionUIFacts?,
+        facts: StackUIFacts?,
         status: StatusMenuStoreStatus,
         settings: AppSettings,
-        error: AnnotationStoreError? = nil,
+        error: StackStoreError? = nil,
         hasPendingMutations: Bool = false
     ) -> [StatusMenuItem] {
         StatusMenuModel.items(
@@ -156,18 +156,18 @@ final class StatusMenuModelTests: XCTestCase {
         )
     }
 
-    private func facts(sessions: [Session], current: UUID, lastCleared: ClearedBatch? = nil) -> SessionUIFacts {
-        SessionUIFacts(sessions: sessions, currentSessionID: current, lastCleared: lastCleared)
+    private func facts(stacks: [Stack], current: UUID, lastCleared: ClearedBatch? = nil) -> StackUIFacts {
+        StackUIFacts(stacks: stacks, currentStackID: current, lastCleared: lastCleared)
     }
 
-    private func session(id: UUID, name: String, noteCount: Int) -> Session {
-        Session(id: id, name: name, entries: (0..<noteCount).map { _ in annotation() })
+    private func stack(id: UUID, name: String, noteCount: Int) -> Stack {
+        Stack(id: id, name: name, notes: (0..<noteCount).map { _ in makeNote() })
     }
 
-    private func annotation() -> Annotation {
-        Annotation(
+    private func makeNote() -> Note {
+        Note(
             subject: .standalone,
-            note: "A note",
+            body: "A note",
             provenance: Provenance(application: ApplicationIdentity(name: "Safari"))
         )
     }

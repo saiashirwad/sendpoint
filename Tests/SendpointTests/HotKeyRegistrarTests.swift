@@ -101,14 +101,14 @@ final class HotKeyRegistrarTests: XCTestCase {
         let issues = registrar.register(makeActions())
 
         XCTAssertTrue(issues.isEmpty)
-        let reverse = try XCTUnwrap(settings.switchSessionReverseCombo)
+        let reverse = try XCTUnwrap(settings.switchStackReverseCombo)
         let shiftCalls = calls.filter { $0.modifiers & UInt32(shiftKey) != 0 }
         XCTAssertEqual(shiftCalls.count, 1)
         XCTAssertEqual(shiftCalls.first?.keyCode, UInt32(reverse.keyCode))
         XCTAssertEqual(shiftCalls.first?.modifiers, reverse.carbonModifiers)
         let primaryIndex = try XCTUnwrap(calls.firstIndex {
-            $0.keyCode == UInt32(settings.switchSessionCombo.keyCode)
-                && $0.modifiers == settings.switchSessionCombo.carbonModifiers
+            $0.keyCode == UInt32(settings.switchStackCombo.keyCode)
+                && $0.modifiers == settings.switchStackCombo.carbonModifiers
         })
         let reverseIndex = try XCTUnwrap(calls.firstIndex { $0.modifiers & UInt32(shiftKey) != 0 })
         XCTAssertGreaterThan(reverseIndex, primaryIndex)
@@ -128,7 +128,7 @@ final class HotKeyRegistrarTests: XCTestCase {
 
         _ = secondRegistrar.register(makeActions())
 
-        XCTAssertTrue(failingModifiers.contains { $0 == settings.switchSessionCombo.carbonModifiers })
+        XCTAssertTrue(failingModifiers.contains { $0 == settings.switchStackCombo.carbonModifiers })
         XCTAssertEqual(failingModifiers.filter { $0 & UInt32(shiftKey) != 0 }.count, 0)
     }
 

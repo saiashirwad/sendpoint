@@ -6,12 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var setupWindowController: SetupWindowController?
     private var accessibilityHelperWindowController: AccessibilityHelperWindowController?
-    private var profileEditor: ProfileEditorState?
+    private var templateEditor: TemplateEditorState?
     private var palette: StackPaletteWindowController?
     private var switcher: StackSwitcherController?
     private enum StoreState {
         case loading
-        case available(AnnotationStore)
+        case available(StackStore)
         case unavailable(String)
     }
 
@@ -59,12 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installMainMenu()
         statusItemController.onAction = { [weak self] action in self?.perform(action) }
         settings.onHotKeysChanged = { [weak self] in self?.registerHotKeys() }
-        settings.onProfilesChanged = { [weak self] in self?.refreshStatusItem() }
+        settings.onTemplatesChanged = { [weak self] in self?.refreshStatusItem() }
         settings.onInputDeviceChanged = { [settings] in
-            VoiceAnnotationService.shared.preferredInputDeviceUID = settings.inputDeviceUID
+            VoiceNoteService.shared.preferredInputDeviceUID = settings.inputDeviceUID
         }
-        VoiceAnnotationService.shared.preferredInputDeviceUID = settings.inputDeviceUID
-        VoiceAnnotationService.shared.warmUp()
+        VoiceNoteService.shared.preferredInputDeviceUID = settings.inputDeviceUID
+        VoiceNoteService.shared.warmUp()
         captureController.warmUp()
         registerHotKeys()
         permissionState.refresh()
@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bootstrapTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let store = try await AnnotationStore(
+                let store = try await StackStore(
                     persistence: .live(),
                     onChange: { [weak self] in self?.storeDidChange() }
                 )
@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatusItem()
     }
 
-    private var store: AnnotationStore? {
+    private var store: StackStore? {
         guard case let .available(store) = storeState else { return nil }
         return store
     }
@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if let profileEditor, !ProfileDialogs.shouldClose(profileEditor) { return .terminateCancel }
+        if let templateEditor, !TemplateDialogs.shouldClose(templateEditor) { return .terminateCancel }
         guard let store, store.state == .processing else { return .terminateNow }
         // A save queued just before ⌘Q must reach disk before teardown cancels it.
         terminationTask = Task {
@@ -172,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutomaticSelectionMonitor.shared.teardown()
         store?.teardown()
         settings.onHotKeysChanged = nil
-        settings.onProfilesChanged = nil
+        settings.onTemplatesChanged = nil
         settings.onInputDeviceChanged = nil
         hotKeyRegistrar.unregisterAll()
     }
@@ -222,16 +222,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshStatusItem() {
         let count = store?.currentEntries.count ?? 0
-        let sessionName = store?.currentSession.name ?? "No stack"
+        let stackName = store?.currentStack.name ?? "No stack"
         statusItemController.setBaseTitle(
             count > 0 ? " \(count)" : "",
-            tooltip: "\(sessionName) · \(settings.activeProfile.name)"
+            tooltip: "\(stackName) · \(settings.activeTemplate.name)"
         )
         statusItemController.rebuildMenu(
             facts: store.map {
-                SessionUIFacts(
-                    sessions: $0.sessions,
-                    currentSessionID: $0.currentSessionID,
+                StackUIFacts(
+                    stacks: $0.stacks,
+                    currentStackID: $0.currentStackID,
                     lastCleared: $0.lastCleared
                 )
             },
@@ -272,20 +272,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             captureSelection()
         case .showStack:
             showStack()
-        case let .switchToStack(sessionID):
-            switchToSession(sessionID)
+        case let .switchToStack(stackID):
+            switchToStack(stackID)
         case .quickSwitcher:
             showQuickSwitcher()
         case .nextStack:
             nextStack()
         case .previousStack:
             previousStack()
-        case let .selectProfile(profileID):
-            selectProfile(profileID)
+        case let .selectTemplate(templateID):
+            selectTemplate(templateID)
         case .copyMarkdown:
             copyMarkdown()
-        case let .clearSession(sessionID):
-            clearSession(sessionID)
+        case let .clearStack(stackID):
+            clearStack(stackID)
         case .undoClear:
             undoClear()
         case .retryPendingMutations:
@@ -327,25 +327,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func copyMarkdown() {
         guard let store else { NSSound.beep(); return }
         let target = settings.pasteDirectly ? NSWorkspace.shared.frontmostApplication?.processIdentifier : nil
-        exportController.copy(store: store, sessionID: store.currentSessionID,
-            profile: settings.activeProfile, pasteTarget: target) { [weak self] message in
+        exportController.copy(store: store, stackID: store.currentStackID,
+            template: settings.activeTemplate, pasteTarget: target) { [weak self] message in
                 self?.statusItemController.flash(message)
             }
     }
 
     private func clearStack() {
         guard let store else { NSSound.beep(); return }
-        let sessionID = store.currentSessionID
-        guard let session = store.sessions.first(where: { $0.id == sessionID }), !session.entries.isEmpty else {
+        let stackID = store.currentStackID
+        guard let stack = store.stacks.first(where: { $0.id == stackID }), !stack.notes.isEmpty else {
             NSSound.beep()
             return
         }
-        Diag.log("clearStack invoked, session=\(sessionID), count=\(session.entries.count)")
-        enqueueMenuMutation(.clearSession(sessionID: sessionID))
+        Diag.log("clearStack invoked, stack=\(stackID), count=\(stack.notes.count)")
+        enqueueMenuMutation(.clearStack(stackID: stackID))
     }
 
-    private func clearSession(_ sessionID: UUID) {
-        enqueueMenuMutation(.clearSession(sessionID: sessionID))
+    private func clearStack(_ stackID: UUID) {
+        enqueueMenuMutation(.clearStack(stackID: stackID))
     }
 
     private func undoClear() {
@@ -353,19 +353,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enqueueMenuMutation(.undoClear)
     }
 
-    private func switchToSession(_ sessionID: UUID) {
-        enqueueMenuMutation(.switchSession(sessionID: sessionID))
+    private func switchToStack(_ stackID: UUID) {
+        enqueueMenuMutation(.switchStack(stackID: stackID))
     }
 
-    private func selectProfile(_ profileID: UUID) {
-        requestProfileSelection(profileID)
+    private func selectTemplate(_ templateID: UUID) {
+        requestTemplateSelection(templateID)
     }
 
-    private func requestProfileSelection(_ profileID: UUID) {
-        if let profileEditor {
-            switch profileEditor.requestSelection(profileID) {
+    private func requestTemplateSelection(_ templateID: UUID) {
+        if let templateEditor {
+            switch templateEditor.requestSelection(templateID) {
             case .needsDecision:
-                _ = ProfileDialogs.resolvePendingSelection(profileEditor)
+                _ = TemplateDialogs.resolvePendingSelection(templateEditor)
             case .selected, .unchanged:
                 break
             case .rejected:
@@ -374,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         do {
-            try settings.selectProfile(id: profileID)
+            try settings.selectTemplate(id: templateID)
         } catch {
             NSSound.beep()
         }
@@ -387,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatusItem()
     }
 
-    private func enqueueMenuMutation(_ mutation: SessionDocumentMutation) {
+    private func enqueueMenuMutation(_ mutation: StackDocumentMutation) {
         guard let store else { NSSound.beep(); return }
         store.mutate(mutation) { [weak self] outcome in
             self?.refreshStatusItem()
@@ -399,7 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opens the palette inside the current stack: its notes, full width.
     private func showStack() {
         guard let store else { NSSound.beep(); return }
-        presentPalette(at: .notes(store.currentSessionID))
+        presentPalette(at: .notes(store.currentStackID))
     }
 
     /// Opens the palette at the list of every stack.
@@ -425,20 +425,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switcher.step(-1)
     }
 
-    private func presentPalette(at level: PaletteLevel, highlighting sessionID: UUID? = nil) {
+    private func presentPalette(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
         guard let store else { NSSound.beep(); return }
         if palette == nil {
             palette = StackPaletteWindowController(
                 store: store,
                 settings: settings,
                 export: exportController,
-                onSelectProfile: { [weak self] profileID in
-                    self?.requestProfileSelection(profileID)
+                onSelectTemplate: { [weak self] templateID in
+                    self?.requestTemplateSelection(templateID)
                 },
                 onDismiss: { [weak self] in self?.palette = nil }
             )
         }
-        palette?.show(at: level, highlighting: sessionID)
+        palette?.show(at: level, highlighting: stackID)
     }
 
     private func presentPermissionHelpForCapture() {
@@ -500,14 +500,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.toolbarStyle = .unified
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        let profileEditor = ProfileEditorState(settings: settings)
-        self.profileEditor = profileEditor
+        let templateEditor = TemplateEditorState(settings: settings)
+        self.templateEditor = templateEditor
         let settingsView = SettingsView(
             settings: settings,
-            profileEditor: profileEditor,
+            templateEditor: templateEditor,
             permissionState: permissionState,
-            onSelectProfile: { [weak self] profileID in
-                self?.requestProfileSelection(profileID)
+            onSelectTemplate: { [weak self] templateID in
+                self?.requestTemplateSelection(templateID)
             },
             onShowAccessibilityHelper: { [weak self] in
                 self?.presentAccessibilityHelper()
@@ -558,15 +558,15 @@ extension AppDelegate: NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard sender === settingsWindow, let profileEditor else { return true }
-        return ProfileDialogs.shouldClose(profileEditor)
+        guard sender === settingsWindow, let templateEditor else { return true }
+        return TemplateDialogs.shouldClose(templateEditor)
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         if window === settingsWindow {
             settingsWindow = nil
-            profileEditor = nil
+            templateEditor = nil
         }
     }
 }

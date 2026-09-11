@@ -7,52 +7,52 @@ final class NoteListingTests: XCTestCase {
     private let secondNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
     private let thirdNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!
 
-    private var entries: [Annotation] {
+    private var notes: [Note] {
         [
-            Annotation(
+            Note(
                 id: firstNoteID,
                 subject: .selection(quote: "OT scales quadratically"),
-                note: "Can you explain why?",
+                body: "Can you explain why?",
                 provenance: Provenance(
                     application: ApplicationIdentity(name: "Helium"),
                     windowTitle: "CRDT deep dive",
                     url: URL(string: "https://example.com/crdt")
                 )
             ),
-            Annotation(
+            Note(
                 id: secondNoteID,
                 subject: .standalone,
-                note: "Monoids and semi-groups",
+                body: "Monoids and semi-groups",
                 provenance: Provenance(application: ApplicationIdentity(name: "Safari"))
             ),
-            Annotation(
+            Note(
                 id: thirdNoteID,
                 subject: .selection(quote: "join-semilattice"),
-                note: "",
+                body: "",
                 provenance: Provenance(application: ApplicationIdentity(name: "Helium"))
             ),
         ]
     }
 
     func testNoteListingSearchesQuoteNoteAppAndWindow() {
-        let all = NoteListing(entries: entries, query: "  ")
+        let all = NoteListing(notes: notes, query: "  ")
         XCTAssertEqual(all.ids, [firstNoteID, secondNoteID, thirdNoteID])
 
-        XCTAssertEqual(NoteListing(entries: entries, query: "QUADRAT").ids, [firstNoteID], "quote")
-        XCTAssertEqual(NoteListing(entries: entries, query: "monoid").ids, [secondNoteID], "note")
+        XCTAssertEqual(NoteListing(notes: notes, query: "QUADRAT").ids, [firstNoteID], "quote")
+        XCTAssertEqual(NoteListing(notes: notes, query: "monoid").ids, [secondNoteID], "note")
         XCTAssertEqual(
-            NoteListing(entries: entries, query: "helium").ids, [firstNoteID, thirdNoteID], "app")
-        XCTAssertEqual(NoteListing(entries: entries, query: "deep dive").ids, [firstNoteID], "window")
-        XCTAssertTrue(NoteListing(entries: entries, query: "zzz").isEmpty)
+            NoteListing(notes: notes, query: "helium").ids, [firstNoteID, thirdNoteID], "app")
+        XCTAssertEqual(NoteListing(notes: notes, query: "deep dive").ids, [firstNoteID], "window")
+        XCTAssertTrue(NoteListing(notes: notes, query: "zzz").isEmpty)
     }
 
 
     func testSearchFoldsCaseDiacriticsAndWidthWithoutReordering() {
-        let matching = Annotation(
-            subject: .standalone, note: "Ｃａｆé", provenance: Provenance(application: ApplicationIdentity(name: "Reader"))
+        let matching = Note(
+            subject: .standalone, body: "Ｃａｆé", provenance: Provenance(application: ApplicationIdentity(name: "Reader"))
         )
-        let listing = NoteListing(entries: [entries[0], matching, entries[1]], query: "  CAFE  ")
-        XCTAssertEqual(listing.entries, [matching])
-        XCTAssertTrue(NoteListing(entries: [], query: "anything").isEmpty)
+        let listing = NoteListing(notes: [notes[0], matching, notes[1]], query: "  CAFE  ")
+        XCTAssertEqual(listing.notes, [matching])
+        XCTAssertTrue(NoteListing(notes: [], query: "anything").isEmpty)
     }
 }

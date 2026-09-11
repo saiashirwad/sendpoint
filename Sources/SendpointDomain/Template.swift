@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Profile: Codable, Hashable, Sendable, Identifiable {
+public struct Template: Codable, Hashable, Sendable, Identifiable {
     public let id: UUID
     public var name: String
     public var preamble: String
@@ -9,8 +9,8 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
     public var includeLink: Bool
     public var includeTimestamps: Bool
     public var includeHeading: Bool
-    public var includeEntryNumbers: Bool
-    public var clearSessionAfterExport: Bool
+    public var includeNoteNumbers: Bool
+    public var clearStackAfterExport: Bool
 
     public init(
         id: UUID = UUID(),
@@ -21,8 +21,8 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
         includeLink: Bool,
         includeTimestamps: Bool,
         includeHeading: Bool,
-        includeEntryNumbers: Bool,
-        clearSessionAfterExport: Bool
+        includeNoteNumbers: Bool,
+        clearStackAfterExport: Bool
     ) {
         self.id = id
         self.name = name
@@ -32,13 +32,13 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
         self.includeLink = includeLink
         self.includeTimestamps = includeTimestamps
         self.includeHeading = includeHeading
-        self.includeEntryNumbers = includeEntryNumbers
-        self.clearSessionAfterExport = clearSessionAfterExport
+        self.includeNoteNumbers = includeNoteNumbers
+        self.clearStackAfterExport = clearStackAfterExport
     }
 }
 
-public extension Profile {
-    static let coherent = Profile(
+public extension Template {
+    static let coherent = Template(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
         name: "Coherent",
         preamble: "These are my reading notes, captured in order while I read. Each entry is either a response to a quoted passage or a standalone thought. Read the notes as a whole and give me one coherent response that takes all of them into account. Restate enough context to make each part of your response understandable without requiring me to scroll back. Do not respond point by point unless the notes ask you to.",
@@ -47,11 +47,11 @@ public extension Profile {
         includeLink: true,
         includeTimestamps: true,
         includeHeading: true,
-        includeEntryNumbers: false,
-        clearSessionAfterExport: false
+        includeNoteNumbers: false,
+        clearStackAfterExport: false
     )
 
-    static let pointByPoint = Profile(
+    static let pointByPoint = Template(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
         name: "Point by Point",
         preamble: "These are my reading notes, captured in order while I read. Each entry is either a response to a quoted passage or a standalone thought. Address each note separately. Before answering a note, restate the relevant topic or quoted idea in a few words so I never need to look up an entry number.",
@@ -60,11 +60,11 @@ public extension Profile {
         includeLink: true,
         includeTimestamps: true,
         includeHeading: true,
-        includeEntryNumbers: true,
-        clearSessionAfterExport: false
+        includeNoteNumbers: true,
+        clearStackAfterExport: false
     )
 
-    static let plain = Profile(
+    static let plain = Template(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
         name: "Plain",
         preamble: "",
@@ -73,9 +73,9 @@ public extension Profile {
         includeLink: false,
         includeTimestamps: false,
         includeHeading: false,
-        includeEntryNumbers: false,
-        clearSessionAfterExport: false
+        includeNoteNumbers: false,
+        clearStackAfterExport: false
     )
 
-    static let builtIns: [Profile] = [.plain, .coherent, .pointByPoint]
+    static let builtIns: [Template] = [.plain, .coherent, .pointByPoint]
 }

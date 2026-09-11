@@ -47,7 +47,7 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
     case capture
     case copy
     case stack
-    case switchSession
+    case switchStack
     case nextStack
     case previousStack
     case clear
@@ -58,7 +58,7 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         case .capture: "Typed note"
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
-        case .switchSession: "Switch stack"
+        case .switchStack: "Switch stack"
         case .nextStack: "Next stack"
         case .previousStack: "Previous stack"
         case .clear: "Clear stack"
@@ -82,7 +82,7 @@ extension ShortcutSlot {
         case .capture: .capture
         case .copy: .copy
         case .stack: .stack
-        case .switchSession: .switchSession
+        case .switchStack: .switchStack
         case .nextStack: .nextStack
         case .previousStack: .previousStack
         case .clear: .clear
@@ -135,8 +135,8 @@ final class AppSettings {
     static let shared = AppSettings()
 
     private enum Key {
-        static let profiles = "profiles"
-        static let activeProfileID = "activeProfileID"
+        static let templates = "templates"
+        static let activeTemplateID = "activeTemplateID"
         static let voiceMode = "voiceMode"
         static func combo(_ slot: ShortcutSlot) -> String { slot.rawValue + "Combo" }
         static let pasteDirectly = "pasteDirectly"
@@ -151,7 +151,7 @@ final class AppSettings {
         .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
         .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
         .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
-        .switchSession: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),
+        .switchStack: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),
         .clear: KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command]),
     ]
 
@@ -168,11 +168,11 @@ final class AppSettings {
     var captureCombo: KeyCombo { combos[.capture]! }
     var copyCombo: KeyCombo { combos[.copy]! }
     var stackCombo: KeyCombo { combos[.stack]! }
-    var switchSessionCombo: KeyCombo { combos[.switchSession]! }
+    var switchStackCombo: KeyCombo { combos[.switchStack]! }
     var clearCombo: KeyCombo { combos[.clear]! }
     /// Walks backwards through the cycle: the switch shortcut plus ⇧, when
     /// the shortcut itself has no ⇧.
-    var switchSessionReverseCombo: KeyCombo? { switchSessionCombo.addingShift }
+    var switchStackReverseCombo: KeyCombo? { switchStackCombo.addingShift }
     var nextStackCombo: KeyCombo? { combos[.nextStack] }
     var previousStackCombo: KeyCombo? { combos[.previousStack] }
 
@@ -187,11 +187,11 @@ final class AppSettings {
 
     private(set) var shortcutRegistrationIssues: [ShortcutRegistrationIssue] = []
 
-    private var profileCollection: ProfileCollection
+    private var templateCollection: TemplateCollection
 
-    var profiles: [Profile] { profileCollection.profiles }
-    var activeProfileID: UUID { profileCollection.activeProfileID }
-    var activeProfile: Profile { profileCollection.activeProfile }
+    var templates: [Template] { templateCollection.templates }
+    var activeTemplateID: UUID { templateCollection.activeTemplateID }
+    var activeTemplate: Template { templateCollection.activeTemplate }
 
     var stackExportMode: StackExportMode {
         StackExportMode(pasteDirectly: pasteDirectly)
@@ -232,8 +232,8 @@ final class AppSettings {
 
     /// Called when a shortcut or direct-paste behavior changes.
     var onHotKeysChanged: (() -> Void)?
-    /// Called after the active profile or stored profiles change.
-    var onProfilesChanged: (() -> Void)?
+    /// Called after the active template or stored templates change.
+    var onTemplatesChanged: (() -> Void)?
     /// Called after the preferred microphone changes.
     var onInputDeviceChanged: (() -> Void)?
 
@@ -257,11 +257,11 @@ final class AppSettings {
         )
         voiceMode = defaults.string(forKey: Key.voiceMode).flatMap(VoiceRecordingMode.init(rawValue:)) ?? .hold
 
-        let decoded = defaults.data(forKey: Key.profiles)
-            .flatMap { try? JSONDecoder().decode([Profile].self, from: $0) }
-        profileCollection = ProfileCollection(
+        let decoded = defaults.data(forKey: Key.templates)
+            .flatMap { try? JSONDecoder().decode([Template].self, from: $0) }
+        templateCollection = TemplateCollection(
             restoring: decoded,
-            activeProfileID: defaults.string(forKey: Key.activeProfileID).flatMap(UUID.init(uuidString:))
+            activeTemplateID: defaults.string(forKey: Key.activeTemplateID).flatMap(UUID.init(uuidString:))
         )
 
         pasteDirectly = defaults.object(forKey: Key.pasteDirectly) as? Bool ?? true
@@ -280,8 +280,8 @@ final class AppSettings {
             return nil
         }
 
-        persistProfiles()
-        persistActiveProfileID()
+        persistTemplates()
+        persistActiveTemplateID()
     }
 
     func completeSetup() {
@@ -295,7 +295,7 @@ final class AppSettings {
     /// Every key a slot takes when bound to `combo`: the combo itself, and for
     /// the switch shortcut also its ⇧ variant, which walks the cycle backwards.
     private static func claimedCombos(_ combo: KeyCombo, for slot: ShortcutSlot) -> [KeyCombo] {
-        guard slot == .switchSession, let reverse = combo.addingShift else { return [combo] }
+        guard slot == .switchStack, let reverse = combo.addingShift else { return [combo] }
         return [combo, reverse]
     }
 
@@ -341,53 +341,53 @@ final class AppSettings {
         shortcutRegistrationIssues = issues
     }
 
-    func selectProfile(id: UUID) throws {
-        try changeProfiles { try $0.select(id: id) }
+    func selectTemplate(id: UUID) throws {
+        try changeTemplates { try $0.select(id: id) }
     }
 
-    func updateProfile(_ profile: Profile) throws {
-        try changeProfiles { try $0.update(profile) }
+    func updateTemplate(_ template: Template) throws {
+        try changeTemplates { try $0.update(template) }
     }
 
-    func addProfile(_ profile: Profile) throws {
-        try changeProfiles { try $0.add(profile) }
+    func addTemplate(_ template: Template) throws {
+        try changeTemplates { try $0.add(template) }
     }
 
     @discardableResult
-    func deleteProfile(id: UUID) throws -> UUID {
-        try changeProfiles { try $0.delete(id: id) }
-        return activeProfileID
+    func deleteTemplate(id: UUID) throws -> UUID {
+        try changeTemplates { try $0.delete(id: id) }
+        return activeTemplateID
     }
 
-    func profile(id: UUID) -> Profile? {
-        profileCollection.profile(id: id)
+    func template(id: UUID) -> Template? {
+        templateCollection.template(id: id)
     }
 
-    func validatedName(_ proposedName: String, excluding profileID: UUID?) throws -> String {
-        try profileCollection.validatedName(proposedName, excluding: profileID)
+    func validatedName(_ proposedName: String, excluding templateID: UUID?) throws -> String {
+        try templateCollection.validatedName(proposedName, excluding: templateID)
     }
 
     /// Publish a valid snapshot before notifying clients. Rejected and unchanged
     /// operations neither write defaults nor notify observers.
-    private func changeProfiles(_ change: (inout ProfileCollection) throws -> Void) throws {
-        var candidate = profileCollection
+    private func changeTemplates(_ change: (inout TemplateCollection) throws -> Void) throws {
+        var candidate = templateCollection
         try change(&candidate)
-        guard candidate != profileCollection else { return }
-        let profilesChanged = candidate.profiles != profiles
-        let selectionChanged = candidate.activeProfileID != activeProfileID
-        profileCollection = candidate
-        if profilesChanged { persistProfiles() }
-        if selectionChanged { persistActiveProfileID() }
-        onProfilesChanged?()
+        guard candidate != templateCollection else { return }
+        let templatesChanged = candidate.templates != templates
+        let selectionChanged = candidate.activeTemplateID != activeTemplateID
+        templateCollection = candidate
+        if templatesChanged { persistTemplates() }
+        if selectionChanged { persistActiveTemplateID() }
+        onTemplatesChanged?()
     }
 
-    private func persistProfiles() {
-        guard let data = try? JSONEncoder().encode(profiles) else { return }
-        defaults.set(data, forKey: Key.profiles)
+    private func persistTemplates() {
+        guard let data = try? JSONEncoder().encode(templates) else { return }
+        defaults.set(data, forKey: Key.templates)
     }
 
-    private func persistActiveProfileID() {
-        defaults.set(activeProfileID.uuidString, forKey: Key.activeProfileID)
+    private func persistActiveTemplateID() {
+        defaults.set(activeTemplateID.uuidString, forKey: Key.activeTemplateID)
     }
 
     private func persist(_ combo: KeyCombo, key: String) {

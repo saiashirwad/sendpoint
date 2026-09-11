@@ -164,9 +164,9 @@ final class ProvenanceProbeTests: XCTestCase {
 
 @MainActor
 final class PendingProvenanceWorkOwnerTests: XCTestCase {
-    func testProbeCompletionBeforeSaveEnrichesInitialAnnotation() async throws {
+    func testProbeCompletionBeforeSaveEnrichesInitialNote() async throws {
         let gate = FieldsGate()
-        var updates: [SessionDocumentMutation] = []
+        var updates: [StackDocumentMutation] = []
         let owner = makeOwner(gate: gate) { updates.append($0) }
         let target = makeTarget()
         owner.start(for: target)
@@ -175,8 +175,8 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         await gate.resolve(ProvenanceFields(windowTitle: "Focused window"))
         await owner.waitForIdle()
 
-        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
-        let saved = owner.annotationForSave(baseline, target: target)
+        let baseline = try XCTUnwrap(target.note(body: "Note"))
+        let saved = owner.noteForSave(baseline, target: target)
 
         XCTAssertEqual(saved.provenance.windowTitle, "Focused window")
         XCTAssertEqual(owner.pendingCount, 0)
@@ -185,13 +185,13 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
 
     func testSaveBeforeProbeCompletionRetainsTaskAndRoutesExactLateUpdate() async throws {
         let gate = FieldsGate()
-        var updates: [SessionDocumentMutation] = []
+        var updates: [StackDocumentMutation] = []
         let owner = makeOwner(gate: gate) { updates.append($0) }
         let target = makeTarget()
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
-        XCTAssertEqual(owner.annotationForSave(baseline, target: target), baseline)
+        let baseline = try XCTUnwrap(target.note(body: "Note"))
+        XCTAssertEqual(owner.noteForSave(baseline, target: target), baseline)
         XCTAssertEqual(owner.pendingTaskCount, 1)
 
         let enriched = Provenance(
@@ -206,73 +206,73 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         await owner.waitForIdle()
         XCTAssertEqual(updates.count, 1)
 
-        guard case let .updateAnnotationProvenance(
-            sessionID,
-            annotationID,
+        guard case let .updateNoteProvenance(
+            stackID,
+            noteID,
             expectedApplication,
             provenance
         ) = updates[0] else {
             return XCTFail("Expected exact provenance update")
         }
-        XCTAssertEqual(sessionID, target.sessionID)
-        XCTAssertEqual(annotationID, target.annotationID)
+        XCTAssertEqual(stackID, target.stackID)
+        XCTAssertEqual(noteID, target.noteID)
         XCTAssertEqual(expectedApplication, target.application)
         XCTAssertEqual(provenance, enriched)
         XCTAssertEqual(owner.pendingCount, 0)
     }
 
-    func testLateUpdateUsesOriginalSessionAfterCommittedSessionSwitch() async throws {
-        let original = Session(name: "Original")
-        let other = Session(name: "Other")
-        let document = StoreDocument(
-            sessions: [original, other],
-            currentSessionID: original.id
+    func testLateUpdateUsesOriginalStackAfterCommittedStackSwitch() async throws {
+        let original = Stack(name: "Original")
+        let other = Stack(name: "Other")
+        let document = StackDocument(
+            stacks: [original, other],
+            currentStackID: original.id
         )
-        let store = try await AnnotationStore(persistence: StorePersistence(
+        let store = try await StackStore(persistence: StorePersistence(
             load: { document },
             commit: { _ in }
         ))
         let gate = FieldsGate()
         let owner = makeOwner(gate: gate) { store.mutate($0) }
-        let target = makeTarget(sessionID: original.id)
+        let target = makeTarget(stackID: original.id)
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
-        let initial = owner.annotationForSave(baseline, target: target)
-        store.mutate(.addAnnotation(sessionID: original.id, annotation: initial))
-        store.mutate(.switchSession(sessionID: other.id))
+        let baseline = try XCTUnwrap(target.note(body: "Note"))
+        let initial = owner.noteForSave(baseline, target: target)
+        store.mutate(.addNote(stackID: original.id, note: initial))
+        store.mutate(.switchStack(stackID: other.id))
 
         await gate.resolve(ProvenanceFields(windowTitle: "Original window"))
         await owner.waitForIdle()
         await store.waitForIdle()
 
-        XCTAssertEqual(store.currentSessionID, other.id)
+        XCTAssertEqual(store.currentStackID, other.id)
         XCTAssertEqual(
-            store.sessions.first(where: { $0.id == original.id })?.entries.first?.provenance.windowTitle,
+            store.stacks.first(where: { $0.id == original.id })?.notes.first?.provenance.windowTitle,
             "Original window"
         )
         XCTAssertTrue(store.currentEntries.isEmpty)
         store.teardown()
     }
 
-    func testLateUpdateDoesNotResurrectRemovedAnnotation() async throws {
-        let original = Session(name: "Original")
-        let document = StoreDocument(sessions: [original], currentSessionID: original.id)
-        let store = try await AnnotationStore(persistence: StorePersistence(
+    func testLateUpdateDoesNotResurrectRemovedNote() async throws {
+        let original = Stack(name: "Original")
+        let document = StackDocument(stacks: [original], currentStackID: original.id)
+        let store = try await StackStore(persistence: StorePersistence(
             load: { document },
             commit: { _ in }
         ))
         let gate = FieldsGate()
         let owner = makeOwner(gate: gate) { store.mutate($0) }
-        let target = makeTarget(sessionID: original.id)
+        let target = makeTarget(stackID: original.id)
         owner.start(for: target)
 
-        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
-        let initial = owner.annotationForSave(baseline, target: target)
-        store.mutate(.addAnnotation(sessionID: original.id, annotation: initial))
-        store.mutate(.removeAnnotation(
-            sessionID: original.id,
-            annotationID: target.annotationID
+        let baseline = try XCTUnwrap(target.note(body: "Note"))
+        let initial = owner.noteForSave(baseline, target: target)
+        store.mutate(.addNote(stackID: original.id, note: initial))
+        store.mutate(.removeNote(
+            stackID: original.id,
+            noteID: target.noteID
         ))
         await store.waitForIdle()
         XCTAssertTrue(store.currentEntries.isEmpty)
@@ -288,14 +288,14 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
 
     func testAbandonAfterSavePreparationRejectsLateResult() async throws {
         let gate = FieldsGate()
-        var updates: [SessionDocumentMutation] = []
+        var updates: [StackDocumentMutation] = []
         let owner = makeOwner(gate: gate) { updates.append($0) }
         let target = makeTarget()
         owner.start(for: target)
         await gate.waitUntilRequested()
 
-        let baseline = try XCTUnwrap(target.annotation(note: "Note"))
-        XCTAssertEqual(owner.annotationForSave(baseline, target: target), baseline)
+        let baseline = try XCTUnwrap(target.note(body: "Note"))
+        XCTAssertEqual(owner.noteForSave(baseline, target: target), baseline)
         owner.abandon(for: target)
 
         await gate.resolve(ProvenanceFields(windowTitle: "Too late"))
@@ -307,7 +307,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
 
     func testUnsavedCancelAndAppTeardownRejectLateResults() async {
         let firstGate = FieldsGate()
-        var firstUpdates: [SessionDocumentMutation] = []
+        var firstUpdates: [StackDocumentMutation] = []
         let first = makeOwner(gate: firstGate) { firstUpdates.append($0) }
         let firstTarget = makeTarget()
         first.start(for: firstTarget)
@@ -317,7 +317,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         XCTAssertTrue(firstUpdates.isEmpty)
 
         let secondGate = FieldsGate()
-        var secondUpdates: [SessionDocumentMutation] = []
+        var secondUpdates: [StackDocumentMutation] = []
         let second = makeOwner(gate: secondGate) { secondUpdates.append($0) }
         let secondTarget = makeTarget()
         second.start(for: secondTarget)
@@ -330,15 +330,15 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
 
     func testStaleTargetCannotCancelOrMarkAnotherCaptureSaved() async throws {
         let gate = FieldsGate()
-        var updates: [SessionDocumentMutation] = []
+        var updates: [StackDocumentMutation] = []
         let owner = makeOwner(gate: gate) { updates.append($0) }
         let target = makeTarget()
         owner.start(for: target)
 
-        let staleContext = AnnotationCaptureContext(
-            sessionID: UUID(),
+        let staleContext = NoteCaptureContext(
+            stackID: UUID(),
             captureID: target.captureID,
-            annotationID: UUID()
+            noteID: UUID()
         )
         let staleTarget = staleContext.target(captured: CapturedSelection(
             text: "Different",
@@ -347,12 +347,12 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
             processIdentifier: 99,
             screenRect: nil
         ))
-        let staleAnnotation = try XCTUnwrap(
-            staleTarget.annotation(note: "Stale")
+        let staleNote = try XCTUnwrap(
+            staleTarget.note(body: "Stale")
         )
         XCTAssertEqual(
-            owner.annotationForSave(staleAnnotation, target: staleTarget),
-            staleAnnotation
+            owner.noteForSave(staleNote, target: staleTarget),
+            staleNote
         )
         owner.abandon(for: staleTarget)
         XCTAssertEqual(owner.pendingCount, 1)
@@ -361,16 +361,16 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         await owner.waitForIdle()
         XCTAssertTrue(updates.isEmpty)
 
-        let original = try XCTUnwrap(target.annotation(note: "Real"))
+        let original = try XCTUnwrap(target.note(body: "Real"))
         XCTAssertEqual(
-            owner.annotationForSave(original, target: target).provenance.windowTitle,
+            owner.noteForSave(original, target: target).provenance.windowTitle,
             "Original"
         )
     }
 
     private func makeOwner(
         gate: FieldsGate,
-        update: @escaping @MainActor (SessionDocumentMutation) -> Void
+        update: @escaping @MainActor (StackDocumentMutation) -> Void
     ) -> PendingProvenanceWorkOwner {
         PendingProvenanceWorkOwner(
             probe: ProvenanceProbe(genericLookup: { _ in await gate.value() }),
@@ -378,8 +378,8 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
         )
     }
 
-    private func makeTarget(sessionID: UUID = UUID()) -> AnnotationCaptureTarget {
-        AnnotationCaptureContext(sessionID: sessionID).target(captured: CapturedSelection(
+    private func makeTarget(stackID: UUID = UUID()) -> NoteCaptureTarget {
+        NoteCaptureContext(stackID: stackID).target(captured: CapturedSelection(
             text: "Selection",
             appName: "Reader",
             appBundleID: "com.example.reader",
