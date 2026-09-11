@@ -353,7 +353,7 @@ struct StackPaletteView: View {
                 placeholder(
                     symbol: "tray",
                     title: "Stack cleared",
-                    detail: "\(undo.noteCount) note\(undo.noteCount == 1 ? "" : "s") set aside."
+                    detail: "\(noteCountLabel(undo.noteCount)) set aside."
                 )
                 .frame(maxHeight: 180)
                 Button {
@@ -381,8 +381,9 @@ struct StackPaletteView: View {
                     // scrollTo inside a lazy stack of variable-height text
                     // can spin the layout engine.
                     VStack(spacing: 2) {
+                        let positions = Dictionary(uniqueKeysWithValues: stack.notes.enumerated().map { ($1.id, $0) })
                         ForEach(Array(listing.notes.enumerated()), id: \.element.id) { index, entry in
-                            let position = stack.notes.firstIndex(where: { $0.id == entry.id }) ?? index
+                            let position = positions[entry.id] ?? index
                             NoteCard(
                                 index: position,
                                 entry: entry,
@@ -529,7 +530,7 @@ struct StackPaletteView: View {
         case .notes:
             let count = model.projection.shownStack?.notes.count ?? 0
             let name = model.projection.shownStack?.name ?? ""
-            return "\(name) · \(count) note\(count == 1 ? "" : "s") · ↑↓ move · ⌥↑↓ reorder · ← back"
+            return "\(name) · \(noteCountLabel(count)) · ↑↓ move · ⌥↑↓ reorder · ← back"
         }
     }
 
@@ -727,7 +728,7 @@ private struct NoteCard: View {
 
     private var quote: String {
         guard case let .selection(quote) = entry.subject else { return "" }
-        return quote.trimmingCharacters(in: .whitespacesAndNewlines)
+        return quote.nonblank ?? ""
     }
 
     var body: some View {

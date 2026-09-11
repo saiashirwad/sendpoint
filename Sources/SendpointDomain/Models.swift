@@ -86,7 +86,7 @@ public struct StackDocument: Codable, Hashable, Sendable {
         var seen: Set<UUID> = [currentStackID]
         var ordered: [Stack] = stacks.filter { $0.id == currentStackID }
         for id in recentStackIDs where !seen.contains(id) {
-            guard let stack = stacks.first(where: { $0.id == id }) else { continue }
+            guard let stack = stacks.stack(id: id) else { continue }
             seen.insert(id)
             ordered.append(stack)
         }
@@ -98,5 +98,11 @@ public struct StackDocument: Codable, Hashable, Sendable {
     mutating func touchStack(_ id: UUID) {
         recentStackIDs.removeAll { $0 == id }
         recentStackIDs.insert(id, at: 0)
+    }
+}
+
+public extension Array where Element == Stack {
+    func stack(id: UUID) -> Stack? {
+        first { $0.id == id }
     }
 }

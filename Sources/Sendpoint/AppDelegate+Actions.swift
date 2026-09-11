@@ -10,13 +10,7 @@ extension AppDelegate {
             tooltip: "\(stackName) · \(templates.activeTemplate.name)"
         )
         statusItemController.rebuildMenu(
-            facts: store.map {
-                StackUIFacts(
-                    stacks: $0.stacks,
-                    currentStackID: $0.currentStackID,
-                    lastCleared: $0.lastCleared
-                )
-            },
+            facts: store.map(StackUIFacts.init(store:)),
             storeStatus: statusMenuStoreStatus,
             error: store?.error,
             hasPendingMutations: store?.hasPendingMutations == true,
@@ -83,15 +77,11 @@ extension AppDelegate {
         }
     }
 
+    /// The hotkey clears the current stack; an empty one only beeps.
     private func clearStack() {
-        guard let store else { NSSound.beep(); return }
-        let stackID = store.currentStackID
-        guard let stack = store.stacks.first(where: { $0.id == stackID }), !stack.notes.isEmpty else {
-            NSSound.beep()
-            return
-        }
-        Diag.log("clearStack invoked, stack=\(stackID), count=\(stack.notes.count)")
-        enqueueMenuMutation(.clearStack(stackID: stackID))
+        guard let store, !store.currentNotes.isEmpty else { NSSound.beep(); return }
+        Diag.log("clearStack invoked, stack=\(store.currentStackID), count=\(store.currentNotes.count)")
+        clearStack(store.currentStackID)
     }
 
     private func clearStack(_ stackID: UUID) {
@@ -99,7 +89,6 @@ extension AppDelegate {
     }
 
     private func undoClear() {
-        guard store != nil else { NSSound.beep(); return }
         enqueueMenuMutation(.undoClear)
     }
 
@@ -139,7 +128,6 @@ extension AppDelegate {
     }
 
     private func showQuickSwitcher() {
-        guard store != nil else { NSSound.beep(); return }
         presentPalette(at: .stacks)
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 
 /// The typed capture draft and its inline save recovery controls.
@@ -11,7 +12,7 @@ struct CaptureView: View {
     private let quoteMaxHeight: CGFloat = 150
 
     private var quote: String {
-        (model.captured?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        model.captured?.text.nonblank ?? ""
     }
 
     var body: some View {

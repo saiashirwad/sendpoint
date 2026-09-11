@@ -44,7 +44,7 @@ struct VoiceCaptureView: View {
                     .fixedSize()
                     .transition(.opacity.combined(with: .offset(x: 6)))
             }
-            Orb(mode: orbMode, level: Double(meter.current), ink: palette.ink, amber: palette.amber)
+            MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber)
                 .frame(width: 22, height: 22)
                 .padding(.leading, 2)
             if let failureMessage {
@@ -124,6 +124,19 @@ struct VoiceCaptureView: View {
         case .saving: return "Voice body: saving.\(destination)"
         default: return ""
         }
+    }
+}
+
+/// The only view that reads the meter, so its tap-rate updates re-render the
+/// orb alone rather than the whole overlay.
+private struct MeteredOrb: View {
+    let mode: Orb.Mode
+    let meter: VoiceLevelMeter
+    let ink: Color
+    let amber: Color
+
+    var body: some View {
+        Orb(mode: mode, level: Double(meter.current), ink: ink, amber: amber)
     }
 }
 

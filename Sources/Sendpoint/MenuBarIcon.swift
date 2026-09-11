@@ -4,8 +4,8 @@ import AppKit
 /// menu bar shows the same speech bubble as the Dock and the website rather
 /// than a stock symbol. Colour is dropped; the icon's shapes become alpha.
 enum MenuBarIcon {
-    /// The icon's art is laid out on a 1024-unit canvas like the app icon.
-    private static let canvas: CGFloat = 1024
+    /// The icon's art is laid out on a 1024-unit canvas like the app icon;
+    /// this tile is the part of it that is drawn.
     private static let tile = CGRect(x: 100, y: 100, width: 824, height: 824)
 
     static func image(pointSize: CGFloat = 18) -> NSImage {

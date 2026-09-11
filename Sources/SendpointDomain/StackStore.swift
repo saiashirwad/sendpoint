@@ -65,7 +65,11 @@ public final class StackStore {
 
     public var currentStack: Stack {
         // StackDocument validation guarantees this lookup succeeds.
-        document.stacks.first { $0.id == document.currentStackID }!
+        stacks.stack(id: document.currentStackID)!
+    }
+
+    public func stack(id: UUID) -> Stack? {
+        stacks.stack(id: id)
     }
 
     public var currentNotes: [Note] {

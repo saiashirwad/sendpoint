@@ -36,11 +36,6 @@ public struct StackDocumentValidationError: Error, Equatable, Sendable, CustomSt
 
 /// Pure stack document rules. This type has no UI or persistence dependency.
 public enum StackDocumentMutations {
-    /// Trims a name and returns its case-, diacritic-, and width-insensitive key.
-    public static func normalizedStackName(_ name: String) -> String? {
-        name.normalizedStackName
-    }
-
     public static func validate(_ document: StackDocument) throws {
         guard document.version == StackDocument.currentVersion else {
             throw StackDocumentValidationError("unsupported document version: \(document.version)")
@@ -58,7 +53,7 @@ public enum StackDocumentMutations {
         var names = Set<String>()
         for stack in document.stacks {
             let trimmed = stack.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard stack.name == trimmed, let nameKey = normalizedStackName(stack.name) else {
+            guard stack.name == trimmed, let nameKey = stack.name.normalizedName else {
                 throw StackDocumentValidationError("stack names must be trimmed and nonempty")
             }
             guard names.insert(nameKey).inserted else {
@@ -103,7 +98,7 @@ public enum StackDocumentMutations {
         switch mutation {
         case var .createStack(stack):
             stack.name = stack.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard normalizedStackName(stack.name) != nil else {
+            guard stack.name.normalizedName != nil else {
                 return .rejected("Stack names must not be empty.")
             }
             guard !document.stacks.contains(where: { $0.id == stack.id }) else {
@@ -121,7 +116,7 @@ public enum StackDocumentMutations {
 
         case let .renameStack(stackID, name):
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard normalizedStackName(trimmed) != nil else {
+            guard trimmed.normalizedName != nil else {
                 return .rejected("Stack names must not be empty.")
             }
             guard let index = stackIndex(stackID, in: document) else {
@@ -257,14 +252,16 @@ public enum StackDocumentMutations {
         document.stacks.firstIndex(where: { $0.id == id })
     }
 
-    private static func isUnique(
+    /// Whether `name` is usable for a stack other than `excludedID`: it is
+    /// nonblank and no other stack has the same normalized name.
+    public static func isUnique(
         _ name: String,
         in stacks: [Stack],
         excluding excludedID: UUID? = nil
     ) -> Bool {
-        guard let normalized = normalizedStackName(name) else { return false }
+        guard let normalized = name.normalizedName else { return false }
         return !stacks.contains {
-            $0.id != excludedID && normalizedStackName($0.name) == normalized
+            $0.id != excludedID && $0.name.normalizedName == normalized
         }
     }
 }

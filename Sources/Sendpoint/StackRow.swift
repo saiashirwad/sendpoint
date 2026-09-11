@@ -32,9 +32,7 @@ struct StackRow<Name: View>: View {
         .foregroundStyle(Color.primary)
     }
 
-    private var countLabel: String {
-        "\(noteCount) note\(noteCount == 1 ? "" : "s")"
-    }
+    private var countLabel: String { noteCountLabel(noteCount) }
 }
 
 extension StackRow where Name == StackRowName {

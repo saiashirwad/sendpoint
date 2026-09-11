@@ -298,10 +298,7 @@ nonisolated struct CaptureState: Equatable {
             session.phase = .saving(request)
             effects = [.commit(request)]
         case .dismiss:
-            switch session.phase {
-            case .saving, .saveFailed(_, _, true, _): return finish(session)
-            default: return finish(session)
-            }
+            return finish(session)
         case let .failureTimeout(context):
             guard context == session.context, case .failed = session.phase else { return [] }
             return finish(session)

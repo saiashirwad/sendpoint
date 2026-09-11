@@ -162,10 +162,7 @@ final class StackSwitcherController {
 
     // MARK: - Facts
 
-    private var facts: StackUIFacts {
-        StackUIFacts(stacks: store.stacks, currentStackID: store.currentStackID,
-            lastCleared: store.lastCleared)
-    }
+    private var facts: StackUIFacts { StackUIFacts(store: store) }
 
     private func rows(for order: [UUID]) -> [StackItemFacts] {
         let facts = facts

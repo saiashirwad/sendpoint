@@ -20,7 +20,7 @@ struct AppEnvironment {
         let shortcutSettings = ShortcutSettings(defaults: defaults)
         let templateSettings = TemplateSettings(defaults: defaults)
         let voiceSettings = VoiceSettings(defaults: defaults)
-        let hotKeyCenter = HotKeyCenter.processCenter()
+        let hotKeyCenter = HotKeyCenter.shared
         let voiceService = VoiceNoteService()
         let selectionMonitor = AutomaticSelectionMonitor()
         let surfaces = SurfaceCoordinator()

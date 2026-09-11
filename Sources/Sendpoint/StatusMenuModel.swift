@@ -26,7 +26,6 @@ enum StatusMenuAction: Hashable {
 struct StatusMenuEntry: Equatable {
     var title: String
     var action: StatusMenuAction?
-    var representedID: UUID?
     var checked: Bool
     var keyEquivalent: String?
     var keyEquivalentModifiers: NSEvent.ModifierFlags?
@@ -35,7 +34,6 @@ struct StatusMenuEntry: Equatable {
     init(
         title: String,
         action: StatusMenuAction? = nil,
-        representedID: UUID? = nil,
         checked: Bool = false,
         keyEquivalent: String? = nil,
         keyEquivalentModifiers: NSEvent.ModifierFlags? = nil,
@@ -43,7 +41,6 @@ struct StatusMenuEntry: Equatable {
     ) {
         self.title = title
         self.action = action
-        self.representedID = representedID
         self.checked = checked
         self.keyEquivalent = keyEquivalent
         self.keyEquivalentModifiers = keyEquivalentModifiers
@@ -96,7 +93,6 @@ enum StatusMenuModel {
             for stack in facts.stacks {
                 stackMenu.append(.entry(entry("\(stack.name) — \(stack.countLabel)",
                     action: .switchToStack(stack.id),
-                    represents: stack.id,
                     checked: stack.isCurrent)))
             }
             stackMenu.append(.separator)
@@ -120,7 +116,6 @@ enum StatusMenuModel {
         for template in templates.templates {
             templateMenu.append(.entry(entry(template.name,
                 action: .selectTemplate(template.id),
-                represents: template.id,
                 checked: template.id == templates.activeTemplateID)))
         }
         menu.append(.submenu(title: "Template", items: templateMenu))
@@ -136,7 +131,6 @@ enum StatusMenuModel {
             combo: shortcuts.copyCombo)))
         var clear = entry(
             facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
-            represents: facts?.current?.id,
             combo: shortcuts.clearCombo)
         if count > 0, let stackID = facts?.current?.id {
             clear.action = .clearStack(stackID)
@@ -189,16 +183,10 @@ enum StatusMenuModel {
     private static func entry(
         _ title: String,
         action: StatusMenuAction? = nil,
-        represents id: UUID? = nil,
         checked: Bool = false,
         combo: KeyCombo? = nil
     ) -> StatusMenuEntry {
-        var entry = StatusMenuEntry(
-            title: title,
-            action: action,
-            representedID: id,
-            checked: checked
-        )
+        var entry = StatusMenuEntry(title: title, action: action, checked: checked)
         if let combo, combo.isValid {
             if let equivalent = combo.menuKeyEquivalent {
                 entry.keyEquivalent = equivalent

@@ -92,14 +92,7 @@ final class TemplateEditorState {
 
     func delete() throws {
         guard !isDirty else { throw TemplateEditorError.unsavedChanges }
-        let oldTemplates = settings.templates
-        guard let oldIndex = oldTemplates.firstIndex(where: { $0.id == editedTemplateID }) else {
-            throw TemplateError.unknownTemplate
-        }
-        let deletedID = editedTemplateID
-        _ = try settings.deleteTemplate(id: deletedID)
-        let nextIndex = min(oldIndex, settings.templates.count - 1)
-        selectImmediately(settings.templates[nextIndex].id)
+        selectImmediately(try settings.deleteTemplate(id: editedTemplateID))
     }
 
     func saveAndSelectPending() throws {
@@ -154,11 +147,6 @@ final class TemplateEditorState {
             return false
         }
         return true
-    }
-
-    func synchronize() {
-        guard settings.template(id: editedTemplateID) == nil else { return }
-        selectImmediately(settings.activeTemplate.id)
     }
 
     private func selectImmediately(_ id: UUID) {

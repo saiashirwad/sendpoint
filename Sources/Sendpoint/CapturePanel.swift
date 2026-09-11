@@ -82,8 +82,7 @@ final class CaptureWindows {
     }
 
     private func focusEditor() {
-        NSApp.activate(ignoringOtherApps: true)
-        panel?.makeKeyAndOrderFront(nil)
+        panel?.presentActivated()
     }
 
     func stopEscapeHandling() {
@@ -142,8 +141,7 @@ final class CaptureWindows {
         position(panel, near: captured?.screenRect)
         self.panel = panel
 
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        panel.presentActivated()
     }
 
     private func makeEditorPanel() -> CapturePanel {

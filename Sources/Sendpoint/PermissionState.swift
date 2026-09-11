@@ -172,24 +172,27 @@ final class PermissionState {
     /// user answers it.
     func refresh() {
         guard !isTornDown else { return }
-        accessibility = services.accessibilityStatus()
+        refreshAccessibility()
         if microphoneRequestTask == nil {
-            microphone = services.microphoneStatus()
+            let status = services.microphoneStatus()
+            if microphone != status { microphone = status }
         }
         refreshVoiceModel()
     }
 
-    /// Refresh only Accessibility for helper polling.
+    /// Refresh only Accessibility for helper polling. Polls that find no
+    /// change leave the property alone so observers are not woken.
     func refreshAccessibility() {
         guard !isTornDown else { return }
-        accessibility = services.accessibilityStatus()
+        let status = services.accessibilityStatus()
+        if accessibility != status { accessibility = status }
     }
 
     /// Re-read the model files without hiding a download or its last failure.
     func refreshVoiceModel() {
         guard !isTornDown, modelDownloadTask == nil else { return }
         if services.voiceModelFilesExist() {
-            localVoiceModel = .ready
+            if localVoiceModel != .ready { localVoiceModel = .ready }
         } else if case .failed = localVoiceModel {
             return
         } else {

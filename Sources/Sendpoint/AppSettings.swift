@@ -28,13 +28,6 @@ enum StackExportMode: Equatable, Sendable {
         case .copy: "When you copy"
         }
     }
-
-    var verb: String {
-        switch self {
-        case .paste: "paste"
-        case .copy: "copy"
-        }
-    }
 }
 
 @Observable

@@ -3,13 +3,11 @@ import Foundation
 
 /// IDs and time captured before selection reading or recording can delay us.
 nonisolated struct NoteCaptureContext: Equatable {
-    let captureID: UUID
     let stackID: UUID
     let noteID: UUID
     let createdAt: Date
 
-    init(stackID: UUID, captureID: UUID = UUID(), noteID: UUID = UUID(), createdAt: Date = Date()) {
-        self.captureID = captureID
+    init(stackID: UUID, noteID: UUID = UUID(), createdAt: Date = Date()) {
         self.stackID = stackID
         self.noteID = noteID
         self.createdAt = createdAt
@@ -31,7 +29,6 @@ nonisolated struct NoteCaptureTarget: Equatable {
         self.captured = captured
     }
 
-    var captureID: UUID { context.captureID }
     var stackID: UUID { context.stackID }
     var noteID: UUID { context.noteID }
     var createdAt: Date { context.createdAt }

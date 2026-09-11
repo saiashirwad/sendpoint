@@ -85,8 +85,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
                 placeNearTop()
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        panel.presentActivated()
     }
 
     /// The only close path. Safe to call more than once.

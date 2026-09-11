@@ -12,12 +12,6 @@ struct KeyRecorder: NSViewRepresentable {
         self.clearable = clearable
     }
 
-    /// A slot that always has a shortcut.
-    init(combo: Binding<KeyCombo>) {
-        _combo = Binding(get: { combo.wrappedValue }, set: { if let new = $0 { combo.wrappedValue = new } })
-        clearable = false
-    }
-
     func makeNSView(context: Context) -> KeyRecorderView {
         let view = KeyRecorderView()
         view.onChange = { combo = $0 }

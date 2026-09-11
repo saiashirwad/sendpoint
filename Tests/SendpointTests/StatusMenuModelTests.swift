@@ -53,7 +53,6 @@ final class StatusMenuModelTests: XCTestCase {
             for template in settings.templates {
                 let templateEntry = entry(titled: template.name, in: templates)
                 XCTAssertEqual(templateEntry?.action, .selectTemplate(template.id))
-                XCTAssertEqual(templateEntry?.representedID, template.id)
                 XCTAssertEqual(templateEntry?.checked, template.id == settings.activeTemplateID)
             }
             XCTAssertEqual(entries(in: templates).filter(\.checked).count, 1)
@@ -76,7 +75,6 @@ final class StatusMenuModelTests: XCTestCase {
             let rows = Array(entries(in: stack).prefix(2))
             XCTAssertEqual(rows.map(\.title), ["First — 1 note", "Second — 2 notes"])
             XCTAssertEqual(rows.map(\.action), [.switchToStack(firstStackID), .switchToStack(secondStackID)])
-            XCTAssertEqual(rows.map(\.representedID), [firstStackID, secondStackID])
             XCTAssertEqual(rows.map(\.checked), [true, false])
             XCTAssertEqual(entry(titled: "Switch Stack…", in: stack)?.action, .quickSwitcher)
         }

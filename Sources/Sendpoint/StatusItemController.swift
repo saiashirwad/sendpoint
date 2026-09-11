@@ -4,24 +4,21 @@ import SendpointDomain
 /// Owns the menu-bar status item: its glyph, its title and flash, and the
 /// status menu rendered from `StatusMenuModel`.
 final class StatusItemController {
-    /// The action and the ID it was built from, kept together for the single
-    /// menu-action entry point.
+    /// The action a menu item performs, boxed for `representedObject`.
     private final class MenuActionBox {
         let action: StatusMenuAction
-        let representedID: UUID?
 
-        init(_ action: StatusMenuAction, representedID: UUID?) {
+        init(_ action: StatusMenuAction) {
             self.action = action
-            self.representedID = representedID
         }
     }
 
     private let statusItem: NSStatusItem
     private var baseTitle = ""
     private var baseTooltip = ""
-    private var flashToken = 0
-    private var isFlashing = false
+    /// Non-nil exactly while a flash is showing.
     private var flashTask: Task<Void, Never>?
+    private var renderedItems: [StatusMenuItem]?
 
     var onAction: ((StatusMenuAction) -> Void)?
 
@@ -42,17 +39,13 @@ final class StatusItemController {
     }
 
     /// Shows `text` in place of the count for 1.4 seconds. A newer flash
-    /// cancels the older one, and a stale restore never applies.
+    /// cancels the older one, whose restore then never runs.
     func flash(_ text: String) {
-        flashToken += 1
-        let token = flashToken
-        isFlashing = true
         statusItem.button?.title = " \(text)"
         flashTask?.cancel()
         flashTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(1.4)) } catch { return }
-            guard let self, self.flashToken == token else { return }
-            self.isFlashing = false
+            guard let self else { return }
             self.flashTask = nil
             self.applyBaseTitle()
         }
@@ -67,7 +60,6 @@ final class StatusItemController {
         shortcuts: ShortcutSettings,
         templates: TemplateSettings
     ) {
-        let menu = NSMenu()
         let items = StatusMenuModel.items(
             facts: facts,
             storeStatus: storeStatus,
@@ -77,6 +69,11 @@ final class StatusItemController {
             shortcuts: shortcuts,
             templates: templates
         )
+        // Refresh requests arrive on every keystroke and store change; only
+        // rebuild the NSMenu when something it shows has changed.
+        guard items != renderedItems else { return }
+        renderedItems = items
+        let menu = NSMenu()
         for item in items {
             menu.addItem(render(item))
         }
@@ -93,7 +90,7 @@ final class StatusItemController {
     /// The count and tooltip are held back while a flash is showing, exactly
     /// as the delegate used to skip its title update.
     private func applyBaseTitle() {
-        guard !isFlashing else { return }
+        guard flashTask == nil else { return }
         statusItem.button?.title = baseTitle
         statusItem.button?.toolTip = baseTooltip
     }
@@ -124,7 +121,7 @@ final class StatusItemController {
         )
         menuItem.target = self
         if let action = entry.action {
-            menuItem.representedObject = MenuActionBox(action, representedID: entry.representedID)
+            menuItem.representedObject = MenuActionBox(action)
         }
         menuItem.state = entry.checked ? .on : .off
         if let tooltip = entry.tooltip {

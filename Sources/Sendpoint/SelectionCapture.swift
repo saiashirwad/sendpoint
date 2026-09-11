@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import SendpointDomain
 
 nonisolated struct CapturedSelection: Equatable {
     var text: String
@@ -76,7 +77,7 @@ struct SelectionCapture {
         if case let .text(axText, axRect) = answer {
             text = axText
             rect = axRect
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { answer = .unavailable }
+            if text.nonblank == nil { answer = .unavailable }
         }
         if case .unavailable = answer {
             if let automatic = monitor.takeSelection(for: processIdentifier) {

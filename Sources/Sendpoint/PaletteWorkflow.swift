@@ -123,11 +123,8 @@ struct PaletteProjection {
     // MARK: - Derived
 
     var facts: StackUIFacts {
-        StackUIFacts(
-            stacks: context.stacks,
-            currentStackID: context.currentStackID,
-            lastCleared: context.lastCleared
-        )
+        StackUIFacts(stacks: context.stacks, currentStackID: context.currentStackID,
+            lastCleared: context.lastCleared)
     }
 
     var stackListing: QuickSwitchListing {
@@ -137,13 +134,8 @@ struct PaletteProjection {
     /// The stack whose notes are shown: the open one, or the highlighted one
     /// as a preview.
     var shownStack: Stack? {
-        switch state.level {
-        case let .notes(id):
-            return context.stacks.first(where: { $0.id == id })
-        case .stacks:
-            guard let id = state.stackState.selectedStackID else { return nil }
-            return context.stacks.first(where: { $0.id == id })
-        }
+        let id = state.level.stackID ?? state.stackState.selectedStackID
+        return id.flatMap { context.stacks.stack(id: $0) }
     }
 
     var noteListing: NoteListing {
@@ -154,8 +146,6 @@ struct PaletteProjection {
         guard case .notes = state.level else { return nil }
         return state.noteState.highlight
     }
-
-    var isEditingNote: Bool { state.inlineEdit?.noteID != nil }
 
     var activeTemplate: Template { context.activeTemplate }
 
@@ -447,7 +437,7 @@ struct PaletteUpdate {
             let count = overlay == .actions ? view.filteredActionItems.count : view.filteredTemplates.count
             switch key {
             case .up, .down:
-                if count > 0 { state.overlayHighlight = (state.overlayHighlight + (key == .up ? -1 : 1) + count) % count }
+                if count > 0 { state.overlayHighlight = wrappedIndex(state.overlayHighlight, by: key == .up ? -1 : 1, count: count) }
             case .activate, .commandActivate:
                 let index = state.overlayHighlight
                 if overlay == .actions, view.filteredActionItems.indices.contains(index) {

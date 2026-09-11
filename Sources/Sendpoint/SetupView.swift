@@ -373,15 +373,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     static func makeWindow() -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 600),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Set Up Sendpoint"
-        window.isReleasedWhenClosed = false
-        return window
+        NSWindow.titledDialog("Set Up Sendpoint", size: NSSize(width: 640, height: 600))
     }
 
     func show() {
@@ -391,13 +383,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     private func present() {
         window.center()
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    func close() {
-        guard lifecycle == .active else { return }
-        surfaces.dismiss(.setup)
+        window.presentActivated()
     }
 
     private func hide() {
@@ -501,15 +487,7 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     }
 
     static func makeWindow() -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 470, height: 310),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Accessibility Setup"
-        window.isReleasedWhenClosed = false
-        return window
+        NSWindow.titledDialog("Accessibility Setup", size: NSSize(width: 470, height: 310))
     }
 
     func show() {
@@ -522,8 +500,7 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
         permissionState.refreshAccessibility()
         startPolling()
         window.center()
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        window.presentActivated()
     }
 
     func close() {

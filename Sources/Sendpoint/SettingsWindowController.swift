@@ -80,8 +80,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func present() {
         let window = self.window ?? makeWindow()
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        window.presentActivated()
         window.makeFirstResponder(nil)
     }
 

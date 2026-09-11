@@ -106,8 +106,7 @@ nonisolated struct StackSwitchMachine: Equatable {
             guard listed.count > 1, let current = orders.recent.first,
                   let index = listed.firstIndex(of: current)
             else { return finish(with: [.beep]) }
-            let count = listed.count
-            let target = listed[((index + offset) % count + count) % count]
+            let target = listed[wrappedIndex(index, by: offset, count: listed.count)]
             let wasVisible = state == .lingering
             order = listed
             highlight = target
@@ -131,9 +130,8 @@ nonisolated struct StackSwitchMachine: Equatable {
 
     private mutating func move(by offset: Int) {
         guard !order.isEmpty else { return }
-        let count = order.count
         let index = highlight.flatMap { order.firstIndex(of: $0) } ?? 0
-        highlight = order[((index + offset) % count + count) % count]
+        highlight = order[wrappedIndex(index, by: offset, count: order.count)]
     }
 
     private mutating func finish(with commands: [StackSwitchCommand]) -> [StackSwitchCommand] {

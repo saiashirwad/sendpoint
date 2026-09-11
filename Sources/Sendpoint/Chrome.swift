@@ -71,20 +71,30 @@ struct HeightKey: PreferenceKey {
 /// Forces overlay scrollers on every scroll view in the window, so a
 /// connected mouse does not leave a permanent track in a tiny text box.
 struct OverlayScrollers: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.isHidden = true
-        return view
-    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        // The text view's scroll view is built lazily, so look more than once.
-        for delay in [0.0, 0.1, 0.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                guard let root = nsView.window?.contentView else { return }
-                for scroll in Self.scrollViews(in: root) {
-                    scroll.scrollerStyle = .overlay
-                    scroll.autohidesScrollers = true
+    /// Restyles once it lands in a window, not on every SwiftUI update.
+    final class Probe: NSView {
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            isHidden = true
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("unsupported") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            // The text view's scroll view is built lazily, so look more than once.
+            for delay in [0.0, 0.1, 0.4] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let root = self?.window?.contentView else { return }
+                    for scroll in OverlayScrollers.scrollViews(in: root) {
+                        scroll.scrollerStyle = .overlay
+                        scroll.autohidesScrollers = true
+                    }
                 }
             }
         }

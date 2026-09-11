@@ -2,15 +2,24 @@ import AppKit
 import SendpointDomain
 import Foundation
 
+/// "1 note", "2 notes": the one spelling of a note count shown to the user.
+nonisolated func noteCountLabel(_ count: Int) -> String {
+    "\(count) note\(count == 1 ? "" : "s")"
+}
+
+/// `index + offset` wrapped into `0..<count`, so stepping past either end of
+/// a list continues from the other.
+nonisolated func wrappedIndex(_ index: Int, by offset: Int, count: Int) -> Int {
+    ((index + offset) % count + count) % count
+}
+
 nonisolated struct StackItemFacts: Equatable, Identifiable {
     let id: UUID
     let name: String
     let noteCount: Int
     let isCurrent: Bool
 
-    var countLabel: String {
-        "\(noteCount) note\(noteCount == 1 ? "" : "s")"
-    }
+    var countLabel: String { noteCountLabel(noteCount) }
 }
 
 nonisolated struct StackUndoFacts: Equatable {
@@ -32,7 +41,7 @@ nonisolated struct StackDeletionFacts: Equatable {
     let clearedNoteCount: Int
 
     init(stackID: UUID, stacks: [Stack], lastCleared: ClearedBatch?) {
-        liveNoteCount = stacks.first(where: { $0.id == stackID })?.notes.count ?? 0
+        liveNoteCount = stacks.stack(id: stackID)?.notes.count ?? 0
         clearedNoteCount = lastCleared?.stackID == stackID
             ? lastCleared?.notes.count ?? 0
             : 0
@@ -48,6 +57,10 @@ nonisolated struct StackUIFacts: Equatable {
     let currentStackID: UUID
     let undo: StackUndoFacts?
 
+    @MainActor init(store: StackStore) {
+        self.init(stacks: store.stacks, currentStackID: store.currentStackID, lastCleared: store.lastCleared)
+    }
+
     init(stacks: [Stack], currentStackID: UUID, lastCleared: ClearedBatch?) {
         self.stacks = stacks.map {
             StackItemFacts(
@@ -59,10 +72,7 @@ nonisolated struct StackUIFacts: Equatable {
         }
         self.currentStackID = currentStackID
 
-        if
-            let lastCleared,
-            let stack = stacks.first(where: { $0.id == lastCleared.stackID })
-        {
+        if let lastCleared, let stack = stacks.stack(id: lastCleared.stackID) {
             undo = StackUndoFacts(
                 stackID: stack.id,
                 stackName: stack.name,
@@ -100,15 +110,10 @@ nonisolated struct StackNameDraft: Equatable {
     let excludedStackID: UUID?
 
     func validation(stacks: [Stack]) -> StackNameValidation {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let normalized = StackDocumentMutations.normalizedStackName(trimmed) else {
+        guard let trimmed = text.nonblank else {
             return .invalid("Enter a stack name.")
         }
-        let duplicate = stacks.contains {
-            $0.id != excludedStackID
-                && StackDocumentMutations.normalizedStackName($0.name) == normalized
-        }
-        guard !duplicate else {
+        guard StackDocumentMutations.isUnique(trimmed, in: stacks, excluding: excludedStackID) else {
             return .invalid("A stack with that name already exists.")
         }
         return .valid(trimmed)
@@ -129,10 +134,10 @@ nonisolated struct QuickSwitchListing: Equatable {
     let creatableName: String?
 
     init(facts: StackUIFacts, query: String) {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedQuery = trimmed.normalizedStackName
+        let trimmed = query.nonblank
+        let normalizedQuery = query.normalizedName
         stacks = facts.stacks.matching(query, text: \.name)
-        let taken = facts.stacks.contains { $0.name.normalizedStackName == normalizedQuery }
+        let taken = facts.stacks.contains { $0.name.normalizedName == normalizedQuery }
         creatableName = normalizedQuery != nil && !taken ? trimmed : nil
     }
 
@@ -187,8 +192,7 @@ nonisolated struct QuickSwitchState: Equatable {
             self.highlight = offset < 0 ? rows[rows.count - 1] : rows[0]
             return
         }
-        let count = rows.count
-        self.highlight = rows[((index + offset) % count + count) % count]
+        self.highlight = rows[wrappedIndex(index, by: offset, count: rows.count)]
     }
 
     /// Ensures the highlight names a listed row after the query changes.
@@ -211,7 +215,7 @@ enum StackDialogs {
             showMessage("The last stack cannot be deleted.")
             return false
         }
-        guard let stack = stacks.first(where: { $0.id == stackID }) else {
+        guard let stack = stacks.stack(id: stackID) else {
             showMessage("That stack no longer exists.")
             return false
         }
@@ -222,23 +226,34 @@ enum StackDialogs {
         )
         guard deletion.requiresConfirmation else { return true }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Delete “\(stack.name)”?"
         let undoWarning = deletion.includesUndoBatch
             ? " Cleared notes waiting to be undone are deleted too."
             : ""
-        let count = deletion.noteCount
-        alert.informativeText = "This deletes \(count) note\(count == 1 ? "" : "s").\(undoWarning) This cannot be undone."
+        return confirmsDeletion(
+            of: stack.name,
+            informative: "This deletes \(noteCountLabel(deletion.noteCount)).\(undoWarning) This cannot be undone."
+        )
+    }
+
+    static func showMessage(_ message: String) {
+        inform(title: "Couldn't Change Stack", message: message)
+    }
+
+    /// A Delete/Cancel warning for `name`; true when Delete was chosen.
+    static func confirmsDeletion(of name: String, informative: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete “\(name)”?"
+        alert.informativeText = informative
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    static func showMessage(_ message: String) {
+    static func inform(title: String, message: String) {
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Couldn't Change Stack"
+        alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()

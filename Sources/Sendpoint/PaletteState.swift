@@ -27,8 +27,7 @@ nonisolated struct NoteHighlightState: Equatable {
             self.highlight = offset < 0 ? ids[ids.count - 1] : ids[0]
             return
         }
-        let count = ids.count
-        self.highlight = ids[((index + offset) % count + count) % count]
+        self.highlight = ids[wrappedIndex(index, by: offset, count: ids.count)]
     }
 
     /// Ensures the highlight names a listed note after the listing changes.

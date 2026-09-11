@@ -103,9 +103,6 @@ public struct TemplateCollection: Equatable, Sendable {
     }
 
     private static func nameKey(_ name: String) -> String {
-        name.folding(
-            options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
-            locale: Locale(identifier: "en_US_POSIX")
-        )
+        name.normalizedName ?? ""
     }
 }

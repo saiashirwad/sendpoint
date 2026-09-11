@@ -16,9 +16,12 @@ nonisolated struct AudioInputDevice: Identifiable, Equatable, Sendable {
 /// is plugged in right now. Kept free of CoreAudio so it can be tested.
 nonisolated enum InputDeviceChoice {
     /// `nil` means "leave the engine on the system default".
-    static func resolve(preferredUID: String?, available: [AudioInputDevice]) -> AudioInputDevice? {
+    /// `available` is only enumerated when there is a preference to match.
+    static func resolve(
+        preferredUID: String?, available: @autoclosure () -> [AudioInputDevice]
+    ) -> AudioInputDevice? {
         guard let preferredUID else { return nil }
-        return available.first { $0.uid == preferredUID }
+        return available().first { $0.uid == preferredUID }
     }
 }
 

@@ -494,14 +494,9 @@ enum TemplateDialogs {
     }
 
     static func delete(_ editor: TemplateEditorState) {
-        guard let stored = editor.storedTemplate else { return }
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Delete “\(stored.name)”?"
-        alert.informativeText = "This cannot be undone."
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let stored = editor.storedTemplate,
+              StackDialogs.confirmsDeletion(of: stored.name, informative: "This cannot be undone.")
+        else { return }
         do {
             try editor.delete()
         } catch {
@@ -510,12 +505,7 @@ enum TemplateDialogs {
     }
 
     static func showError(_ error: Error) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = "Couldn't Change Template"
-        alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        StackDialogs.inform(title: "Couldn't Change Template", message: error.localizedDescription)
     }
 
     private static func dirtyDecision(

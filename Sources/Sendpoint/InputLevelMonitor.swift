@@ -9,9 +9,9 @@ import Observation
 final class InputLevelMonitor {
     /// 0…1 on the same speech-centred scale as `VoiceLevelMeter`.
     private(set) var level: Float = 0
-    private(set) var isRunning = false
+    var isRunning: Bool { engine != nil }
 
-    @ObservationIgnored private var engine: AVAudioEngine?
+    private var engine: AVAudioEngine?
 
     func start(preferredUID: String?) {
         stop()
@@ -45,7 +45,6 @@ final class InputLevelMonitor {
             return
         }
         self.engine = engine
-        isRunning = true
     }
 
     func stop() {
@@ -53,7 +52,6 @@ final class InputLevelMonitor {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         self.engine = nil
-        isRunning = false
         level = 0
     }
 }

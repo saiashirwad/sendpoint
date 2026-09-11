@@ -10,12 +10,12 @@ final class PromptComposerTests: XCTestCase {
 
     func testTextNormalizationTrimsAndCaseFoldsStackIdentity() {
         XCTAssertEqual("  Reading Notes \n".nonblank, "Reading Notes")
-        XCTAssertEqual("  Reading Notes \n".normalizedStackName, "reading notes")
-        XCTAssertEqual("READING NOTES".normalizedStackName, "reading notes")
-        XCTAssertEqual("Résumé".normalizedStackName, "resume")
-        XCTAssertEqual("ＲＥＡＤＩＮＧ".normalizedStackName, "reading")
+        XCTAssertEqual("  Reading Notes \n".normalizedName, "reading notes")
+        XCTAssertEqual("READING NOTES".normalizedName, "reading notes")
+        XCTAssertEqual("Résumé".normalizedName, "resume")
+        XCTAssertEqual("ＲＥＡＤＩＮＧ".normalizedName, "reading")
         XCTAssertNil(" \n\t".nonblank)
-        XCTAssertNil(" \n\t".normalizedStackName)
+        XCTAssertNil(" \n\t".normalizedName)
     }
 
     func testComposerIncludesPreambleHeadingEntriesAndTimestamp() {

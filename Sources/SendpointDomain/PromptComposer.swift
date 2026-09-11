@@ -24,7 +24,7 @@ public enum PromptComposer {
         )
         var blocks: [String] = []
 
-        if !template.preamble.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if template.preamble.nonblank != nil {
             blocks.append(template.preamble)
         }
 

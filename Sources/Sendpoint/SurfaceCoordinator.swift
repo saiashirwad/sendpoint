@@ -1,5 +1,28 @@
 import AppKit
 
+extension NSWindow {
+    /// A plain titled, closable window that survives being closed, sized for
+    /// `size` and left for the caller to place.
+    static func titledDialog(_ title: String, size: NSSize) -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = title
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    /// Brings the app forward and makes this window key, the way every
+    /// surface the coordinator shows comes to the front.
+    func presentActivated() {
+        NSApp.activate(ignoringOtherApps: true)
+        makeKeyAndOrderFront(nil)
+    }
+}
+
 enum Surface: CaseIterable, Hashable {
     case palette
     case settings

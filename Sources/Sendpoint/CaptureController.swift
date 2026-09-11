@@ -85,8 +85,7 @@ final class CaptureController {
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
         let id = state.session?.context.stackID ?? store.currentStackID
-        return StackUIFacts(stacks: store.stacks, currentStackID: store.currentStackID,
-            lastCleared: store.lastCleared).stack(id: id)
+        return StackUIFacts(store: store).stack(id: id)
     }
     var isOpen: Bool { state.session != nil }
     var captured: CapturedSelection? { state.session?.target?.captured }
@@ -107,11 +106,7 @@ final class CaptureController {
 
     init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionState,
          selection: SelectionCapture, recorder: VoiceRecorder,
-         surfaces: @escaping (CaptureController) -> CaptureSurfaces = {
-             .live(CaptureWindows(
-                 model: $0, surfaces: SurfaceCoordinator(), hotKeyCenter: HotKeyCenter.processCenter()
-             ))
-         }) {
+         surfaces: @escaping (CaptureController) -> CaptureSurfaces) {
         self.settings = settings
         self.voiceSettings = voiceSettings
         self.permissionState = permissionState

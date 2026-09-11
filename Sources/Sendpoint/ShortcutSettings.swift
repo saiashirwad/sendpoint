@@ -162,16 +162,10 @@ final class ShortcutSettings {
 
     private func requiredCombo(_ slot: ShortcutSlot) -> KeyCombo {
         if let combo = combos[slot] { return combo }
-        return switch slot {
-        case .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command])
-        case .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command])
-        case .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command])
-        case .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command])
-        case .switchStack: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command])
-        case .clear: KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command])
-        case .nextStack, .previousStack:
+        guard let fallback = Self.defaultCombos[slot] else {
             preconditionFailure("Optional shortcuts have no required value")
         }
+        return fallback
     }
 
     private static func claimedCombos(_ combo: KeyCombo, for slot: ShortcutSlot) -> [KeyCombo] {

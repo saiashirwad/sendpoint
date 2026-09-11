@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import os
 
 /// A global shortcut: one key plus modifiers.
 nonisolated struct KeyCombo: Codable, Equatable, Hashable {
@@ -80,8 +81,23 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
 
     static func name(for keyCode: UInt16) -> String {
         if let special = specialNames[keyCode] { return special }
-        return literal(for: keyCode) ?? "Key \(keyCode)"
+        _ = layoutWatcher
+        if let cached = literalNames.withLock({ $0[keyCode] }) { return cached }
+        let name = literal(for: keyCode) ?? "Key \(keyCode)"
+        literalNames.withLock { $0[keyCode] = name }
+        return name
     }
+
+    /// Layout lookups go through Text Input Services on every call, and the
+    /// status menu asks for every shortcut on every rebuild, so answers are
+    /// kept until the keyboard layout changes.
+    private static let literalNames = OSAllocatedUnfairLock(initialState: [UInt16: String]())
+    private static let layoutWatcher: Void = {
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: nil
+        ) { _ in literalNames.withLock { $0.removeAll() } }
+    }()
 
     private static let specialNames: [UInt16: String] = [
         UInt16(kVK_Return): "↩",

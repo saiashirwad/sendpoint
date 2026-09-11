@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 
 /// Remembers selections copied by apps that own terminal mouse input.
 ///
@@ -180,9 +181,7 @@ nonisolated struct AutomaticSelectionTracker {
         guard pasteboardChangeCount != request.pasteboardChangeCountBeforeDrag else {
             return false
         }
-        guard let text,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
+        guard let text, text.nonblank != nil else {
             state = .idle
             return false
         }

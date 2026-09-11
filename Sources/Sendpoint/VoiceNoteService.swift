@@ -1,6 +1,7 @@
 import AVFoundation
 import FluidAudio
 import Foundation
+import SendpointDomain
 
 extension Notification.Name {
     static let voiceModelDidBecomeReady = Notification.Name("Sendpoint.voiceModelDidBecomeReady")
@@ -33,10 +34,6 @@ final class VoiceNoteService {
 
     var isRecording: Bool { engine?.isRunning == true }
 
-    func isVoiceModelReady() async -> Bool {
-        await transcriber.isReady()
-    }
-
     func downloadVoiceModel(
         onProgress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
@@ -44,8 +41,8 @@ final class VoiceNoteService {
     }
 
     func requestMicrophoneAccess() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized:
+        switch PermissionCheck.microphonePermissionState {
+        case .granted:
             return true
         case .notDetermined:
             return await withCheckedContinuation { continuation in
@@ -54,8 +51,6 @@ final class VoiceNoteService {
                 }
             }
         case .denied, .restricted:
-            return false
-        @unknown default:
             return false
         }
     }
@@ -66,9 +61,7 @@ final class VoiceNoteService {
 
     /// Call once at launch and after every recording, when nobody is waiting.
     func warmUp() {
-        guard spareEngine == nil,
-              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        else { return }
+        guard spareEngine == nil, PermissionCheck.isMicrophoneAuthorized else { return }
         let engine = AVAudioEngine()
         _ = engine.inputNode
         spareEngine = engine
@@ -165,7 +158,7 @@ final class VoiceNoteService {
         do {
             let transcript = try await transcriber.transcribe(url: clip.url)
             try Task.checkCancellation()
-            return transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            return transcript.nonblank ?? ""
         } catch ASRError.invalidAudioData {
             Diag.log("voice clip rejected by the recogniser as too short; treating as silence")
             return ""
