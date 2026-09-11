@@ -6,6 +6,7 @@ import SwiftUI
 /// notes previewed beside it, and the same notes opened full-width with →.
 struct StackPaletteView: View {
     @Bindable var model: StackPaletteModel
+    let appIcons: AppIconStore
     @FocusState private var focus: PaletteField?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -389,6 +390,7 @@ struct StackPaletteView: View {
                                 isHighlighted: interactive && model.projection.highlightedNoteID == entry.id,
                                 isEditing: interactive && model.state.inlineEdit?.noteID == entry.id,
                                 interactive: interactive,
+                                appIcons: appIcons,
                                 draft: Binding(
                                     get: {
                                         model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.body
@@ -426,15 +428,15 @@ struct StackPaletteView: View {
                 Text("Nothing captured yet")
                     .font(.title3.weight(.semibold))
                 HStack(spacing: 5) {
-                    Text(model.settings.voiceMode.title)
-                    Keycap(model.settings.voiceCaptureCombo.displayString, size: 12)
-                    Text(model.settings.voiceMode == .hold
+                    Text(model.voiceSettings.voiceMode.title)
+                    Keycap(model.shortcuts.voiceCaptureCombo.displayString, size: 12)
+                    Text(model.voiceSettings.voiceMode == .hold
                         ? "to speak, then release to save"
                         : "to start, then press again to save")
                 }
                 HStack(spacing: 5) {
                     Text("Or press")
-                    Keycap(model.settings.captureCombo.displayString, size: 12)
+                    Keycap(model.shortcuts.captureCombo.displayString, size: 12)
                     Text("to type a note about selected text")
                 }
                 .font(.callout)
@@ -717,6 +719,7 @@ private struct NoteCard: View {
     let isHighlighted: Bool
     let isEditing: Bool
     let interactive: Bool
+    let appIcons: AppIconStore
     @Binding var draft: String
     var focus: FocusState<PaletteField?>.Binding
     let onSelect: () -> Void
@@ -740,7 +743,7 @@ private struct NoteCard: View {
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous).fill(PaletteTint.chip))
 
-                AppIcon(application: entry.provenance.application)
+                AppIcon(application: entry.provenance.application, store: appIcons)
 
                 Text(entry.provenance.application.name)
                     .font(.caption.weight(.semibold))
@@ -865,10 +868,11 @@ private struct QuotedPassage: View {
 /// provenance row keeps its shape.
 private struct AppIcon: View {
     let application: ApplicationIdentity
+    let store: AppIconStore
 
     var body: some View {
         Group {
-            if let image = AppIconStore.shared.icon(for: application) {
+            if let image = store.icon(for: application) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)

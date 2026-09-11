@@ -30,7 +30,8 @@ final class StackSwitcherController {
     private enum Lifecycle { case active, tornDown }
 
     private let store: StackStore
-    private let settings: AppSettings
+    private let settings: ShortcutSettings
+    private let hotKeyCenter: HotKeyCenter
     private let surfaces: SurfaceCoordinator
     private let onOpenPalette: (UUID) -> Void
     private let onSwitched: (StackItemFacts) -> Void
@@ -48,11 +49,13 @@ final class StackSwitcherController {
     /// been seen, and the strip goes the instant the keys come up.
     static let minimumVisibleDuration: TimeInterval = 0.3
 
-    init(store: StackStore, settings: AppSettings, surfaces: SurfaceCoordinator,
+    init(store: StackStore, settings: ShortcutSettings, hotKeyCenter: HotKeyCenter,
+         surfaces: SurfaceCoordinator,
          onOpenPalette: @escaping (UUID) -> Void,
          onSwitched: @escaping (StackItemFacts) -> Void) {
         self.store = store
         self.settings = settings
+        self.hotKeyCenter = hotKeyCenter
         self.surfaces = surfaces
         self.onOpenPalette = onOpenPalette
         self.onSwitched = onSwitched
@@ -220,11 +223,11 @@ final class StackSwitcherController {
         guard !temporaryKeysRegistered else { return }
         temporaryKeysRegistered = true
         let modifiers = settings.switchStackCombo.carbonModifiers
-        HotKeyCenter.shared.registerRaw(name: .switchEscape, keyCode: UInt16(kVK_Escape),
+        hotKeyCenter.registerRaw(name: .switchEscape, keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0, pressed: { [weak self] in self?.send(.escape) })
-        HotKeyCenter.shared.registerRaw(name: .switchPinUp, keyCode: UInt16(kVK_UpArrow),
+        hotKeyCenter.registerRaw(name: .switchPinUp, keyCode: UInt16(kVK_UpArrow),
             carbonModifiers: modifiers, pressed: { [weak self] in self?.send(.pin) })
-        HotKeyCenter.shared.registerRaw(name: .switchPinDown, keyCode: UInt16(kVK_DownArrow),
+        hotKeyCenter.registerRaw(name: .switchPinDown, keyCode: UInt16(kVK_DownArrow),
             carbonModifiers: modifiers, pressed: { [weak self] in self?.send(.pin) })
     }
 
@@ -232,7 +235,7 @@ final class StackSwitcherController {
         guard temporaryKeysRegistered else { return }
         temporaryKeysRegistered = false
         for name in [HotKeyName.switchEscape, .switchPinUp, .switchPinDown] {
-            HotKeyCenter.shared.unregister(name: name)
+            hotKeyCenter.unregister(name: name)
         }
     }
 

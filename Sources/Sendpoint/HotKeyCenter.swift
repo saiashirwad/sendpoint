@@ -28,6 +28,7 @@ enum HotKeyRegistrationResult: Equatable {
 /// Accessibility permission and fires even when another app is frontmost.
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
+    static func processCenter() -> HotKeyCenter { shared }
 
     typealias RegisterEvent = @MainActor (UInt32, UInt32, EventHotKeyID) -> (OSStatus, EventHotKeyRef?)
 

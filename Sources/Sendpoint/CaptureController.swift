@@ -9,6 +9,8 @@ struct VoiceRecorder {
     var stopAndTranscribe: () async throws -> String
     var discard: () -> Void
     var levelMeter: VoiceLevelMeter
+    var chooseMicrophone: (String?) -> Void = { _ in }
+    var warmUp: () -> Void = {}
 
     static func live(_ service: VoiceNoteService) -> Self {
         Self(
@@ -21,7 +23,9 @@ struct VoiceRecorder {
             },
             stopAndTranscribe: { try await service.stopAndTranscribe() },
             discard: { service.discardRecording() },
-            levelMeter: service.levelMeter
+            levelMeter: service.levelMeter,
+            chooseMicrophone: { service.preferredInputDeviceUID = $0 },
+            warmUp: { service.warmUp() }
         )
     }
 }
@@ -58,6 +62,7 @@ final class CaptureController {
     private(set) var state = CaptureState()
     @ObservationIgnored private var store: StackStore?
     @ObservationIgnored private let settings: AppSettings
+    @ObservationIgnored private let voiceSettings: VoiceSettings
     @ObservationIgnored private let permissionState: PermissionState
     @ObservationIgnored private let selection: SelectionCapture
     @ObservationIgnored private let recorder: VoiceRecorder
@@ -103,13 +108,16 @@ final class CaptureController {
         return session.saveAwaitsSelection
     }
 
-    init(settings: AppSettings, permissionState: PermissionState,
+    init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionState,
          selection: SelectionCapture, recorder: VoiceRecorder,
          provenanceProbe: ProvenanceProbe = .live(),
          surfaces: @escaping (CaptureController) -> CaptureSurfaces = {
-             .live(CaptureWindows(model: $0, surfaces: SurfaceCoordinator()))
+             .live(CaptureWindows(
+                 model: $0, surfaces: SurfaceCoordinator(), hotKeyCenter: HotKeyCenter.processCenter()
+             ))
          }) {
         self.settings = settings
+        self.voiceSettings = voiceSettings
         self.permissionState = permissionState
         self.selection = selection
         self.recorder = recorder
@@ -126,7 +134,19 @@ final class CaptureController {
     /// Builds the overlay and the note box ahead of the first hotkey press.
     func warmUp() {
         guard !state.isTornDown else { return }
+        recorder.chooseMicrophone(voiceSettings.inputDeviceUID)
+        recorder.warmUp()
         surfaces.prepare()
+    }
+
+    func setVoiceMode(_ mode: VoiceRecordingMode) {
+        voiceSettings.setVoiceMode(mode)
+        send(.voiceModeChanged(mode))
+    }
+
+    func chooseMicrophone(uid: String?, name: String?) {
+        voiceSettings.setInputDevice(uid: uid, name: name)
+        recorder.chooseMicrophone(uid)
     }
 
     func beginCapture() {

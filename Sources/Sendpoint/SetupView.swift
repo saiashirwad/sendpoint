@@ -3,17 +3,23 @@ import SwiftUI
 
 struct SetupView: View {
     @Bindable var settings: AppSettings
+    @Bindable var shortcuts: ShortcutSettings
+    @Bindable var voiceSettings: VoiceSettings
     @Bindable var permissionState: PermissionState
     let onShowAccessibilityHelper: () -> Void
     let onComplete: () -> Void
 
     init(
         settings: AppSettings,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
         permissionState: PermissionState,
         onShowAccessibilityHelper: @escaping () -> Void,
         onComplete: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
+        _shortcuts = Bindable(wrappedValue: shortcuts)
+        _voiceSettings = Bindable(wrappedValue: voiceSettings)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
         self.onComplete = onComplete
@@ -30,7 +36,7 @@ struct SetupView: View {
                         .accessibilityHidden(true)
                     Text("Set Up Sendpoint")
                         .font(.largeTitle.weight(.semibold))
-                    Text("Select text anywhere and use \(settings.voiceCaptureCombo.displayString) to say what you think. Sendpoint keeps the passage and your words together in a stack you can copy out as one prompt.")
+                    Text("Select text anywhere and use \(shortcuts.voiceCaptureCombo.displayString) to say what you think. Sendpoint keeps the passage and your words together in a stack you can copy out as one prompt.")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -85,16 +91,16 @@ struct SetupView: View {
             SettingsRowGroup {
                 HowToRow(
                     icon: "mic.fill",
-                    lead: settings.voiceMode.title,
-                    sentence: settings.voiceMode.detail,
-                    keycap: settings.voiceCaptureCombo.displayString
+                    lead: voiceSettings.voiceMode.title,
+                    sentence: voiceSettings.voiceMode.detail,
+                    keycap: shortcuts.voiceCaptureCombo.displayString
                 )
                 SettingsDivider()
                 HowToRow(
                     icon: "square.and.pencil",
                     lead: "Type instead",
                     sentence: "For when you can't talk out loud.",
-                    keycap: settings.captureCombo.displayString
+                    keycap: shortcuts.captureCombo.displayString
                 )
             }
         }
@@ -338,6 +344,8 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     init(
         settings: AppSettings,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
         permissionState: PermissionState,
         surfaces: SurfaceCoordinator,
         onShowAccessibilityHelper: @escaping () -> Void,
@@ -349,6 +357,8 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         super.init()
         window.contentView = NSHostingView(rootView: SetupView(
             settings: settings,
+            shortcuts: shortcuts,
+            voiceSettings: voiceSettings,
             permissionState: permissionState,
             onShowAccessibilityHelper: onShowAccessibilityHelper,
             onComplete: onComplete

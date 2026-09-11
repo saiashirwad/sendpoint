@@ -7,7 +7,7 @@ extension AppDelegate {
         let stackName = store?.currentStack.name ?? "No stack"
         statusItemController.setBaseTitle(
             count > 0 ? " \(count)" : "",
-            tooltip: "\(stackName) · \(settings.activeTemplate.name)"
+            tooltip: "\(stackName) · \(templates.activeTemplate.name)"
         )
         statusItemController.rebuildMenu(
             facts: store.map {
@@ -20,12 +20,14 @@ extension AppDelegate {
             storeStatus: statusMenuStoreStatus,
             error: store?.error,
             hasPendingMutations: store?.hasPendingMutations == true,
-            settings: settings
+            settings: settings,
+            shortcuts: shortcuts,
+            templates: templates
         )
     }
 
     func registerHotKeys() {
-        captureController.send(.voiceModeChanged(settings.voiceMode))
+        captureController.send(.voiceModeChanged(voiceSettings.voiceMode))
         let actions = HotKeyRegistrar.Actions(
             voicePressed: { [weak self] in self?.captureController.send(.voicePressed) },
             voiceReleased: { [weak self] in self?.captureController.send(.voiceReleased) },
@@ -38,7 +40,7 @@ extension AppDelegate {
             clear: { [weak self] in self?.clearStack() }
         )
         let issues = hotKeyRegistrar.register(actions)
-        settings.updateShortcutRegistrationIssues(issues)
+        shortcuts.updateShortcutRegistrationIssues(issues)
         refreshStatusItem()
     }
 
@@ -74,7 +76,7 @@ extension AppDelegate {
         exportController.copy(
             store: store,
             stackID: store.currentStackID,
-            template: settings.activeTemplate,
+            template: templates.activeTemplate,
             pasteTarget: target
         ) { [weak self] message in
             self?.statusItemController.flash(message)
@@ -108,7 +110,8 @@ extension AppDelegate {
     func requestTemplateSelection(_ templateID: UUID) {
         if settingsWindowController?.requestTemplateSelection(templateID) == true { return }
         do {
-            try settings.selectTemplate(id: templateID)
+            try templates.selectTemplate(id: templateID)
+            refreshStatusItem()
         } catch {
             NSSound.beep()
         }
@@ -163,8 +166,11 @@ extension AppDelegate {
     func buildPalette(store: StackStore) {
         palette = StackPaletteWindowController(
             store: store,
-            settings: settings,
+            settings: templates,
+            shortcuts: shortcuts,
+            voiceSettings: voiceSettings,
             export: exportController,
+            appIcons: environment.appIcons,
             surfaces: surfaces,
             onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }
         )
@@ -184,6 +190,8 @@ extension AppDelegate {
         if setupWindowController == nil {
             setupWindowController = SetupWindowController(
                 settings: settings,
+                shortcuts: shortcuts,
+                voiceSettings: voiceSettings,
                 permissionState: permissionState,
                 surfaces: surfaces,
                 onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() },
@@ -191,8 +199,8 @@ extension AppDelegate {
                     guard let self else { return }
                     self.surfaces.dismiss(.setup)
                     self.statusItemController.flash(
-                        "\(self.settings.voiceCaptureCombo.displayString): "
-                            + "\(self.settings.voiceMode.detail) · Esc discards"
+                        "\(self.shortcuts.voiceCaptureCombo.displayString): "
+                            + "\(self.voiceSettings.voiceMode.detail) · Esc discards"
                     )
                 }
             )
@@ -214,10 +222,16 @@ extension AppDelegate {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 settings: settings,
+                shortcuts: shortcuts,
+                templates: templates,
+                voiceSettings: voiceSettings,
+                hotKeyRegistrar: hotKeyRegistrar,
+                captureController: captureController,
                 permissionState: permissionState,
                 surfaces: surfaces,
                 onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) },
-                onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() }
+                onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() },
+                onSettingsChanged: { [weak self] in self?.refreshStatusItem() }
             )
         }
         settingsWindowController?.show()

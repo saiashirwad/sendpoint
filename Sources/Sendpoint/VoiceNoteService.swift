@@ -19,8 +19,6 @@ nonisolated enum LocalVoiceModelFiles {
 /// Hex uses. The model downloads only when the user asks for voice setup or
 /// first makes a voice note. Neither the audio nor its transcript leaves the Mac.
 final class VoiceNoteService {
-    static let shared = VoiceNoteService()
-
     private let transcriber = LocalVoiceTranscriber()
     let levelMeter = VoiceLevelMeter()
     private var engine: AVAudioEngine?
@@ -31,7 +29,7 @@ final class VoiceNoteService {
     /// If the device is not connected when recording starts, the default is used.
     var preferredInputDeviceUID: String?
 
-    private init() {}
+    init() {}
 
     var isRecording: Bool { engine?.isRunning == true }
 

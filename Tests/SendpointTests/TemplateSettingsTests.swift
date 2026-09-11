@@ -20,7 +20,7 @@ final class TemplateSettingsTests: XCTestCase {
                 defaults.set(Template.coherent.id.uuidString, forKey: "activeTemplateID")
             }
 
-            let settings = AppSettings(defaults: defaults)
+            let settings = TemplateSettings(defaults: defaults)
 
             XCTAssertEqual(settings.templates, Template.builtIns)
             XCTAssertEqual(settings.activeTemplateID, Template.plain.id)
@@ -33,7 +33,7 @@ final class TemplateSettingsTests: XCTestCase {
     func testValidTemplatesAndActiveTemplatePersistAcrossSettingsInstances() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = TemplateSettings(defaults: defaults)
         var custom = Template.plain
         custom = Template(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
@@ -50,7 +50,7 @@ final class TemplateSettingsTests: XCTestCase {
 
         try settings.addTemplate(custom)
         try settings.selectTemplate(id: custom.id)
-        let reloaded = AppSettings(defaults: defaults)
+        let reloaded = TemplateSettings(defaults: defaults)
 
         XCTAssertEqual(reloaded.templates, Template.builtIns + [custom])
         XCTAssertEqual(reloaded.activeTemplateID, custom.id)
@@ -77,7 +77,7 @@ final class TemplateSettingsTests: XCTestCase {
     func testCloseCancelAndFailedSaveKeepDraft() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = TemplateSettings(defaults: defaults)
         let editor = TemplateEditorState(settings: settings)
         editor.draft.name = Template.pointByPoint.name
 
@@ -162,7 +162,7 @@ final class TemplateSettingsTests: XCTestCase {
     func testSaveAsNewClonesDraftWithNewIDWithoutMutatingSource() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = TemplateSettings(defaults: defaults)
         let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000099")!
         let editor = TemplateEditorState(settings: settings, makeID: { newID })
         editor.draft.preamble = "Clone only"
@@ -202,37 +202,6 @@ final class TemplateSettingsTests: XCTestCase {
         XCTAssertEqual(settings.activeTemplateID, settings.templates[0].id)
     }
 
-    func testTemplateChangesNotifyOnlyAfterPersistingAValidSnapshot() throws {
-        let defaults = makeDefaults()
-        defer { remove(defaults) }
-        let settings = AppSettings(defaults: defaults)
-        var selections: [UUID] = []
-        settings.onTemplatesChanged = {
-            selections.append(settings.activeTemplateID)
-            let saved = defaults.data(forKey: "templates")
-                .flatMap { try? JSONDecoder().decode([Template].self, from: $0) }
-            XCTAssertEqual(saved, settings.templates)
-            XCTAssertEqual(defaults.string(forKey: "activeTemplateID"), settings.activeTemplateID.uuidString)
-            XCTAssertTrue(settings.templates.contains { $0.id == settings.activeTemplateID })
-        }
-        let initialData = defaults.data(forKey: "templates")
-        try settings.selectTemplate(id: Template.plain.id)
-        try settings.updateTemplate(.plain)
-        XCTAssertThrowsError(try settings.addTemplate(.plain)) {
-            XCTAssertEqual($0 as? TemplateError, .duplicateID)
-        }
-        XCTAssertTrue(selections.isEmpty)
-        XCTAssertEqual(defaults.data(forKey: "templates"), initialData)
-
-        try settings.selectTemplate(id: Template.coherent.id)
-        var edited = Template.coherent
-        edited.name = "  Revised  "
-        try settings.updateTemplate(edited)
-        XCTAssertEqual(settings.activeTemplate.name, "Revised")
-        try settings.deleteTemplate(id: Template.coherent.id)
-        XCTAssertEqual(selections, [Template.coherent.id, Template.coherent.id, Template.pointByPoint.id])
-    }
-
     private enum Seed {
         case missing
         case empty
@@ -240,8 +209,8 @@ final class TemplateSettingsTests: XCTestCase {
     }
 
     /// Editor flows below edit Coherent; a fresh store opens on Plain.
-    private func makeSettingsOnCoherent(_ defaults: UserDefaults) throws -> AppSettings {
-        let settings = AppSettings(defaults: defaults)
+    private func makeSettingsOnCoherent(_ defaults: UserDefaults) throws -> TemplateSettings {
+        let settings = TemplateSettings(defaults: defaults)
         try settings.selectTemplate(id: Template.coherent.id)
         return settings
     }

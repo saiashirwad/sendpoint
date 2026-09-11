@@ -24,7 +24,8 @@ extension AppDelegate {
                 buildPalette(store: store)
                 switcher = StackSwitcherController(
                     store: store,
-                    settings: settings,
+                    settings: shortcuts,
+                    hotKeyCenter: environment.hotKeyCenter,
                     surfaces: surfaces,
                     onOpenPalette: { [weak self] id in
                         self?.presentPalette(at: .stacks, highlighting: id)

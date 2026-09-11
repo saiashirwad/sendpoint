@@ -31,10 +31,15 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Bindable var settings: AppSettings
+    @Bindable var shortcuts: ShortcutSettings
+    @Bindable var voiceSettings: VoiceSettings
     @Bindable var templateEditor: TemplateEditorState
     @Bindable var permissionState: PermissionState
     let onSelectTemplate: (UUID) -> Void
     let onShowAccessibilityHelper: () -> Void
+    let hotKeyRegistrar: HotKeyRegistrar
+    let captureController: CaptureController
+    let onSettingsChanged: () -> Void
 
     @State private var tab: SettingsTab = .capture
     @State private var newTemplate: NewTemplateDraft?
@@ -57,16 +62,26 @@ struct SettingsView: View {
 
     init(
         settings: AppSettings,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
+        hotKeyRegistrar: HotKeyRegistrar,
+        captureController: CaptureController,
         templateEditor: TemplateEditorState,
         permissionState: PermissionState,
         onSelectTemplate: @escaping (UUID) -> Void,
-        onShowAccessibilityHelper: @escaping () -> Void
+        onShowAccessibilityHelper: @escaping () -> Void,
+        onSettingsChanged: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
+        _shortcuts = Bindable(wrappedValue: shortcuts)
+        _voiceSettings = Bindable(wrappedValue: voiceSettings)
         _templateEditor = Bindable(wrappedValue: templateEditor)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onSelectTemplate = onSelectTemplate
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
+        self.hotKeyRegistrar = hotKeyRegistrar
+        self.captureController = captureController
+        self.onSettingsChanged = onSettingsChanged
     }
 
     var body: some View {
@@ -77,7 +92,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-                        if !settings.shortcutRegistrationIssues.isEmpty {
+                        if !shortcuts.shortcutRegistrationIssues.isEmpty {
                             shortcutRegistrationIssues
                         }
                         switch tab {
@@ -256,7 +271,7 @@ struct SettingsView: View {
                 Label("Shortcut unavailable", systemImage: "exclamationmark.triangle.fill")
                     .font(.body.weight(.medium))
                     .foregroundStyle(.orange)
-                ForEach(settings.shortcutRegistrationIssues) { issue in
+                ForEach(shortcuts.shortcutRegistrationIssues) { issue in
                     Text("• \(issue.id.title): \(issue.message)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -271,18 +286,18 @@ struct SettingsView: View {
     /// Restart the meter when the mic, the window's visibility, or the
     /// permission changes; stop it whenever the tab is not on screen.
     private var levelMonitorKey: String {
-        "\(windowIsVisible)|\(settings.inputDeviceUID ?? "default")|\(permissionState.microphone == .granted)"
+        "\(windowIsVisible)|\(voiceSettings.inputDeviceUID ?? "default")|\(permissionState.microphone == .granted)"
     }
 
     private var microphoneFootnote: String {
-        if settings.inputDeviceUID != nil, !selectedDeviceIsConnected {
-            return "\(settings.inputDeviceName ?? "That microphone") is not connected, so the system default is used."
+        if voiceSettings.inputDeviceUID != nil, !selectedDeviceIsConnected {
+            return "\(voiceSettings.inputDeviceName ?? "That microphone") is not connected, so the system default is used."
         }
         return "The built-in microphone usually sounds better than AirPods."
     }
 
     private var selectedDeviceIsConnected: Bool {
-        guard let uid = settings.inputDeviceUID else { return true }
+        guard let uid = voiceSettings.inputDeviceUID else { return true }
         return inputDevices.devices.contains { $0.uid == uid }
     }
 
@@ -292,13 +307,13 @@ struct SettingsView: View {
             items.append(.separator)
             items += inputDevices.devices.map { .init(uid: $0.uid, title: $0.name) }
         }
-        if let uid = settings.inputDeviceUID, !selectedDeviceIsConnected {
+        if let uid = voiceSettings.inputDeviceUID, !selectedDeviceIsConnected {
             items.append(.separator)
-            items.append(.init(uid: uid, title: "\(settings.inputDeviceName ?? "Saved microphone") (not connected)"))
+            items.append(.init(uid: uid, title: "\(voiceSettings.inputDeviceName ?? "Saved microphone") (not connected)"))
         }
-        return InputDevicePopUp(items: items, selectedUID: settings.inputDeviceUID) { uid in
+        return InputDevicePopUp(items: items, selectedUID: voiceSettings.inputDeviceUID) { uid in
             let name = inputDevices.devices.first { $0.uid == uid }?.name
-            settings.setInputDevice(uid: uid, name: name)
+            captureController.chooseMicrophone(uid: uid, name: name)
         }
         .frame(maxWidth: .infinity)
         .accessibilityLabel("Microphone")
@@ -330,7 +345,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Making notes") {
                 SettingsRowGroup {
-                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
+                    shortcutRow(icon: "mic.fill", title: "Voice note", detail: voiceSettings.voiceMode.detail, slot: .voiceCapture)
                     SettingsDivider()
                     shortcutRow(
                         icon: "square.and.pencil",
@@ -413,16 +428,18 @@ struct SettingsView: View {
 
     private func shortcutBinding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {
         Binding(
-            get: { settings.combo(for: slot) },
+            get: { shortcuts.combo(for: slot) },
             set: { proposed in
                 guard let proposed else {
-                    settings.clearShortcut(for: slot)
+                    hotKeyRegistrar.clear(slot)
                     shortcutFeedback = nil
+                    onSettingsChanged()
                     return
                 }
                 do {
-                    try settings.setShortcut(proposed, for: slot)
+                    try hotKeyRegistrar.rebind(proposed, for: slot)
                     shortcutFeedback = nil
+                    onSettingsChanged()
                 } catch {
                     shortcutFeedback = error.localizedDescription
                 }
@@ -442,8 +459,8 @@ struct SettingsView: View {
                         detail: "How the shortcut starts and stops a recording."
                     ) {
                         Picker("Recording mode", selection: Binding(
-                            get: { settings.voiceMode },
-                            set: { settings.setVoiceMode($0) }
+                            get: { voiceSettings.voiceMode },
+                            set: { captureController.setVoiceMode($0) }
                         )) {
                             ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
                                 Text(mode.title).tag(mode)
@@ -471,13 +488,25 @@ struct SettingsView: View {
                     SettingsToggleRow(
                         "Paste straight into the app you are in",
                         subtitle: "The Markdown lands where your cursor is, without a separate paste.",
-                        isOn: $settings.pasteDirectly
+                        isOn: Binding(
+                            get: { settings.pasteDirectly },
+                            set: {
+                                self.settings.setPasteDirectly($0)
+                                onSettingsChanged()
+                            }
+                        )
                     )
                     SettingsDivider(pastIcon: false)
                     SettingsToggleRow(
                         "Return to the previous app after saving",
                         subtitle: "Hands focus back to where you were reading.",
-                        isOn: $settings.restoreFocusAfterSave
+                        isOn: Binding(
+                            get: { settings.restoreFocusAfterSave },
+                            set: {
+                                self.settings.setRestoreFocusAfterSave($0)
+                                onSettingsChanged()
+                            }
+                        )
                     )
                     SettingsDivider(pastIcon: false)
                     SettingsToggleRow(
@@ -485,7 +514,10 @@ struct SettingsView: View {
                         subtitle: "Keeps the shortcuts ready as soon as you sign in.",
                         isOn: Binding(
                             get: { settings.launchAtLogin },
-                            set: { settings.setLaunchAtLogin($0) }
+                            set: {
+                                settings.setLaunchAtLogin($0)
+                                onSettingsChanged()
+                            }
                         )
                     )
                 }
@@ -494,7 +526,7 @@ struct SettingsView: View {
         .task { await permissionState.watchVoiceModel() }
         .task(id: levelMonitorKey) {
             guard windowIsVisible else { levelMonitor.stop(); return }
-            levelMonitor.start(preferredUID: settings.inputDeviceUID)
+            levelMonitor.start(preferredUID: voiceSettings.inputDeviceUID)
         }
         .onDisappear { levelMonitor.stop() }
     }

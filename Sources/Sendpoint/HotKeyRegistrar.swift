@@ -16,10 +16,11 @@ final class HotKeyRegistrar {
         var clear: () -> Void
     }
 
-    private let settings: AppSettings
+    private let settings: ShortcutSettings
     private let center: HotKeyCenter
+    private var actions: Actions?
 
-    init(settings: AppSettings, center: HotKeyCenter = .shared) {
+    init(settings: ShortcutSettings, center: HotKeyCenter) {
         self.settings = settings
         self.center = center
     }
@@ -29,6 +30,7 @@ final class HotKeyRegistrar {
     /// each name is unregistered before its replacement is attempted.
     @discardableResult
     func register(_ actions: Actions) -> [ShortcutRegistrationIssue] {
+        self.actions = actions
         var issues: [ShortcutRegistrationIssue] = []
         center.unregister(name: .switchStackReverse)
         for slot in ShortcutSlot.allCases {
@@ -73,6 +75,21 @@ final class HotKeyRegistrar {
             }
         }
         return issues
+    }
+
+    func rebind(_ proposed: KeyCombo, for slot: ShortcutSlot) throws {
+        try settings.setShortcut(proposed, for: slot)
+        applyCurrentBindings()
+    }
+
+    func clear(_ slot: ShortcutSlot) {
+        settings.clearShortcut(for: slot)
+        applyCurrentBindings()
+    }
+
+    func applyCurrentBindings() {
+        guard let actions else { return }
+        settings.updateShortcutRegistrationIssues(register(actions))
     }
 
     /// Releases every name the app can register, including the temporary

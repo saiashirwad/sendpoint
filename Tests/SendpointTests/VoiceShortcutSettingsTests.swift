@@ -7,26 +7,22 @@ import XCTest
 final class VoiceShortcutSettingsTests: XCTestCase {
     func testVoiceShortcutAndModeAreAssignableAndPersistAcrossLaunches() throws {
         try withDefaults { defaults in
-            let settings = AppSettings(defaults: defaults)
+            let shortcuts = ShortcutSettings(defaults: defaults)
+            let voice = VoiceSettings(defaults: defaults)
             let combo = KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option])
-            var changes = 0
-            settings.onHotKeysChanged = { changes += 1 }
-            try settings.setShortcut(combo, for: .voiceCapture)
-            settings.setVoiceMode(.tap)
-            settings.setVoiceMode(.tap)
-            XCTAssertEqual(changes, 2)
-            let reloaded = AppSettings(defaults: defaults)
-            XCTAssertEqual(reloaded.voiceCaptureCombo, combo)
-            XCTAssertEqual(reloaded.voiceMode, .tap)
-            settings.setVoiceMode(.hold)
-            XCTAssertEqual(AppSettings(defaults: defaults).voiceMode, .hold)
+            try shortcuts.setShortcut(combo, for: .voiceCapture)
+            voice.setVoiceMode(.tap)
+            XCTAssertEqual(ShortcutSettings(defaults: defaults).voiceCaptureCombo, combo)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .tap)
+            voice.setVoiceMode(.hold)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .hold)
         }
     }
 
     func testUnknownModeFallsBackToHold() {
         withDefaults { defaults in
             defaults.set("automatic", forKey: "voiceMode")
-            XCTAssertEqual(AppSettings(defaults: defaults).voiceMode, .hold)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .hold)
         }
     }
 

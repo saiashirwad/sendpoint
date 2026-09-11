@@ -1,8 +1,17 @@
 import AppKit
 import SendpointDomain
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let statusItemController = StatusItemController()
-    let surfaces: SurfaceCoordinator
+    let environment: AppEnvironment
+    var statusItemController: StatusItemController { environment.statusItemController }
+    var surfaces: SurfaceCoordinator { environment.surfaces }
+    var settings: AppSettings { environment.appSettings }
+    var shortcuts: ShortcutSettings { environment.shortcutSettings }
+    var templates: TemplateSettings { environment.templateSettings }
+    var voiceSettings: VoiceSettings { environment.voiceSettings }
+    var captureController: CaptureController { environment.captureController }
+    var permissionState: PermissionState { environment.permissionState }
+    var hotKeyRegistrar: HotKeyRegistrar { environment.hotKeyRegistrar }
+    var exportController: ExportController { environment.exportController }
     var settingsWindowController: SettingsWindowController?
     var setupWindowController: SetupWindowController?
     var accessibilityHelperWindowController: AccessibilityHelperWindowController?
@@ -17,30 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var storeState: StoreState = .loading
     var bootstrapTask: Task<Void, Never>?
     var terminationTask: Task<Void, Never>?
-    let exportController: ExportController
-
-    let settings: AppSettings
-    let captureController: CaptureController
-    let permissionState: PermissionState
-    let hotKeyRegistrar: HotKeyRegistrar
-
     override init() {
-        let settings = AppSettings.shared
-        let permissionState = PermissionState()
-        let surfaces = SurfaceCoordinator()
-        let selection = SelectionCapture.live(monitor: .shared)
-        self.settings = settings
-        self.permissionState = permissionState
-        self.surfaces = surfaces
-        self.hotKeyRegistrar = HotKeyRegistrar(settings: settings)
-        self.exportController = ExportController(services: .live(selection: selection))
-        self.captureController = CaptureController(
-            settings: settings,
-            permissionState: permissionState,
-            selection: selection,
-            recorder: .live(.shared),
-            surfaces: { .live(CaptureWindows(model: $0, surfaces: surfaces)) }
-        )
+        environment = AppEnvironment()
         super.init()
         captureController.onAccessibilityRequired = { [weak self] in
             self?.presentPermissionHelpForCapture()
@@ -54,17 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Diag.log("=== launch pid=\(ProcessInfo.processInfo.processIdentifier) ===")
         NSApp.mainMenu = MainMenu.build()
         statusItemController.onAction = { [weak self] action in self?.perform(action) }
-        settings.onHotKeysChanged = { [weak self] in self?.registerHotKeys() }
-        settings.onTemplatesChanged = { [weak self] in self?.refreshStatusItem() }
-        settings.onInputDeviceChanged = { [settings] in
-            VoiceNoteService.shared.preferredInputDeviceUID = settings.inputDeviceUID
-        }
-        VoiceNoteService.shared.preferredInputDeviceUID = settings.inputDeviceUID
-        VoiceNoteService.shared.warmUp()
         captureController.warmUp()
         registerHotKeys()
         permissionState.refresh()
-        AutomaticSelectionMonitor.shared.start()
+        environment.selectionMonitor.start()
 
         bootstrapStore()
         if !settings.hasCompletedSetup {
@@ -106,11 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureController.teardown()
         permissionState.teardown()
         statusItemController.teardown()
-        AutomaticSelectionMonitor.shared.teardown()
+        environment.selectionMonitor.teardown()
         store?.teardown()
-        settings.onHotKeysChanged = nil
-        settings.onTemplatesChanged = nil
-        settings.onInputDeviceChanged = nil
         hotKeyRegistrar.unregisterAll()
         surfaces.teardown()
     }

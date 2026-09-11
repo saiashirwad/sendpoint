@@ -6,6 +6,18 @@ import XCTest
 
 @MainActor
 final class StatusMenuModelTests: XCTestCase {
+    @MainActor private struct FixtureSettings {
+        let app: AppSettings
+        let shortcuts: ShortcutSettings
+        let templateSettings: TemplateSettings
+
+        var templates: [Template] { templateSettings.templates }
+        var activeTemplateID: UUID { templateSettings.activeTemplateID }
+
+        func setShortcut(_ combo: KeyCombo, for slot: ShortcutSlot) throws {
+            try shortcuts.setShortcut(combo, for: slot)
+        }
+    }
     private let firstStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let secondStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
 
@@ -143,7 +155,7 @@ final class StatusMenuModelTests: XCTestCase {
     private func items(
         facts: StackUIFacts?,
         status: StatusMenuStoreStatus,
-        settings: AppSettings,
+        settings: FixtureSettings,
         error: StackStoreError? = nil,
         hasPendingMutations: Bool = false
     ) -> [StatusMenuItem] {
@@ -152,7 +164,9 @@ final class StatusMenuModelTests: XCTestCase {
             storeStatus: status,
             error: error,
             hasPendingMutations: hasPendingMutations,
-            settings: settings
+            settings: settings.app,
+            shortcuts: settings.shortcuts,
+            templates: settings.templateSettings
         )
     }
 
@@ -197,10 +211,14 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
-    private func withSettings(_ body: (AppSettings) throws -> Void) rethrows {
+    private func withSettings(_ body: (FixtureSettings) throws -> Void) rethrows {
         let suite = "StatusMenuModelTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        try body(AppSettings(defaults: defaults))
+        try body(FixtureSettings(
+            app: AppSettings(defaults: defaults),
+            shortcuts: ShortcutSettings(defaults: defaults),
+            templateSettings: TemplateSettings(defaults: defaults)
+        ))
     }
 }

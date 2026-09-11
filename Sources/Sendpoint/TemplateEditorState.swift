@@ -23,16 +23,19 @@ final class TemplateEditorState {
         case cancel
     }
 
-    private let settings: AppSettings
+    private let settings: TemplateSettings
     private let makeID: () -> UUID
+    private let onChange: () -> Void
 
     private(set) var editedTemplateID: UUID
     var draft: Template
     private(set) var pendingTemplateID: UUID?
 
-    init(settings: AppSettings, makeID: @escaping () -> UUID = UUID.init) {
+    init(settings: TemplateSettings, makeID: @escaping () -> UUID = UUID.init,
+         onChange: @escaping () -> Void = {}) {
         self.settings = settings
         self.makeID = makeID
+        self.onChange = onChange
         let template = settings.activeTemplate
         editedTemplateID = template.id
         draft = template
@@ -62,6 +65,7 @@ final class TemplateEditorState {
     func save() throws {
         try settings.updateTemplate(draft)
         draft = settings.template(id: editedTemplateID) ?? draft
+        onChange()
     }
 
     @discardableResult
@@ -166,5 +170,6 @@ final class TemplateEditorState {
         editedTemplateID = id
         draft = template
         pendingTemplateID = nil
+        onChange()
     }
 }

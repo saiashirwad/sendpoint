@@ -10,7 +10,7 @@ final class HotKeyRegistrarTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let invalid = KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [])
         defaults.set(try JSONEncoder().encode(invalid), forKey: "captureCombo")
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         var attempts: [(keyCode: UInt32, modifiers: UInt32)] = []
         let center = HotKeyCenter(
             registerEvent: { keyCode, carbonModifiers, _ in
@@ -35,7 +35,7 @@ final class HotKeyRegistrarTests: XCTestCase {
         let shared = KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command])
         defaults.set(try JSONEncoder().encode(shared), forKey: "copyCombo")
         defaults.set(try JSONEncoder().encode(shared), forKey: "stackCombo")
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         var attempts: [(keyCode: UInt32, modifiers: UInt32)] = []
         let center = HotKeyCenter(
             registerEvent: { keyCode, carbonModifiers, _ in
@@ -60,7 +60,7 @@ final class HotKeyRegistrarTests: XCTestCase {
     func testFailedRegistrationYieldsUnavailableForEveryBoundSlot() {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         let status: Int32 = -9876
         var attempts = 0
         let center = HotKeyCenter(
@@ -86,7 +86,7 @@ final class HotKeyRegistrarTests: XCTestCase {
     func testReverseSwitchIsClaimedOnlyAfterThePrimarySwitchSucceeds() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
 
         var calls: [(keyCode: UInt32, modifiers: UInt32)] = []
         let succeeding = HotKeyCenter(
@@ -135,7 +135,7 @@ final class HotKeyRegistrarTests: XCTestCase {
     func testUnregisterAllReleasesEveryRegisteredName() {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         var successfulRegistrations = 0
         var unregisteredRefs: [EventHotKeyRef] = []
         let center = HotKeyCenter(
@@ -160,6 +160,34 @@ final class HotKeyRegistrarTests: XCTestCase {
 
         XCTAssertGreaterThan(successfulRegistrations, 0)
         XCTAssertEqual(unregisteredRefs.count, successfulRegistrations)
+    }
+
+    func testRebindPersistsAndRegistersTheReplacementImmediately() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = ShortcutSettings(defaults: defaults)
+        var attempts: [(UInt32, UInt32)] = []
+        let center = HotKeyCenter(
+            registerEvent: { keyCode, modifiers, _ in
+                attempts.append((keyCode, modifiers))
+                return (noErr, EventHotKeyRef(bitPattern: 1))
+            },
+            unregisterEvent: { _ in }
+        )
+        let registrar = HotKeyRegistrar(settings: settings, center: center)
+        _ = registrar.register(makeActions())
+        let replacement = KeyCombo(
+            keyCode: UInt16(kVK_ANSI_RightBracket),
+            modifiers: [.control, .option]
+        )
+
+        try registrar.rebind(replacement, for: .nextStack)
+
+        XCTAssertEqual(settings.nextStackCombo, replacement)
+        XCTAssertEqual(ShortcutSettings(defaults: defaults).nextStackCombo, replacement)
+        XCTAssertTrue(attempts.contains {
+            $0.0 == UInt32(replacement.keyCode) && $0.1 == replacement.carbonModifiers
+        })
     }
 
     private func makeActions() -> HotKeyRegistrar.Actions {

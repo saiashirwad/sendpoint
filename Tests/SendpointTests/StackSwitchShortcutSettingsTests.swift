@@ -7,7 +7,7 @@ import XCTest
 final class StackSwitchShortcutSettingsTests: XCTestCase {
     func testTheShiftVariantOfTheSwitchShortcutIsClaimed() throws {
         try withDefaults { defaults in
-            let settings = AppSettings(defaults: defaults)
+            let settings = ShortcutSettings(defaults: defaults)
             let shiftU = KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command, .shift])
             XCTAssertEqual(settings.shortcutConflict(for: shiftU, excluding: .clear), .duplicate(.switchStack))
             XCTAssertThrowsError(try settings.setShortcut(shiftU, for: .nextStack))
@@ -28,7 +28,7 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
 
     func testAShiftedSwitchShortcutHasNoReverse() throws {
         try withDefaults { defaults in
-            let settings = AppSettings(defaults: defaults)
+            let settings = ShortcutSettings(defaults: defaults)
             try settings.setShortcut(KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command, .shift]),
                 for: .switchStack)
             XCTAssertNil(settings.switchStackReverseCombo)
@@ -37,23 +37,19 @@ final class StackSwitchShortcutSettingsTests: XCTestCase {
 
     func testOptionalSlotsCanBeSetAndClearedAndBothPersist() throws {
         try withDefaults { defaults in
-            let settings = AppSettings(defaults: defaults)
+            let settings = ShortcutSettings(defaults: defaults)
             let next = KeyCombo(keyCode: UInt16(kVK_ANSI_RightBracket), modifiers: [.command])
-            var changes = 0
-            settings.onHotKeysChanged = { changes += 1 }
             try settings.setShortcut(next, for: .nextStack)
             XCTAssertEqual(settings.nextStackCombo, next)
-            XCTAssertEqual(AppSettings(defaults: defaults).nextStackCombo, next)
+            XCTAssertEqual(ShortcutSettings(defaults: defaults).nextStackCombo, next)
 
             settings.clearShortcut(for: .nextStack)
             XCTAssertNil(settings.nextStackCombo)
-            XCTAssertNil(AppSettings(defaults: defaults).nextStackCombo)
+            XCTAssertNil(ShortcutSettings(defaults: defaults).nextStackCombo)
             settings.clearShortcut(for: .nextStack)
-            XCTAssertEqual(changes, 2, "clearing an already clear slot notifies nobody")
 
             settings.clearShortcut(for: .switchStack)
             XCTAssertNotNil(settings.combo(for: .switchStack), "required slots cannot be cleared")
-            XCTAssertEqual(changes, 2)
         }
     }
 

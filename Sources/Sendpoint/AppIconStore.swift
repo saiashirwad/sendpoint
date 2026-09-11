@@ -4,8 +4,6 @@ import SendpointDomain
 /// Caches app icons by bundle ID. A hit is remembered, and so is a miss, so
 /// an app that cannot be found costs one lookup rather than one per render.
 final class AppIconStore {
-    static let shared = AppIconStore()
-
     private let load: @MainActor (String) -> NSImage?
     private var icons: [String: NSImage] = [:]
     private var missing: Set<String> = []

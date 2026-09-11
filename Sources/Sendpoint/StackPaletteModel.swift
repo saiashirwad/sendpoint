@@ -5,7 +5,9 @@ import SendpointDomain
 final class StackPaletteModel {
     private(set) var state = PaletteWorkflow()
     let store: StackStore
-    let settings: AppSettings
+    let settings: TemplateSettings
+    let shortcuts: ShortcutSettings
+    let voiceSettings: VoiceSettings
     @ObservationIgnored private let onSelectTemplate: (UUID) -> Void
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored private let export: ExportController
@@ -14,11 +16,14 @@ final class StackPaletteModel {
     @ObservationIgnored private var pending: [PaletteEvent] = []
     @ObservationIgnored private var isDraining = false
 
-    init(store: StackStore, settings: AppSettings, export: ExportController,
+    init(store: StackStore, settings: TemplateSettings, shortcuts: ShortcutSettings,
+         voiceSettings: VoiceSettings, export: ExportController,
          onSelectTemplate: @escaping (UUID) -> Void,
          confirmDelete: ((UUID, [Stack], ClearedBatch?) -> Bool)? = nil) {
         self.store = store
         self.settings = settings
+        self.shortcuts = shortcuts
+        self.voiceSettings = voiceSettings
         self.export = export
         self.onSelectTemplate = onSelectTemplate
         self.confirmDelete = confirmDelete ?? {

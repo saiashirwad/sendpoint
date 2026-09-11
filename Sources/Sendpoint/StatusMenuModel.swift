@@ -71,22 +71,24 @@ enum StatusMenuModel {
         storeStatus: StatusMenuStoreStatus,
         error: StackStoreError?,
         hasPendingMutations: Bool,
-        settings: AppSettings
+        settings: AppSettings,
+        shortcuts: ShortcutSettings,
+        templates: TemplateSettings
     ) -> [StatusMenuItem] {
         let ready = storeStatus == .available
         var menu: [StatusMenuItem] = []
 
         menu.append(.entry(StatusMenuEntry(
-            title: "Voice Note (\(settings.voiceCaptureCombo.displayString))",
+            title: "Voice Note (\(shortcuts.voiceCaptureCombo.displayString))",
             action: ready ? .voiceNote : nil,
-            tooltip: settings.voiceCaptureCombo.displayString
+            tooltip: shortcuts.voiceCaptureCombo.displayString
         )))
         menu.append(.entry(entry("Typed Note",
             action: ready ? .typedNote : nil,
-            combo: settings.captureCombo)))
+            combo: shortcuts.captureCombo)))
         menu.append(.entry(entry("Show Stack…",
             action: ready ? .showStack : nil,
-            combo: settings.stackCombo)))
+            combo: shortcuts.stackCombo)))
 
         if let facts, facts.current != nil {
             menu.append(.entry(entry(facts.currentTitle)))
@@ -100,13 +102,13 @@ enum StatusMenuModel {
             stackMenu.append(.separator)
             stackMenu.append(.entry(entry("Switch Stack…",
                 action: .quickSwitcher,
-                combo: settings.switchStackCombo)))
-            if let combo = settings.nextStackCombo {
+                combo: shortcuts.switchStackCombo)))
+            if let combo = shortcuts.nextStackCombo {
                 stackMenu.append(.entry(entry("Next Stack",
                     action: .nextStack,
                     combo: combo)))
             }
-            if let combo = settings.previousStackCombo {
+            if let combo = shortcuts.previousStackCombo {
                 stackMenu.append(.entry(entry("Previous Stack",
                     action: .previousStack,
                     combo: combo)))
@@ -115,11 +117,11 @@ enum StatusMenuModel {
         }
 
         var templateMenu: [StatusMenuItem] = []
-        for template in settings.templates {
+        for template in templates.templates {
             templateMenu.append(.entry(entry(template.name,
                 action: .selectTemplate(template.id),
                 represents: template.id,
-                checked: template.id == settings.activeTemplateID)))
+                checked: template.id == templates.activeTemplateID)))
         }
         menu.append(.submenu(title: "Template", items: templateMenu))
         menu.append(.separator)
@@ -131,11 +133,11 @@ enum StatusMenuModel {
                 ? "\(verb) \(count) Note\(count == 1 ? "" : "s") as Markdown"
                 : unavailableTitle(for: storeStatus),
             action: count > 0 ? .copyMarkdown : nil,
-            combo: settings.copyCombo)))
+            combo: shortcuts.copyCombo)))
         var clear = entry(
             facts?.current.map { "Clear \($0.name)" } ?? "Clear Current Stack",
             represents: facts?.current?.id,
-            combo: settings.clearCombo)
+            combo: shortcuts.clearCombo)
         if count > 0, let stackID = facts?.current?.id {
             clear.action = .clearStack(stackID)
         }

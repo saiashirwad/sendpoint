@@ -20,8 +20,11 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     init(
         store: StackStore,
-        settings: AppSettings,
+        settings: TemplateSettings,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
         export: ExportController,
+        appIcons: AppIconStore,
         surfaces: SurfaceCoordinator,
         onSelectTemplate: @escaping (UUID) -> Void
     ) {
@@ -32,13 +35,14 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         self.panel = panel
 
         let model = StackPaletteModel(
-            store: store, settings: settings, export: export, onSelectTemplate: onSelectTemplate
+            store: store, settings: settings, shortcuts: shortcuts,
+            voiceSettings: voiceSettings, export: export, onSelectTemplate: onSelectTemplate
         )
         self.model = model
         super.init()
         model.onClose = { [weak surfaces] in surfaces?.dismiss(.palette) }
         panel.onClose = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: StackPaletteView(model: model))
+        let hosting = NSHostingView(rootView: StackPaletteView(model: model, appIcons: appIcons))
         hosting.sizingOptions = []
         panel.contentView = hosting
         panel.delegate = self

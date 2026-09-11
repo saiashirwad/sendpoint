@@ -87,6 +87,7 @@ final class CaptureControllerTests: XCTestCase {
         let gate = Gate<CapturedSelection>()
         let controller = CaptureController(
             settings: AppSettings(defaults: defaults),
+            voiceSettings: VoiceSettings(defaults: defaults),
             permissionState: permissions,
             selection: SelectionCapture(
                 read: { _, editorMayOpen in

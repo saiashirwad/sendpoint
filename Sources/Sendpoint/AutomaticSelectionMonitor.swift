@@ -8,8 +8,6 @@ import AppKit
 /// pasteboard value to the mouse drag that produced it, rather than treating
 /// arbitrary clipboard text as a selection.
 final class AutomaticSelectionMonitor {
-    static let shared = AutomaticSelectionMonitor()
-
     private var tracker = AutomaticSelectionTracker()
     private var eventMonitor: Any?
     private var settlementTask: Task<Void, Never>?

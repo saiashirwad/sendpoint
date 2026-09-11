@@ -26,6 +26,7 @@ final class CapturePanel: NSPanel {
 final class CaptureWindows {
     private unowned let model: CaptureController
     private let surfaces: SurfaceCoordinator
+    private let hotKeyCenter: HotKeyCenter
     private var panel: CapturePanel?
     /// Built once and kept: constructing a panel and its SwiftUI hosting
     /// view costs tens of milliseconds, which would sit between the hotkey
@@ -37,9 +38,10 @@ final class CaptureWindows {
     private var voiceEscapeMonitor: Any?
     private var surface: CaptureSurface?
 
-    init(model: CaptureController, surfaces: SurfaceCoordinator) {
+    init(model: CaptureController, surfaces: SurfaceCoordinator, hotKeyCenter: HotKeyCenter) {
         self.model = model
         self.surfaces = surfaces
+        self.hotKeyCenter = hotKeyCenter
         surfaces.register(.captureEditor, transitions: .init(
             show: { [weak self] in self?.presentEditor() },
             hide: { [weak self] in self?.hide(.editor) },
@@ -85,7 +87,7 @@ final class CaptureWindows {
     }
 
     func stopEscapeHandling() {
-        HotKeyCenter.shared.unregister(name: .voiceEscape)
+        hotKeyCenter.unregister(name: .voiceEscape)
         if let voiceEscapeMonitor { NSEvent.removeMonitor(voiceEscapeMonitor) }
         voiceEscapeMonitor = nil
     }
@@ -184,7 +186,7 @@ final class CaptureWindows {
         positionVoiceOverlay(panel)
         self.panel = panel
 
-        let escapeRegistration = HotKeyCenter.shared.registerRaw(
+        let escapeRegistration = hotKeyCenter.registerRaw(
             name: .voiceEscape,
             keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0,

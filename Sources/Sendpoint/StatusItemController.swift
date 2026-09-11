@@ -63,7 +63,9 @@ final class StatusItemController {
         storeStatus: StatusMenuStoreStatus,
         error: StackStoreError?,
         hasPendingMutations: Bool,
-        settings: AppSettings
+        settings: AppSettings,
+        shortcuts: ShortcutSettings,
+        templates: TemplateSettings
     ) {
         let menu = NSMenu()
         let items = StatusMenuModel.items(
@@ -71,7 +73,9 @@ final class StatusItemController {
             storeStatus: storeStatus,
             error: error,
             hasPendingMutations: hasPendingMutations,
-            settings: settings
+            settings: settings,
+            shortcuts: shortcuts,
+            templates: templates
         )
         for item in items {
             menu.addItem(render(item))

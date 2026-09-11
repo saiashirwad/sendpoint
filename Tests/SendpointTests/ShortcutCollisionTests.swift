@@ -8,7 +8,7 @@ final class ShortcutCollisionTests: XCTestCase {
     func testDuplicateShortcutIsRejectedBeforePersistence() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         let oldClear = settings.clearCombo
         let oldStoredClear = defaults.data(forKey: "clearCombo")
 
@@ -22,7 +22,7 @@ final class ShortcutCollisionTests: XCTestCase {
     func testFixedMainMenuShortcutsAreRejected() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
         let closeWindow = KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command])
         let undo = KeyCombo(keyCode: UInt16(kVK_ANSI_Z), modifiers: [.command])
 
@@ -47,7 +47,7 @@ final class ShortcutCollisionTests: XCTestCase {
         defaults.set(try JSONEncoder().encode(duplicate), forKey: "copyCombo")
         defaults.set(try JSONEncoder().encode(duplicate), forKey: "stackCombo")
 
-        let settings = AppSettings(defaults: defaults)
+        let settings = ShortcutSettings(defaults: defaults)
 
         XCTAssertEqual(
             settings.shortcutConflict(for: settings.clearCombo, excluding: .clear),

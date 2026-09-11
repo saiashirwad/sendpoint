@@ -64,7 +64,7 @@ struct PermissionServices: Sendable {
     var openAccessibilitySettings: @MainActor @Sendable () -> Void
     var openMicrophoneSettings: @MainActor @Sendable () -> Void
 
-    static func live() -> PermissionServices {
+    static func live(voiceService: VoiceNoteService) -> PermissionServices {
         PermissionServices(
             accessibilityStatus: {
                 AXIsProcessTrusted() ? .granted : .notGranted
@@ -77,13 +77,13 @@ struct PermissionServices: Sendable {
                 PermissionCheck.microphonePermissionState
             },
             requestMicrophone: {
-                await VoiceNoteService.shared.requestMicrophoneAccess()
+                await voiceService.requestMicrophoneAccess()
             },
             voiceModelFilesExist: {
                 LocalVoiceModelFiles.exist()
             },
             downloadVoiceModel: { onProgress in
-                try await VoiceNoteService.shared.downloadVoiceModel(
+                try await voiceService.downloadVoiceModel(
                     onProgress: onProgress
                 )
             },
@@ -165,10 +165,6 @@ final class PermissionState {
                 self?.voiceModelBecameReady()
             }
         }
-    }
-
-    convenience init() {
-        self.init(services: .live())
     }
 
     /// Re-read everything the system can answer instantly. A microphone
