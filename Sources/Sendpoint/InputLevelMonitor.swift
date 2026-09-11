@@ -28,7 +28,8 @@ final class InputLevelMonitor {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { return }
 
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak self] buffer, _ in
+        // The tap runs off the main thread; it must not inherit this method's isolation.
+        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { @Sendable [weak self] buffer, _ in
             let sample = VoiceLevelMeter.level(of: buffer)
             Task { @MainActor [weak self] in
                 guard let self else { return }

@@ -51,7 +51,7 @@ final class VoiceAnnotationService {
             return true
         case .notDetermined:
             return await withCheckedContinuation { continuation in
-                AVCaptureDevice.requestAccess(for: .audio) { allowed in
+                AVCaptureDevice.requestAccess(for: .audio) { @Sendable allowed in
                     continuation.resume(returning: allowed)
                 }
             }
@@ -99,7 +99,8 @@ final class VoiceAnnotationService {
 
         let meter = levelMeter
         meter.reset()
-        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { buffer, _ in
+        // The tap runs off the main thread; it must not inherit this method's isolation.
+        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable buffer, _ in
             do {
                 try file.write(from: buffer)
             } catch {
@@ -249,7 +250,7 @@ actor LocalVoiceTranscriber {
             // Parakeet TDT v3 is Hex's default, multilingual, on-device model.
             let models = try await AsrModels.downloadAndLoad(
                 version: .v3,
-                progressHandler: { onProgress($0.fractionCompleted) }
+                progressHandler: { @Sendable in onProgress($0.fractionCompleted) }
             )
             return AsrManager(config: .init(), models: models)
         }
