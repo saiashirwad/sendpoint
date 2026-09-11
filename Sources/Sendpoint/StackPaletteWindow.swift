@@ -14,20 +14,42 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     private let panel: CapturePanel
     private let model: StackPaletteModel
+    private let surfaces: SurfaceCoordinator
     private var keyMonitor: Any?
     private var lifecycle: Lifecycle = .active
-    private let onDismiss: () -> Void
 
     init(
         store: StackStore,
         settings: AppSettings,
         export: ExportController,
-        onSelectTemplate: @escaping (UUID) -> Void,
-        onDismiss: @escaping () -> Void
+        surfaces: SurfaceCoordinator,
+        onSelectTemplate: @escaping (UUID) -> Void
     ) {
-        self.onDismiss = onDismiss
+        self.surfaces = surfaces
         // Borderless: the SwiftUI sheet draws its own rounded edge, and the
         // window is clear behind it so the shadow follows that shape.
+        let panel = Self.makePanel()
+        self.panel = panel
+
+        let model = StackPaletteModel(
+            store: store, settings: settings, export: export, onSelectTemplate: onSelectTemplate
+        )
+        self.model = model
+        super.init()
+        model.onClose = { [weak surfaces] in surfaces?.dismiss(.palette) }
+        panel.onClose = { [weak self] in self?.close() }
+        let hosting = NSHostingView(rootView: StackPaletteView(model: model))
+        hosting.sizingOptions = []
+        panel.contentView = hosting
+        panel.delegate = self
+        installKeyMonitor()
+        surfaces.register(.palette, transitions: .init(
+            show: { [weak self] in self?.present() },
+            hide: { [weak self] in self?.hide() }
+        ))
+    }
+
+    static func makePanel() -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 560),
             styleMask: [.borderless, .resizable],
@@ -44,26 +66,17 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.animationBehavior = .utilityWindow
         panel.becomesKeyOnlyIfNeeded = false
         panel.minSize = StackPaletteView.minimumSize
-        self.panel = panel
-
-        let model = StackPaletteModel(
-            store: store, settings: settings, export: export, onSelectTemplate: onSelectTemplate
-        )
-        self.model = model
-        super.init()
-        model.onClose = { [weak self] in self?.releaseWindow() }
-        panel.onClose = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: StackPaletteView(model: model))
-        hosting.sizingOptions = []
-        panel.contentView = hosting
-        panel.delegate = self
-        installKeyMonitor()
+        return panel
     }
 
     func show(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
         guard lifecycle == .active else { return }
         model.send(.open(level))
         if let stackID, level == .stacks { model.send(.chooseStack(stackID)) }
+        surfaces.present(.palette)
+    }
+
+    private func present() {
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()
@@ -76,9 +89,21 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     /// The only close path. Safe to call more than once.
     func close() { model.send(.close) }
 
-    func teardown() { model.send(.teardown) }
+    func teardown() {
+        guard lifecycle == .active else { return }
+        model.send(.teardown)
+        surfaces.unregister(.palette)
+        releaseWindow()
+    }
 
     func documentChanged() { model.send(.documentChanged) }
+
+    private func hide() {
+        guard lifecycle == .active else { return }
+        model.send(.close)
+        panel.saveFrame(usingName: Self.frameAutosaveName)
+        panel.orderOut(nil)
+    }
 
     private func releaseWindow() {
         guard lifecycle == .active else { return }
@@ -90,7 +115,6 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.orderOut(nil)
         panel.contentView = nil
         panel.close()
-        onDismiss()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -98,10 +122,8 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        // A palette that lost focus is a palette the user is done with, unless
-        // an alert of ours (delete confirmation) took the key.
-        guard lifecycle == .active, NSApp.modalWindow == nil else { return }
-        close()
+        guard lifecycle == .active else { return }
+        surfaces.resignedKey(.palette)
     }
 
     // MARK: - Keys

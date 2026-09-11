@@ -76,9 +76,6 @@ final class CaptureController {
 
     var onAccessibilityRequired: (() -> Void)?
     var onStatusChange: (() -> Void)?
-    /// Runs synchronously before the editor activates the app, so other
-    /// windows can get out of the way instead of being dragged forward.
-    var onWillPresentEditor: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
     /// The stack this note lands in: the one fixed when the capture began,
@@ -109,7 +106,9 @@ final class CaptureController {
     init(settings: AppSettings, permissionState: PermissionState,
          selection: SelectionCapture, recorder: VoiceRecorder,
          provenanceProbe: ProvenanceProbe = .live(),
-         surfaces: @escaping (CaptureController) -> CaptureSurfaces = { .live(CaptureWindows(model: $0)) }) {
+         surfaces: @escaping (CaptureController) -> CaptureSurfaces = {
+             .live(CaptureWindows(model: $0, surfaces: SurfaceCoordinator()))
+         }) {
         self.settings = settings
         self.permissionState = permissionState
         self.selection = selection
@@ -261,6 +260,5 @@ final class CaptureController {
         store = nil
         onAccessibilityRequired = nil
         onStatusChange = nil
-        onWillPresentEditor = nil
     }
 }

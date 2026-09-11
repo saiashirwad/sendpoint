@@ -25,6 +25,7 @@ final class CapturePanel: NSPanel {
 /// Native windows are resources, never a second source of workflow state.
 final class CaptureWindows {
     private unowned let model: CaptureController
+    private let surfaces: SurfaceCoordinator
     private var panel: CapturePanel?
     /// Built once and kept: constructing a panel and its SwiftUI hosting
     /// view costs tens of milliseconds, which would sit between the hotkey
@@ -36,15 +37,27 @@ final class CaptureWindows {
     private var voiceEscapeMonitor: Any?
     private var surface: CaptureSurface?
 
-    init(model: CaptureController) { self.model = model }
+    init(model: CaptureController, surfaces: SurfaceCoordinator) {
+        self.model = model
+        self.surfaces = surfaces
+        surfaces.register(.captureEditor, transitions: .init(
+            show: { [weak self] in self?.presentEditor() },
+            hide: { [weak self] in self?.hide(.editor) },
+            focus: { [weak self] in self?.focusEditor() }
+        ))
+        surfaces.register(.captureVoice, transitions: .init(
+            show: { [weak self] in self?.presentVoice() },
+            hide: { [weak self] in self?.hide(.voice) }
+        ))
+    }
 
     func show(_ surface: CaptureSurface) {
         guard surface != self.surface else { return }
         close()
         self.surface = surface
         switch surface {
-        case .editor: presentEditor()
-        case .voice: presentVoice()
+        case .editor: surfaces.present(.captureEditor)
+        case .voice: surfaces.present(.captureVoice)
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
@@ -63,6 +76,10 @@ final class CaptureWindows {
     }
 
     func focus() {
+        surfaces.focus(.captureEditor)
+    }
+
+    private func focusEditor() {
         NSApp.activate(ignoringOtherApps: true)
         panel?.makeKeyAndOrderFront(nil)
     }
@@ -74,6 +91,12 @@ final class CaptureWindows {
     }
 
     func close() {
+        guard let surface else { return }
+        surfaces.dismiss(surface == .editor ? .captureEditor : .captureVoice)
+    }
+
+    private func hide(_ hidden: CaptureSurface) {
+        guard surface == hidden else { return }
         stopEscapeHandling()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -85,6 +108,8 @@ final class CaptureWindows {
 
     func discardSurfaces() {
         close()
+        surfaces.unregister(.captureEditor)
+        surfaces.unregister(.captureVoice)
         for kept in [voicePanel, editorPanel] {
             kept?.contentView = nil
             kept?.close()
@@ -115,13 +140,16 @@ final class CaptureWindows {
         position(panel, near: captured?.screenRect)
         self.panel = panel
 
-        model.onWillPresentEditor?()
-
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
 
     private func makeEditorPanel() -> CapturePanel {
+        let hosting = NSHostingView(rootView: CaptureView(model: model))
+        return Self.makeEditorPanel(contentView: hosting)
+    }
+
+    static func makeEditorPanel(contentView: NSView = NSView()) -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
@@ -141,11 +169,9 @@ final class CaptureWindows {
         panel.minSize = NSSize(width: 380, height: 220)
         panel.animationBehavior = .utilityWindow
 
-        let view = CaptureView(model: model)
         // The hosting view fills the whole frame, title-bar strip included, so
         // the material runs edge to edge under the transparent title bar.
-        let hosting = NSHostingView(rootView: view)
-        panel.contentView = hosting
+        panel.contentView = contentView
         return panel
     }
 
@@ -171,6 +197,16 @@ final class CaptureWindows {
     }
 
     private func makeVoicePanel() -> CapturePanel {
+        let hosting = NSHostingView(rootView: VoiceCaptureView(
+            model: model,
+            meter: model.levelMeter
+        ))
+        let panel = Self.makeVoicePanel(contentView: hosting)
+        panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
+        return panel
+    }
+
+    static func makeVoicePanel(contentView: NSView = NSView()) -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 110),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -188,12 +224,7 @@ final class CaptureWindows {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.animationBehavior = .utilityWindow
 
-        let hosting = NSHostingView(rootView: VoiceCaptureView(
-            model: model,
-            meter: model.levelMeter
-        ))
-        panel.contentView = hosting
-        panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
+        panel.contentView = contentView
         return panel
     }
 

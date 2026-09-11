@@ -31,6 +31,7 @@ final class StackSwitcherController {
 
     private let store: StackStore
     private let settings: AppSettings
+    private let surfaces: SurfaceCoordinator
     private let onOpenPalette: (UUID) -> Void
     private let onSwitched: (StackItemFacts) -> Void
     private var machine = StackSwitchMachine()
@@ -47,17 +48,22 @@ final class StackSwitcherController {
     /// been seen, and the strip goes the instant the keys come up.
     static let minimumVisibleDuration: TimeInterval = 0.3
 
-    init(store: StackStore, settings: AppSettings,
+    init(store: StackStore, settings: AppSettings, surfaces: SurfaceCoordinator,
          onOpenPalette: @escaping (UUID) -> Void,
          onSwitched: @escaping (StackItemFacts) -> Void) {
         self.store = store
         self.settings = settings
+        self.surfaces = surfaces
         self.onOpenPalette = onOpenPalette
         self.onSwitched = onSwitched
         // Built now, while nobody is waiting: a window plus a SwiftUI hosting
         // view costs tens of milliseconds, which must not sit between the
         // key and the strip.
         panel = makePanel()
+        surfaces.register(.switcher, transitions: .init(
+            show: { [weak self] in self?.presentOverlay() },
+            hide: { [weak self] in self?.hideOverlay() }
+        ))
     }
 
     // MARK: - Events
@@ -69,6 +75,7 @@ final class StackSwitcherController {
     func teardown() {
         guard lifecycle == .active else { return }
         send(.teardown)
+        surfaces.unregister(.switcher)
         stopReleaseWatch()
         unregisterTemporaryKeys()
         lingerTask?.cancel()
@@ -112,12 +119,12 @@ final class StackSwitcherController {
     private func run(_ command: StackSwitchCommand) {
         switch command {
         case .showOverlay:
-            presentOverlay()
+            surfaces.present(.switcher)
         case .hideOverlay:
             lingerTask?.cancel()
             lingerTask = nil
             model.hide()
-            panel?.orderOut(nil)
+            surfaces.dismiss(.switcher)
         case let .switchTo(id):
             store.mutate(.switchStack(stackID: id)) { [weak self] outcome in
                 guard let self, self.lifecycle == .active else { return }
@@ -242,7 +249,15 @@ final class StackSwitcherController {
         panel.displayIfNeeded()
     }
 
+    private func hideOverlay() {
+        panel?.orderOut(nil)
+    }
+
     private func makePanel() -> NSPanel {
+        Self.makePanel(model: model)
+    }
+
+    static func makePanel(model: StackSwitcherModel) -> NSPanel {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: StackSwitcherView.width, height: 200),
             styleMask: [.borderless, .nonactivatingPanel],

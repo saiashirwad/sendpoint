@@ -333,22 +333,20 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     private let window: NSWindow
+    private let surfaces: SurfaceCoordinator
     private var lifecycle: Lifecycle = .active
 
     init(
         settings: AppSettings,
         permissionState: PermissionState,
+        surfaces: SurfaceCoordinator,
         onShowAccessibilityHelper: @escaping () -> Void,
         onComplete: @escaping () -> Void
     ) {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 600),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Set Up Sendpoint"
-        window.isReleasedWhenClosed = false
+        let window = Self.makeWindow()
+        self.surfaces = surfaces
+        self.window = window
+        super.init()
         window.contentView = NSHostingView(rootView: SetupView(
             settings: settings,
             permissionState: permissionState,
@@ -357,13 +355,31 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         ))
         window.setContentSize(window.contentView?.fittingSize ?? NSSize(width: 640, height: 600))
         window.center()
-        self.window = window
-        super.init()
         window.delegate = self
+        surfaces.register(.setup, transitions: .init(
+            show: { [weak self] in self?.present() },
+            hide: { [weak self] in self?.hide() }
+        ))
+    }
+
+    static func makeWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 600),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Set Up Sendpoint"
+        window.isReleasedWhenClosed = false
+        return window
     }
 
     func show() {
         guard lifecycle == .active else { return }
+        surfaces.present(.setup)
+    }
+
+    private func present() {
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -371,16 +387,25 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     func close() {
         guard lifecycle == .active else { return }
+        surfaces.dismiss(.setup)
+    }
+
+    private func hide() {
         window.orderOut(nil)
         window.close()
     }
 
     func teardown() {
         guard lifecycle == .active else { return }
+        surfaces.unregister(.setup)
         lifecycle = .tornDown
         window.delegate = nil
         window.orderOut(nil)
         window.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        surfaces.userClosed(.setup)
     }
 }
 
@@ -437,20 +462,15 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     }
 
     private let permissionState: PermissionState
+    private let surfaces: SurfaceCoordinator
     private let window: NSWindow
     private var lifecycle: Lifecycle = .hidden
     private var pollingTask: Task<Void, Never>?
 
-    init(permissionState: PermissionState) {
+    init(permissionState: PermissionState, surfaces: SurfaceCoordinator) {
         self.permissionState = permissionState
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 470, height: 310),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Accessibility Setup"
-        window.isReleasedWhenClosed = false
+        self.surfaces = surfaces
+        let window = Self.makeWindow()
         self.window = window
         super.init()
         window.contentView = NSHostingView(rootView: AccessibilityHelperView(
@@ -464,10 +484,30 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
         window.setContentSize(window.contentView?.fittingSize ?? NSSize(width: 470, height: 310))
         window.center()
         window.delegate = self
+        surfaces.register(.accessibilityHelper, transitions: .init(
+            show: { [weak self] in self?.present() },
+            hide: { [weak self] in self?.hide(closingWindow: false) }
+        ))
+    }
+
+    static func makeWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 470, height: 310),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Accessibility Setup"
+        window.isReleasedWhenClosed = false
+        return window
     }
 
     func show() {
         guard lifecycle != .tornDown else { return }
+        surfaces.present(.accessibilityHelper)
+    }
+
+    private func present() {
         lifecycle = .visible
         permissionState.refreshAccessibility()
         startPolling()
@@ -477,11 +517,12 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     }
 
     func close() {
-        close(closingWindow: false)
+        surfaces.dismiss(.accessibilityHelper)
     }
 
     func teardown() {
         guard lifecycle != .tornDown else { return }
+        surfaces.unregister(.accessibilityHelper)
         lifecycle = .tornDown
         pollingTask?.cancel()
         pollingTask = nil
@@ -491,7 +532,8 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        close(closingWindow: true)
+        surfaces.userClosed(.accessibilityHelper)
+        hide(closingWindow: true)
     }
 
     private func startPolling() {
@@ -507,14 +549,14 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
                 }
                 guard !Task.isCancelled, self.lifecycle == .visible else { return }
                 if self.permissionState.accessibility == .granted {
-                    self.close()
+                    self.surfaces.dismiss(.accessibilityHelper)
                     return
                 }
             }
         }
     }
 
-    private func close(closingWindow: Bool) {
+    private func hide(closingWindow: Bool) {
         guard lifecycle == .visible else { return }
         lifecycle = .hidden
         pollingTask?.cancel()

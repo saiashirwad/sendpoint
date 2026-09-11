@@ -3,10 +3,10 @@ import SendpointDomain
 import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItemController = StatusItemController()
-    private var settingsWindow: NSWindow?
+    private let surfaces: SurfaceCoordinator
+    private var settingsWindowController: SettingsWindowController?
     private var setupWindowController: SetupWindowController?
     private var accessibilityHelperWindowController: AccessibilityHelperWindowController?
-    private var templateEditor: TemplateEditorState?
     private var palette: StackPaletteWindowController?
     private var switcher: StackSwitcherController?
     private enum StoreState {
@@ -28,16 +28,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         let settings = AppSettings.shared
         let permissionState = PermissionState()
+        let surfaces = SurfaceCoordinator()
         let selection = SelectionCapture.live(monitor: .shared)
         self.settings = settings
         self.permissionState = permissionState
+        self.surfaces = surfaces
         self.hotKeyRegistrar = HotKeyRegistrar(settings: settings)
         self.exportController = ExportController(services: .live(selection: selection))
         self.captureController = CaptureController(
             settings: settings,
             permissionState: permissionState,
             selection: selection,
-            recorder: .live(.shared)
+            recorder: .live(.shared),
+            surfaces: { .live(CaptureWindows(model: $0, surfaces: surfaces)) }
         )
         super.init()
         captureController.onAccessibilityRequired = { [weak self] in
@@ -46,14 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureController.onStatusChange = { [weak self] in
             self?.refreshStatusItem()
         }
-        captureController.onWillPresentEditor = { [weak self] in
-            self?.hideAuxiliaryWindows()
-        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.log("=== launch pid=\(ProcessInfo.processInfo.processIdentifier) ===")
-        installMainMenu()
+        NSApp.mainMenu = MainMenu.build()
         statusItemController.onAction = { [weak self] action in self?.perform(action) }
         settings.onHotKeysChanged = { [weak self] in self?.registerHotKeys() }
         settings.onTemplatesChanged = { [weak self] in self?.refreshStatusItem() }
@@ -92,8 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 bootstrapTask = nil
                 storeState = .available(store)
                 captureController.configure(store: store)
+                buildPalette(store: store)
                 switcher = StackSwitcherController(
                     store: store, settings: settings,
+                    surfaces: surfaces,
                     onOpenPalette: { [weak self] id in self?.presentPalette(at: .stacks, highlighting: id) },
                     onSwitched: { [weak self] stack in self?.statusItemController.flash(stack.name) }
                 )
@@ -137,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if let templateEditor, !TemplateDialogs.shouldClose(templateEditor) { return .terminateCancel }
+        if settingsWindowController?.canTerminate() == false { return .terminateCancel }
         guard let store, store.state == .processing else { return .terminateNow }
         // A save queued just before ⌘Q must reach disk before teardown cancels it.
         terminationTask = Task {
@@ -156,13 +158,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switcher?.teardown()
         switcher = nil
         palette?.teardown()
+        palette = nil
         setupWindowController?.teardown()
         setupWindowController = nil
         accessibilityHelperWindowController?.teardown()
         accessibilityHelperWindowController = nil
-        settingsWindow?.delegate = nil
-        settingsWindow?.close()
-        settingsWindow = nil
+        settingsWindowController?.teardown()
+        settingsWindowController = nil
         captureController.teardown()
         permissionState.teardown()
         statusItemController.teardown()
@@ -172,47 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onTemplatesChanged = nil
         settings.onInputDeviceChanged = nil
         hotKeyRegistrar.unregisterAll()
-    }
-
-    // MARK: - Main menu
-
-    /// A menu-bar app has no visible main menu, but AppKit still routes ⌘V,
-    /// ⌘C, ⌘A and ⌘Z through one. Without it, a dictation tool that types by
-    /// sending ⌘V to the note box gets nothing — the text stays stuck on the
-    /// clipboard and turns up later, on top of the Markdown.
-    private func installMainMenu() {
-        let main = NSMenu()
-
-        let appItem = NSMenuItem()
-        appItem.submenu = NSMenu(title: "Sendpoint")
-        main.addItem(appItem)
-
-        let file = NSMenu(title: "File")
-        file.addItem(
-            withTitle: "Close Window",
-            action: #selector(NSWindow.performClose(_:)),
-            keyEquivalent: "w"
-        )
-        let fileItem = NSMenuItem()
-        fileItem.submenu = file
-        main.addItem(fileItem)
-
-        let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
-        redo.keyEquivalentModifierMask = [.command, .shift]
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
-        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-
-        let editItem = NSMenuItem()
-        editItem.submenu = edit
-        main.addItem(editItem)
-
-        NSApp.mainMenu = main
+        surfaces.teardown()
     }
 
     // MARK: - Status item
@@ -342,17 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func requestTemplateSelection(_ templateID: UUID) {
-        if let templateEditor {
-            switch templateEditor.requestSelection(templateID) {
-            case .needsDecision:
-                _ = TemplateDialogs.resolvePendingSelection(templateEditor)
-            case .selected, .unchanged:
-                break
-            case .rejected:
-                NSSound.beep()
-            }
-            return
-        }
+        if settingsWindowController?.requestTemplateSelection(templateID) == true { return }
         do {
             try settings.selectTemplate(id: templateID)
         } catch {
@@ -391,7 +343,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The switch shortcut: ⌘⇥ for stacks. A pinned palette gives way to it.
     private func cycleStacks(reverse: Bool) {
         guard let switcher else { NSSound.beep(); return }
-        palette?.close()
         switcher.press(reverse: reverse)
     }
 
@@ -406,19 +357,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentPalette(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
-        guard let store else { NSSound.beep(); return }
-        if palette == nil {
-            palette = StackPaletteWindowController(
+        guard store != nil else { NSSound.beep(); return }
+        guard let palette else { NSSound.beep(); return }
+        palette.show(at: level, highlighting: stackID)
+    }
+
+    private func buildPalette(store: StackStore) {
+        palette = StackPaletteWindowController(
                 store: store,
                 settings: settings,
                 export: exportController,
+                surfaces: surfaces,
                 onSelectTemplate: { [weak self] templateID in
                     self?.requestTemplateSelection(templateID)
-                },
-                onDismiss: { [weak self] in self?.palette = nil }
+                }
             )
-        }
-        palette?.show(at: level, highlighting: stackID)
     }
 
     private func presentPermissionHelpForCapture() {
@@ -436,12 +389,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setupWindowController = SetupWindowController(
                 settings: settings,
                 permissionState: permissionState,
+                surfaces: surfaces,
                 onShowAccessibilityHelper: { [weak self] in
                     self?.presentAccessibilityHelper()
                 },
                 onComplete: { [weak self] in
                     guard let self else { return }
-                    self.setupWindowController?.close()
+                    self.surfaces.dismiss(.setup)
                     self.statusItemController.flash("\(self.settings.voiceCaptureCombo.displayString): \(self.settings.voiceMode.detail) · Esc discards")
                 }
             )
@@ -452,101 +406,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentAccessibilityHelper() {
         if accessibilityHelperWindowController == nil {
             accessibilityHelperWindowController = AccessibilityHelperWindowController(
-                permissionState: permissionState
+                permissionState: permissionState,
+                surfaces: surfaces
             )
         }
         accessibilityHelperWindowController?.show()
     }
 
     private func showSettings() {
-        permissionState.refresh()
-        if let settingsWindow {
-            NSApp.activate(ignoringOtherApps: true)
-            settingsWindow.makeKeyAndOrderFront(nil)
-            return
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(
+                settings: settings,
+                permissionState: permissionState,
+                surfaces: surfaces,
+                onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) },
+                onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() }
+            )
         }
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: SettingsView.size),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Settings"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        let toolbar = NSToolbar(identifier: "SettingsWindowToolbar")
-        toolbar.showsBaselineSeparator = false
-        window.toolbar = toolbar
-        window.toolbarStyle = .unified
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        let templateEditor = TemplateEditorState(settings: settings)
-        self.templateEditor = templateEditor
-        let settingsView = SettingsView(
-            settings: settings,
-            templateEditor: templateEditor,
-            permissionState: permissionState,
-            onSelectTemplate: { [weak self] templateID in
-                self?.requestTemplateSelection(templateID)
-            },
-            onShowAccessibilityHelper: { [weak self] in
-                self?.presentAccessibilityHelper()
-            }
-        )
-        let hosting = NSHostingView(rootView: settingsView)
-        // The sidebar owns the title-bar band; no inset for the toolbar.
-        hosting.safeAreaRegions = []
-        // SwiftUI publishes only its minimum, so the window never shrinks
-        // below it and never resizes itself when a tab changes.
-        hosting.sizingOptions = [.minSize]
-        window.contentView = hosting
-        window.contentMinSize = SettingsView.size
-        window.setContentSize(SettingsView.size)
-        window.center()
-        // Remembers a larger size between openings, if the user made one.
-        window.setFrameAutosaveName("SettingsWindow")
-        window.delegate = self
-        settingsWindow = window
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-        // Open calmly, without the first text field selected.
-        window.makeFirstResponder(nil)
-    }
-
-    /// Tuck away auxiliary windows so a capture shows the note box alone.
-    private func hideAuxiliaryWindows() {
-        Diag.log("hideAuxiliaryWindows palette=\(palette != nil) settings=\(settingsWindow?.isVisible ?? false)")
-        settingsWindow?.orderOut(nil)
-        setupWindowController?.close()
-        accessibilityHelperWindowController?.close()
-        palette?.close()
+        settingsWindowController?.show()
     }
 
     private func quit() {
         NSApp.terminate(nil)
-    }
-}
-
-extension AppDelegate: NSWindowDelegate {
-    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        guard sender === settingsWindow else { return frameSize }
-        let minimum = sender.frameRect(forContentRect: NSRect(origin: .zero, size: SettingsView.size)).size
-        return NSSize(
-            width: max(frameSize.width, minimum.width),
-            height: max(frameSize.height, minimum.height)
-        )
-    }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard sender === settingsWindow, let templateEditor else { return true }
-        return TemplateDialogs.shouldClose(templateEditor)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow else { return }
-        if window === settingsWindow {
-            settingsWindow = nil
-            templateEditor = nil
-        }
     }
 }
