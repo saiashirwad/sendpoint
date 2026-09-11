@@ -103,6 +103,7 @@ final class RuntimeCutoverTests: XCTestCase {
             includeLink: false,
             includeTimestamps: false,
             includeHeading: false,
+            includeEntryNumbers: false,
             clearSessionAfterExport: true
         )
         try settings.addProfile(profile)
@@ -126,7 +127,7 @@ final class RuntimeCutoverTests: XCTestCase {
         await store.waitForIdle()
 
         XCTAssertEqual(exporter.state, .idle)
-        XCTAssertEqual(written, "Use this profile\n\n## 1\n\nA note")
+        XCTAssertEqual(written, "Use this profile\n\nA note")
         XCTAssertTrue(store.currentEntries.isEmpty)
         XCTAssertEqual(store.lastCleared?.entries, [annotation])
         store.teardown()

@@ -109,6 +109,7 @@ final class ProfileCollectionTests: XCTestCase {
 
     private func profile(id: UUID = UUID(), name: String) -> Profile {
         Profile(id: id, name: name, preamble: "", includeApplication: false, includeWindow: false,
-                includeLink: false, includeTimestamps: false, includeHeading: false, clearSessionAfterExport: false)
+                includeLink: false, includeTimestamps: false, includeHeading: false,
+                includeEntryNumbers: false, clearSessionAfterExport: false)
     }
 }

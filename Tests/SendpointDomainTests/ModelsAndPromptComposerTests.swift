@@ -135,12 +135,15 @@ final class ModelsAndPromptComposerTests: XCTestCase {
             XCTAssertTrue(profile.includeHeading)
             XCTAssertFalse(profile.clearSessionAfterExport)
         }
+        XCTAssertFalse(Profile.coherent.includeEntryNumbers)
+        XCTAssertTrue(Profile.pointByPoint.includeEntryNumbers)
         XCTAssertEqual(Profile.plain.preamble, "")
         XCTAssertFalse(Profile.plain.includeApplication)
         XCTAssertFalse(Profile.plain.includeWindow)
         XCTAssertFalse(Profile.plain.includeLink)
         XCTAssertFalse(Profile.plain.includeTimestamps)
         XCTAssertFalse(Profile.plain.includeHeading)
+        XCTAssertFalse(Profile.plain.includeEntryNumbers)
         XCTAssertFalse(Profile.plain.clearSessionAfterExport)
     }
 
@@ -153,6 +156,7 @@ final class ModelsAndPromptComposerTests: XCTestCase {
         XCTAssertEqual(object["includeApplication"] as? Bool, true)
         XCTAssertEqual(object["includeWindow"] as? Bool, true)
         XCTAssertEqual(object["includeLink"] as? Bool, true)
+        XCTAssertEqual(object["includeEntryNumbers"] as? Bool, false)
         XCTAssertNil(object["includeProvenance"])
         XCTAssertEqual(try JSONDecoder().decode(Profile.self, from: data), .coherent)
     }
@@ -162,11 +166,21 @@ final class ModelsAndPromptComposerTests: XCTestCase {
 
         XCTAssertTrue(output.contains("# Reading notes — January 2, 2025"))
         XCTAssertEqual(output.components(separatedBy: Profile.coherent.preamble).count - 1, 1)
-        XCTAssertEqual(output.components(separatedBy: "## ").count - 1, 2)
+        XCTAssertFalse(output.contains("## "))
         XCTAssertEqual(
             metadata(in: output),
             ["Helium", "Page title", "https://example.com/article", "/tmp/project", expectedTime]
         )
+    }
+
+    func testComposerNumbersEntriesOnlyWhenTheProfileEnablesIt() {
+        let numbered = compose(profile: .pointByPoint)
+        XCTAssertTrue(numbered.contains("## 1"))
+        XCTAssertTrue(numbered.contains("## 2"))
+
+        var unnumbered = Profile.pointByPoint
+        unnumbered.includeEntryNumbers = false
+        XCTAssertFalse(compose(profile: unnumbered).contains("## "))
     }
 
     func testComposerKeepsAllMetadataFlagsIndependent() {
@@ -196,7 +210,7 @@ final class ModelsAndPromptComposerTests: XCTestCase {
         XCTAssertEqual(compose(profile: profile), compose(profile: .plain))
 
         profile.preamble = "  Keep this spacing  "
-        XCTAssertTrue(compose(profile: profile).hasPrefix("  Keep this spacing  \n\n## 1"))
+        XCTAssertTrue(compose(profile: profile).hasPrefix("  Keep this spacing  \n\n> First line"))
     }
 
     func testPlainComposerFormatsSelectionAndStandaloneEntriesExactly() {
@@ -205,16 +219,12 @@ final class ModelsAndPromptComposerTests: XCTestCase {
         XCTAssertEqual(
             output,
             """
-            ## 1
-
             > First line
             > Second line
             >
             > Fourth line
 
             Response to selection
-
-            ## 2
 
             A standalone thought
             """
@@ -265,7 +275,7 @@ final class ModelsAndPromptComposerTests: XCTestCase {
         profile.includeApplication = true
         profile.includeWindow = true
 
-        XCTAssertEqual(compose(session: session, profile: profile), "## 1\n\nNote")
+        XCTAssertEqual(compose(session: session, profile: profile), "Note")
     }
 
     private var expectedTime: String {
@@ -279,13 +289,11 @@ final class ModelsAndPromptComposerTests: XCTestCase {
     }
 
     private func metadata(in markdown: String) -> [String] {
-        let firstEntry = markdown.components(separatedBy: "## 1").last ?? ""
-        let beforeSecond = firstEntry.components(separatedBy: "## 2").first ?? ""
         guard
-            let line = beforeSecond
+            let line = markdown
                 .split(separator: "\n", omittingEmptySubsequences: false)
                 .map(String.init)
-                .last(where: { $0.hasPrefix("_") && $0.hasSuffix("_") })
+                .first(where: { $0.hasPrefix("_") && $0.hasSuffix("_") })
         else { return [] }
         return String(line.dropFirst().dropLast()).components(separatedBy: " · ")
     }

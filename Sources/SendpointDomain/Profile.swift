@@ -9,6 +9,7 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
     public var includeLink: Bool
     public var includeTimestamps: Bool
     public var includeHeading: Bool
+    public var includeEntryNumbers: Bool
     public var clearSessionAfterExport: Bool
 
     public init(
@@ -20,6 +21,7 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
         includeLink: Bool,
         includeTimestamps: Bool,
         includeHeading: Bool,
+        includeEntryNumbers: Bool,
         clearSessionAfterExport: Bool
     ) {
         self.id = id
@@ -30,6 +32,7 @@ public struct Profile: Codable, Hashable, Sendable, Identifiable {
         self.includeLink = includeLink
         self.includeTimestamps = includeTimestamps
         self.includeHeading = includeHeading
+        self.includeEntryNumbers = includeEntryNumbers
         self.clearSessionAfterExport = clearSessionAfterExport
     }
 }
@@ -44,6 +47,7 @@ public extension Profile {
         includeLink: true,
         includeTimestamps: true,
         includeHeading: true,
+        includeEntryNumbers: false,
         clearSessionAfterExport: false
     )
 
@@ -56,6 +60,7 @@ public extension Profile {
         includeLink: true,
         includeTimestamps: true,
         includeHeading: true,
+        includeEntryNumbers: true,
         clearSessionAfterExport: false
     )
 
@@ -68,6 +73,7 @@ public extension Profile {
         includeLink: false,
         includeTimestamps: false,
         includeHeading: false,
+        includeEntryNumbers: false,
         clearSessionAfterExport: false
     )
 

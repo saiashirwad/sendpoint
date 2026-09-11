@@ -33,7 +33,11 @@ public enum PromptComposer {
         }
 
         for (offset, entry) in session.entries.enumerated() {
-            var entryBlocks = ["## \(offset + 1)"]
+            var entryBlocks: [String] = []
+
+            if profile.includeEntryNumbers {
+                entryBlocks.append("## \(offset + 1)")
+            }
 
             if case let .selection(quote) = entry.subject {
                 entryBlocks.append(blockquote(quote))

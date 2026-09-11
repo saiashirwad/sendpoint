@@ -174,8 +174,10 @@ struct SettingsView: View {
                 )
             }
 
-            SettingsSection("Under each note") {
+            SettingsSection("Each note") {
                 SettingsCard {
+                    SettingsToggleRow("Number each note", isOn: $profileEditor.draft.includeEntryNumbers)
+                    SettingsDivider(pastIcon: false)
                     SettingsToggleRow("Application", isOn: $profileEditor.draft.includeApplication)
                     SettingsDivider(pastIcon: false)
                     SettingsToggleRow("Window title", isOn: $profileEditor.draft.includeWindow)
@@ -357,14 +359,14 @@ struct SettingsView: View {
                     shortcutRow(
                         icon: "arrow.left.arrow.right",
                         title: "Switch stack",
-                        detail: switchStackDetail,
+                        detail: "Tap or hold to cycle stacks; ↑/↓ lists all.",
                         slot: .switchSession
                     )
                     SettingsDivider()
                     shortcutRow(
                         icon: "arrow.right.to.line",
                         title: "Next stack",
-                        detail: "Steps through your stacks in order. Press ⌫ while recording to remove it.",
+                        detail: "Steps through stacks; ⌫ removes while recording.",
                         slot: .nextStack
                     )
                     SettingsDivider()
@@ -385,19 +387,6 @@ struct SettingsView: View {
             }
             shortcutFeedbackView
         }
-    }
-
-    /// Names the modifiers of the switch shortcut, so the explanation matches
-    /// whatever the user bound.
-    private var switchStackDetail: String {
-        let combo = settings.switchSessionCombo
-        var held = ""
-        if combo.modifiers.contains(.control) { held += "⌃" }
-        if combo.modifiers.contains(.option) { held += "⌥" }
-        if combo.modifiers.contains(.command) { held += "⌘" }
-        let reverse = settings.switchSessionReverseCombo.map { " \($0.displayString) goes backwards." } ?? ""
-        return "Tap for the stack you used last. Keep \(held) held and tap again to keep going; "
-            + "let go to choose. ↑ or ↓ opens the full list.\(reverse)"
     }
 
     private func shortcutRow(

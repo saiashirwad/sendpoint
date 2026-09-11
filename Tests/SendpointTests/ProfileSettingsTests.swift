@@ -57,6 +57,7 @@ final class ProfileSettingsTests: XCTestCase {
             includeLink: true,
             includeTimestamps: false,
             includeHeading: true,
+            includeEntryNumbers: true,
             clearSessionAfterExport: true
         )
 

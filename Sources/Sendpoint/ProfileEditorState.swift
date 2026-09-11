@@ -77,6 +77,7 @@ final class ProfileEditorState {
             includeLink: draft.includeLink,
             includeTimestamps: draft.includeTimestamps,
             includeHeading: draft.includeHeading,
+            includeEntryNumbers: draft.includeEntryNumbers,
             clearSessionAfterExport: draft.clearSessionAfterExport
         )
         try settings.addProfile(clone)
