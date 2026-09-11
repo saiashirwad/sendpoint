@@ -7,7 +7,7 @@ import SendpointDomain
 struct CaptureServices {
     /// Reads the selection. The callback fires once nothing that remains
     /// needs the front app to still be frontmost, so the editor may open.
-    var selection: (CaptureMode, _ editorMayOpen: @escaping @MainActor () -> Void) async throws -> CapturedSelection
+    var selection: (CaptureMode, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
     var startRecording: () async throws -> Void
     var transcribe: () async throws -> String
     var discardRecording: () -> Void

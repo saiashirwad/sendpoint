@@ -162,7 +162,11 @@ final class AudioInputDeviceList {
     private(set) var devices: [AudioInputDevice] = []
     private(set) var systemDefault: AudioInputDevice?
 
-    @ObservationIgnored private var listeners: [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
+    /// Removed in deinit, which is nonisolated. The array is written only
+    /// during init and read only after the last reference goes away, so no
+    /// concurrent access is possible, and CoreAudio's removal call is safe
+    /// from any thread.
+    @ObservationIgnored nonisolated(unsafe) private var listeners: [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
 
     init() {
         refresh()

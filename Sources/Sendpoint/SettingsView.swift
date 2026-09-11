@@ -638,10 +638,10 @@ private struct WindowVisibilityReporter: NSViewRepresentable {
             guard let window else { report(false); return }
             observers.append(NotificationCenter.default.addObserver(
                 forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-            ) { [weak self] _ in self?.reportCurrent() })
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.reportCurrent() } })
             observers.append(NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification, object: window, queue: .main
-            ) { [weak self] _ in self?.report(false) })
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.report(false) } })
             reportCurrent()
         }
 
@@ -698,6 +698,7 @@ private struct InputDevicePopUp: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect) }
 
+    @MainActor
     final class Coordinator: NSObject {
         var onSelect: (String?) -> Void
 

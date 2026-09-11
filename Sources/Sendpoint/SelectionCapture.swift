@@ -49,7 +49,7 @@ enum SelectionCapture {
     /// keystroke has been delivered. The clipboard may still be read after.
     static func capture(
         fallback: FallbackPolicy = .patient,
-        editorMayOpen: @escaping @MainActor () -> Void = {}
+        editorMayOpen: @escaping @MainActor @Sendable () -> Void = {}
     ) async throws -> CapturedSelection {
         try Task.checkCancellation()
         let app = NSWorkspace.shared.frontmostApplication
@@ -160,7 +160,7 @@ enum SelectionCapture {
     private static func copyViaKeystroke(
         processIdentifier: pid_t,
         fallback: FallbackPolicy,
-        afterKeystroke: @escaping @MainActor () -> Void
+        afterKeystroke: @escaping @MainActor @Sendable () -> Void
     ) async throws -> String? {
         let pasteboard = NSPasteboard.general
         let saved = snapshot(pasteboard)

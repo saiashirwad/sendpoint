@@ -21,22 +21,26 @@ let package = Package(
     targets: [
         .target(
             name: "SendpointDomain",
-            path: "Sources/SendpointDomain"
+            path: "Sources/SendpointDomain",
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
         .executableTarget(
             name: "Sendpoint",
             dependencies: ["SendpointDomain", "FluidAudio"],
-            path: "Sources/Sendpoint"
+            path: "Sources/Sendpoint",
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
         .testTarget(
             name: "SendpointDomainTests",
             dependencies: ["SendpointDomain"],
-            path: "Tests/SendpointDomainTests"
+            path: "Tests/SendpointDomainTests",
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
         .testTarget(
             name: "SendpointTests",
             dependencies: ["Sendpoint", "SendpointDomain"],
-            path: "Tests/SendpointTests"
+            path: "Tests/SendpointTests",
+            swiftSettings: [.enableUpcomingFeature("StrictConcurrency")]
         ),
     ]
 )

@@ -6,6 +6,14 @@ import Foundation
 enum ProvenanceCommand {
     enum Failure: Error { case timedOut, outputTooLarge, exited(Int32), readFailed(Int32) }
 
+    /// Blocks the calling cooperative thread for at most one second while a
+    /// killed child is reaped. A defer cannot await, and waitUntilExit relies
+    /// on a run loop the caller may have left. The termination callback is
+    /// independent of that thread, so the signal still arrives.
+    private static func waitForTermination(_ terminated: DispatchSemaphore) {
+        _ = terminated.wait(timeout: .now() + 1)
+    }
+
     static func output(
         executable: URL, arguments: [String],
         timeout: Duration = .seconds(2), maximumBytes: Int = 1_048_576
@@ -30,10 +38,7 @@ enum ProvenanceCommand {
             // One teardown path covers success, cancellation, timeout and errors.
             if process.isRunning {
                 kill(process.processIdentifier, SIGKILL)
-                // waitUntilExit relies on a thread run loop, which an async
-                // caller may have left. The termination callback is independent
-                // of that thread; bound the wait even if notification is delayed.
-                _ = terminated.wait(timeout: .now() + 1)
+                waitForTermination(terminated)
             }
             try? readHandle.close()
             try? pipe.fileHandleForWriting.close()
