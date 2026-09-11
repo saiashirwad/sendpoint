@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings: AppSettings
     private let captureController: CaptureController
     private let permissionState: PermissionState
+    private let hotKeyRegistrar: HotKeyRegistrar
     private var voiceTrigger = VoiceTriggerMachine()
 
     override init() {
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let permissionState = PermissionState()
         self.settings = settings
         self.permissionState = permissionState
+        self.hotKeyRegistrar = HotKeyRegistrar(settings: settings)
         self.captureController = CaptureController(
             settings: settings,
             permissionState: permissionState
@@ -165,9 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onHotKeysChanged = nil
         settings.onProfilesChanged = nil
         settings.onInputDeviceChanged = nil
-        for name in HotKeyName.allCases {
-            HotKeyCenter.shared.unregister(name: name)
-        }
+        hotKeyRegistrar.unregisterAll()
     }
 
     // MARK: - Main menu
@@ -239,44 +239,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerHotKeys() {
         handleVoiceTrigger(.configurationChanged(settings.voiceMode))
-        let actions: [ShortcutSlot: () -> Void] = [
-            .voiceCapture: { [weak self] in self?.handleVoiceTrigger(.pressed) },
-            .capture: { [weak self] in self?.captureSelection() },
-            .copy: { [weak self] in self?.copyMarkdown() },
-            .stack: { [weak self] in self?.showStack() },
-            .switchSession: { [weak self] in self?.cycleStacks(reverse: false) },
-            .nextStack: { [weak self] in self?.nextStack() },
-            .previousStack: { [weak self] in self?.previousStack() },
-            .clear: { [weak self] in self?.clearStack() },
-        ]
-        var issues: [ShortcutRegistrationIssue] = []
-        HotKeyCenter.shared.unregister(name: .switchSessionReverse)
-        for slot in ShortcutSlot.allCases {
-            // A rejected replacement must not leave the previous binding live.
-            HotKeyCenter.shared.unregister(name: slot.hotKeyName)
-            guard let combo = settings.combo(for: slot) else { continue }
-            if let conflict = settings.shortcutConflict(for: combo, excluding: slot) {
-                issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
-                continue
-            }
-            let released: (() -> Void)? = slot == .voiceCapture
-                ? { [weak self] in self?.handleVoiceTrigger(.released) } : nil
-            guard let action = actions[slot] else { continue }
-            switch HotKeyCenter.shared.register(name: slot.hotKeyName, combo: combo, released: released,
-                                                action: action) {
-            case .registered:
-                // ⇧ on the switch shortcut walks the cycle backwards. It is
-                // claimed together with the shortcut, so a failure here is
-                // only logged: the forward direction still works.
-                if slot == .switchSession, let reverse = settings.switchSessionReverseCombo {
-                    HotKeyCenter.shared.register(name: .switchSessionReverse, combo: reverse) { [weak self] in
-                        self?.cycleStacks(reverse: true)
-                    }
-                }
-            case .invalid: issues.append(.invalid(slot: slot, combo: combo))
-            case let .failed(status): issues.append(.unavailable(slot: slot, combo: combo, status: status))
-            }
-        }
+        let actions = HotKeyRegistrar.Actions(
+            voicePressed: { [weak self] in self?.handleVoiceTrigger(.pressed) },
+            voiceReleased: { [weak self] in self?.handleVoiceTrigger(.released) },
+            typedNote: { [weak self] in self?.captureSelection() },
+            copy: { [weak self] in self?.copyMarkdown() },
+            showStack: { [weak self] in self?.showStack() },
+            switchStack: { [weak self] reverse in self?.cycleStacks(reverse: reverse) },
+            nextStack: { [weak self] in self?.nextStack() },
+            previousStack: { [weak self] in self?.previousStack() },
+            clear: { [weak self] in self?.clearStack() }
+        )
+        let issues = hotKeyRegistrar.register(actions)
         settings.updateShortcutRegistrationIssues(issues)
         refreshStatusItem()
     }
