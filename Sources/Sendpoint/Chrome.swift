@@ -145,15 +145,12 @@ struct SettingsCaption: View {
     }
 }
 
-/// A raised, bordered group of rows.
-struct SettingsCard<Content: View>: View {
+/// A group of settings rows. Rows carry their own padding, and the negative
+/// inset cancels it so the group aligns with the section captions.
+struct SettingsRowGroup<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        // Experiment: no card chrome. Rows sit on the window background and
-        // line up with the section captions.
-        // Rows keep their own padding for the dividers between them; the
-        // group as a whole sits flush with captions and plain content.
         VStack(spacing: 0) {
             content()
         }

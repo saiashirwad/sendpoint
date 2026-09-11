@@ -82,7 +82,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("How to use it")
                 .font(.headline)
-            SettingsCard {
+            SettingsRowGroup {
                 HowToRow(
                     icon: "mic.fill",
                     lead: settings.voiceMode.title,
@@ -114,7 +114,7 @@ struct PermissionCapabilityList: View {
     }
 
     var body: some View {
-        SettingsCard {
+        SettingsRowGroup {
             accessibilityRow
             SettingsDivider()
             microphoneRow

@@ -30,9 +30,6 @@ final class StackSwitcherModel {
 @MainActor
 final class StackSwitcherController {
     private enum Lifecycle { case active, tornDown }
-    private enum TemporaryKey: String, CaseIterable {
-        case escape = "switchEscape", pinUp = "switchPinUp", pinDown = "switchPinDown"
-    }
 
     private let store: AnnotationStore
     private let settings: AppSettings
@@ -218,18 +215,20 @@ final class StackSwitcherController {
         guard !temporaryKeysRegistered else { return }
         temporaryKeysRegistered = true
         let modifiers = settings.switchSessionCombo.carbonModifiers
-        HotKeyCenter.shared.registerRaw(name: TemporaryKey.escape.rawValue, keyCode: UInt16(kVK_Escape),
+        HotKeyCenter.shared.registerRaw(name: .switchEscape, keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0, pressed: { [weak self] in self?.send(.escape) })
-        HotKeyCenter.shared.registerRaw(name: TemporaryKey.pinUp.rawValue, keyCode: UInt16(kVK_UpArrow),
+        HotKeyCenter.shared.registerRaw(name: .switchPinUp, keyCode: UInt16(kVK_UpArrow),
             carbonModifiers: modifiers, pressed: { [weak self] in self?.send(.pin) })
-        HotKeyCenter.shared.registerRaw(name: TemporaryKey.pinDown.rawValue, keyCode: UInt16(kVK_DownArrow),
+        HotKeyCenter.shared.registerRaw(name: .switchPinDown, keyCode: UInt16(kVK_DownArrow),
             carbonModifiers: modifiers, pressed: { [weak self] in self?.send(.pin) })
     }
 
     private func unregisterTemporaryKeys() {
         guard temporaryKeysRegistered else { return }
         temporaryKeysRegistered = false
-        for key in TemporaryKey.allCases { HotKeyCenter.shared.unregister(name: key.rawValue) }
+        for name in [HotKeyName.switchEscape, .switchPinUp, .switchPinDown] {
+            HotKeyCenter.shared.unregister(name: name)
+        }
     }
 
     // MARK: - Overlay
@@ -310,24 +309,14 @@ struct StackSwitcherView: View {
             VStack(spacing: Self.rowSpacing) {
                 ForEach(Array(model.rows.enumerated()), id: \.element.id) { position, row in
                     let lit = row.id == model.highlight
-                    HStack(spacing: 10) {
-                        Text(row.name)
-                            .font(.system(size: 14, weight: row.isCurrent ? .semibold : .medium))
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        if position < 9 {
-                            Text("⌘\(position + 1)")
-                                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                                .opacity(lit ? 1 : 0.7)
-                        }
-                        Text("\(row.annotationCount)")
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(row.annotationCount == 0
-                                ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.secondary))
-                            .frame(minWidth: 18, alignment: .trailing)
-                    }
-                    .foregroundStyle(Color.primary)
+                    StackRow(
+                        name: row.name,
+                        annotationCount: row.annotationCount,
+                        isCurrent: row.isCurrent,
+                        isHighlighted: lit,
+                        position: position,
+                        showsDigit: true
+                    )
                     .padding(.horizontal, 8)
                     .frame(height: Self.rowHeight)
                     .background(

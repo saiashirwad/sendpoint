@@ -1,6 +1,23 @@
 import AppKit
 import Carbon.HIToolbox
 
+/// Names a hotkey registered with HotKeyCenter.
+enum HotKeyName: String, CaseIterable, Hashable {
+    case voiceCapture
+    case capture
+    case copy
+    case stack
+    case switchSession
+    case nextStack
+    case previousStack
+    case clear
+    case switchSessionReverse
+    case voiceEscape
+    case switchEscape
+    case switchPinUp
+    case switchPinDown
+}
+
 enum HotKeyRegistrationResult: Equatable {
     case registered
     case invalid
@@ -37,7 +54,7 @@ final class HotKeyCenter {
 
     /// Replaces any shortcut previously registered under `name`.
     @discardableResult
-    func register(name: String, combo: KeyCombo?, released: (() -> Void)? = nil, action: @escaping () -> Void) -> HotKeyRegistrationResult {
+    func register(name: HotKeyName, combo: KeyCombo?, released: (() -> Void)? = nil, action: @escaping () -> Void) -> HotKeyRegistrationResult {
         unregister(name: name)
         guard let combo, combo.isValid else { return .invalid }
         return registerRaw(
@@ -53,7 +70,7 @@ final class HotKeyCenter {
     /// for the temporary, modifier-free Escape cancel key.
     @discardableResult
     func registerRaw(
-        name: String,
+        name: HotKeyName,
         keyCode: UInt16,
         carbonModifiers: UInt32,
         pressed: @escaping () -> Void,
@@ -67,18 +84,18 @@ final class HotKeyCenter {
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id) // 'CLAN'
         let (status, ref) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
         guard status == noErr, let ref else {
-            Diag.log("hotkey FAILED name=\(name) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
+            Diag.log("hotkey FAILED name=\(name.rawValue) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
             return .failed(status)
         }
-        Diag.log("hotkey ok name=\(name) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
+        Diag.log("hotkey ok name=\(name.rawValue) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
         handlers[id] = Handler(pressed: pressed, released: released)
         refs[id] = ref
-        names[name] = id
+        names[name.rawValue] = id
         return .registered
     }
 
-    func unregister(name: String) {
-        guard let id = names.removeValue(forKey: name) else { return }
+    func unregister(name: HotKeyName) {
+        guard let id = names.removeValue(forKey: name.rawValue) else { return }
         if let ref = refs.removeValue(forKey: id) { unregisterEvent(ref) }
         handlers[id] = nil
     }

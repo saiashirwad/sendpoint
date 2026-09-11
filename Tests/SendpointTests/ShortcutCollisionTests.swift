@@ -86,7 +86,7 @@ final class ShortcutCollisionTests: XCTestCase {
         let center = HotKeyCenter(registerEvent: { _, _, _ in (status, nil) })
 
         let result = center.register(
-            name: "test",
+            name: .capture,
             combo: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
             action: {}
         )

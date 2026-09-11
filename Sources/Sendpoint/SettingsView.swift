@@ -175,7 +175,7 @@ struct SettingsView: View {
             }
 
             SettingsSection("Each note") {
-                SettingsCard {
+                SettingsRowGroup {
                     SettingsToggleRow("Number each note", isOn: $profileEditor.draft.includeEntryNumbers)
                     SettingsDivider(pastIcon: false)
                     SettingsToggleRow("Application", isOn: $profileEditor.draft.includeApplication)
@@ -189,7 +189,7 @@ struct SettingsView: View {
             }
 
             SettingsSection(settings.stackExportMode.exportMomentCaption) {
-                SettingsCard {
+                SettingsRowGroup {
                     SettingsToggleRow("Date heading at the top", isOn: $profileEditor.draft.includeHeading)
                     SettingsDivider(pastIcon: false)
                     SettingsToggleRow("Clear the stack afterwards", isOn: $profileEditor.draft.clearSessionAfterExport)
@@ -251,7 +251,7 @@ struct SettingsView: View {
     // MARK: - Shortcuts
 
     private var shortcutRegistrationIssues: some View {
-        SettingsCard {
+        SettingsRowGroup {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Shortcut unavailable", systemImage: "exclamationmark.triangle.fill")
                     .font(.body.weight(.medium))
@@ -329,7 +329,7 @@ struct SettingsView: View {
     private var shortcutsTab: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Making notes") {
-                SettingsCard {
+                SettingsRowGroup {
                     shortcutRow(icon: "mic.fill", title: "Voice note", detail: settings.voiceMode.detail, slot: .voiceCapture)
                     SettingsDivider()
                     shortcutRow(
@@ -341,7 +341,7 @@ struct SettingsView: View {
                 }
             }
             SettingsSection("Your stack") {
-                SettingsCard {
+                SettingsRowGroup {
                     shortcutRow(
                         icon: "doc.on.clipboard",
                         title: settings.stackExportMode.shortcutTitle,
@@ -435,7 +435,7 @@ struct SettingsView: View {
     private var captureTab: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Voice") {
-                SettingsCard {
+                SettingsRowGroup {
                     SettingsIconRow(
                         icon: "hand.tap",
                         title: "Recording mode",
@@ -467,7 +467,7 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             SettingsSection("Behavior") {
-                SettingsCard {
+                SettingsRowGroup {
                     SettingsToggleRow(
                         "Paste straight into the app you are in",
                         subtitle: "The Markdown lands where your cursor is, without a separate paste.",

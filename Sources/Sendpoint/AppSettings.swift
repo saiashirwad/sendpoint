@@ -74,6 +74,22 @@ enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
     }
 }
 
+extension ShortcutSlot {
+    /// The registered hotkey name for this shortcut slot.
+    var hotKeyName: HotKeyName {
+        switch self {
+        case .voiceCapture: .voiceCapture
+        case .capture: .capture
+        case .copy: .copy
+        case .stack: .stack
+        case .switchSession: .switchSession
+        case .nextStack: .nextStack
+        case .previousStack: .previousStack
+        case .clear: .clear
+        }
+    }
+}
+
 enum ShortcutConflict: Error, Equatable, LocalizedError {
     case invalid
     case duplicate(ShortcutSlot)

@@ -167,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onHotKeysChanged = nil
         settings.onProfilesChanged = nil
         settings.onInputDeviceChanged = nil
-        for name in ShortcutSlot.allCases.map(\.rawValue) + ["voiceEscape", Self.reverseSwitchHotKey] {
+        for name in HotKeyName.allCases {
             HotKeyCenter.shared.unregister(name: name)
         }
     }
@@ -352,8 +352,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Hot keys
 
-    private static let reverseSwitchHotKey = "switchSessionReverse"
-
     private func registerHotKeys() {
         handleVoiceTrigger(.configurationChanged(settings.voiceMode))
         let actions: [ShortcutSlot: () -> Void] = [
@@ -367,10 +365,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .clear: { [weak self] in self?.clearStack() },
         ]
         var issues: [ShortcutRegistrationIssue] = []
-        HotKeyCenter.shared.unregister(name: Self.reverseSwitchHotKey)
+        HotKeyCenter.shared.unregister(name: .switchSessionReverse)
         for slot in ShortcutSlot.allCases {
             // A rejected replacement must not leave the previous binding live.
-            HotKeyCenter.shared.unregister(name: slot.rawValue)
+            HotKeyCenter.shared.unregister(name: slot.hotKeyName)
             guard let combo = settings.combo(for: slot) else { continue }
             if let conflict = settings.shortcutConflict(for: combo, excluding: slot) {
                 issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
@@ -379,14 +377,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let released: (() -> Void)? = slot == .voiceCapture
                 ? { [weak self] in self?.handleVoiceTrigger(.released) } : nil
             guard let action = actions[slot] else { continue }
-            switch HotKeyCenter.shared.register(name: slot.rawValue, combo: combo, released: released,
+            switch HotKeyCenter.shared.register(name: slot.hotKeyName, combo: combo, released: released,
                                                 action: action) {
             case .registered:
                 // ⇧ on the switch shortcut walks the cycle backwards. It is
                 // claimed together with the shortcut, so a failure here is
                 // only logged: the forward direction still works.
                 if slot == .switchSession, let reverse = settings.switchSessionReverseCombo {
-                    HotKeyCenter.shared.register(name: Self.reverseSwitchHotKey, combo: reverse) { [weak self] in
+                    HotKeyCenter.shared.register(name: .switchSessionReverse, combo: reverse) { [weak self] in
                         self?.cycleStacks(reverse: true)
                     }
                 }

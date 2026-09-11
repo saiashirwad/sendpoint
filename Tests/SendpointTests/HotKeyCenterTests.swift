@@ -14,14 +14,14 @@ final class HotKeyCenterTests: XCTestCase {
         }, unregisterEvent: { _ in unregistered += 1 })
         let combo = KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command])
         var events: [String] = []
-        XCTAssertEqual(center.register(name: "voice", combo: combo,
+        XCTAssertEqual(center.register(name: .voiceCapture, combo: combo,
             released: { events.append("release") }, action: { events.append("press") }), .registered)
         let original = try XCTUnwrap(ids.last)
         center.fire(id: original, released: false)
         center.fire(id: original, released: true)
         XCTAssertEqual(events, ["press", "release"])
 
-        XCTAssertEqual(center.register(name: "voice", combo: combo,
+        XCTAssertEqual(center.register(name: .voiceCapture, combo: combo,
             released: { events.append("new release") }, action: { events.append("new press") }), .registered)
         let replacement = try XCTUnwrap(ids.last)
         center.fire(id: original, released: false)
@@ -30,8 +30,8 @@ final class HotKeyCenterTests: XCTestCase {
         center.fire(id: replacement, released: false)
         center.fire(id: replacement, released: true)
         XCTAssertEqual(events, ["press", "release", "new press", "new release"])
-        center.unregister(name: "voice")
-        center.unregister(name: "voice")
+        center.unregister(name: .voiceCapture)
+        center.unregister(name: .voiceCapture)
         center.fire(id: replacement, released: false)
         center.fire(id: replacement, released: true)
         XCTAssertEqual(events.count, 4)
@@ -47,12 +47,12 @@ final class HotKeyCenterTests: XCTestCase {
         }, unregisterEvent: { _ in unregistered += 1 })
         let combo = KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.command])
         var presses = 0
-        XCTAssertEqual(center.register(name: "capture", combo: combo) { presses += 1 }, .registered)
+        XCTAssertEqual(center.register(name: .capture, combo: combo) { presses += 1 }, .registered)
         center.fire(id: id, released: true)
         XCTAssertEqual(presses, 0)
         center.fire(id: id, released: false)
         XCTAssertEqual(presses, 1)
-        XCTAssertEqual(center.register(name: "capture", combo: nil) { presses += 1 }, .invalid)
+        XCTAssertEqual(center.register(name: .capture, combo: nil) { presses += 1 }, .invalid)
         center.fire(id: id, released: false)
         XCTAssertEqual(presses, 1)
         XCTAssertEqual(unregistered, 1)

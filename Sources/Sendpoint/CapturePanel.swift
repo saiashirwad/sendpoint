@@ -69,7 +69,7 @@ final class CaptureWindows {
     }
 
     func stopEscapeHandling() {
-        HotKeyCenter.shared.unregister(name: "voiceEscape")
+        HotKeyCenter.shared.unregister(name: .voiceEscape)
         if let voiceEscapeMonitor { NSEvent.removeMonitor(voiceEscapeMonitor) }
         voiceEscapeMonitor = nil
     }
@@ -160,7 +160,7 @@ final class CaptureWindows {
         self.panel = panel
 
         let escapeRegistration = HotKeyCenter.shared.registerRaw(
-            name: "voiceEscape",
+            name: .voiceEscape,
             keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0,
             pressed: { [weak self] in self?.model.voiceEscape() }

@@ -234,33 +234,26 @@ struct StackPaletteView: View {
             onSelect: { model.send(.chooseStack(session.id)) },
             onActivate: { model.send(.perform(.switchToStack(session.id))) }
         ) {
-            HStack(spacing: 10) {
-                if isRenaming {
+            if isRenaming {
+                StackRow(
+                    annotationCount: session.annotationCount,
+                    isHighlighted: isHighlighted,
+                    position: position,
+                    showsDigit: false
+                ) {
                     inlineNameField(field: .rename(session.id), placeholder: "Stack name")
-                } else {
-                    Text(session.name)
-                        .font(.system(size: 14, weight: session.isCurrent ? .semibold : .medium))
-                        .lineLimit(1)
-                        .accessibilityLabel(session.isCurrent ? "\(session.name), current" : session.name)
                 }
-
-                Spacer(minLength: 8)
-
-                if position < 9, !isRenaming {
-                    Text("⌘\(position + 1)")
-                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .opacity(isHighlighted ? 1 : 0.7)
-                }
-
-                Text("\(session.annotationCount)")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(session.annotationCount == 0 ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.secondary))
-                    .frame(minWidth: 18, alignment: .trailing)
-                    .accessibilityLabel(session.countLabel)
+            } else {
+                StackRow(
+                    name: session.name,
+                    annotationCount: session.annotationCount,
+                    isCurrent: session.isCurrent,
+                    isHighlighted: isHighlighted,
+                    position: position,
+                    showsDigit: true
+                )
             }
         }
-        .foregroundStyle(Color.primary)
         .frame(height: rowHeight)
     }
 
@@ -867,19 +860,15 @@ private struct QuotedPassage: View {
     }
 }
 
-/// The icon of the app a note came from, looked up once per bundle and
-/// cached. Apps we cannot find get a neutral glyph rather than nothing, so
-/// the provenance row keeps its shape.
+/// The icon of the app a note came from, resolved through the shared store.
+/// Apps we cannot find get a neutral glyph rather than nothing, so the
+/// provenance row keeps its shape.
 private struct AppIcon: View {
     let application: ApplicationIdentity
 
-    /// Misses are cached too, so an uninstalled app costs one lookup, not one
-    /// per render.
-    @MainActor private static var cache: [String: NSImage?] = [:]
-
     var body: some View {
         Group {
-            if let image = Self.icon(for: application) {
+            if let image = AppIconStore.shared.icon(for: application) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -891,19 +880,6 @@ private struct AppIcon: View {
         }
         .frame(width: 16, height: 16)
         .accessibilityHidden(true)
-    }
-
-    @MainActor
-    private static func icon(for application: ApplicationIdentity) -> NSImage? {
-        guard let bundleID = application.bundleID?.nonblank else { return nil }
-        if let cached = cache[bundleID] { return cached }
-        let image = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID).map {
-            let icon = NSWorkspace.shared.icon(forFile: $0.path)
-            icon.size = NSSize(width: 16, height: 16)
-            return icon
-        }
-        cache[bundleID] = image
-        return image
     }
 }
 
