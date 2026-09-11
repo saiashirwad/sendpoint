@@ -11,6 +11,8 @@ final class StackPaletteModel {
     @ObservationIgnored private let export: ExportController
     @ObservationIgnored private let confirmDelete: (UUID, [Stack], ClearedBatch?) -> Bool
     @ObservationIgnored private var flashTask: Task<Void, Never>?
+    @ObservationIgnored private var pending: [PaletteEvent] = []
+    @ObservationIgnored private var isDraining = false
 
     init(store: StackStore, settings: AppSettings, export: ExportController,
          onSelectTemplate: @escaping (UUID) -> Void,
@@ -38,12 +40,21 @@ final class StackPaletteModel {
         set { send(.overlayQuery(newValue)) }
     }
 
+    /// Whether the event was handled. An event sent while another is being
+    /// applied waits its turn and reports itself handled.
     @discardableResult
     func send(_ event: PaletteEvent) -> Bool {
-        var update = PaletteUpdate(state: state, context: projection.context, operationID: UUID(), now: Date())
-        let handled = update.update(event)
-        state = update.state
-        for effect in update.effects { run(effect) }
+        pending.append(event)
+        guard !isDraining else { return true }
+        isDraining = true
+        defer { isDraining = false }
+        var handled = true
+        while !pending.isEmpty {
+            var update = PaletteUpdate(state: state, context: projection.context, operationID: UUID(), now: Date())
+            handled = update.update(pending.removeFirst())
+            state = update.state
+            for effect in update.effects { run(effect) }
+        }
         return handled
     }
 

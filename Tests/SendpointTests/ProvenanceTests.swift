@@ -251,7 +251,7 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
             store.stacks.first(where: { $0.id == original.id })?.notes.first?.provenance.windowTitle,
             "Original window"
         )
-        XCTAssertTrue(store.currentEntries.isEmpty)
+        XCTAssertTrue(store.currentNotes.isEmpty)
         store.teardown()
     }
 
@@ -275,13 +275,13 @@ final class PendingProvenanceWorkOwnerTests: XCTestCase {
             noteID: target.noteID
         ))
         await store.waitForIdle()
-        XCTAssertTrue(store.currentEntries.isEmpty)
+        XCTAssertTrue(store.currentNotes.isEmpty)
 
         await gate.resolve(ProvenanceFields(windowTitle: "Late window"))
         await owner.waitForIdle()
         await store.waitForIdle()
 
-        XCTAssertTrue(store.currentEntries.isEmpty)
+        XCTAssertTrue(store.currentNotes.isEmpty)
         XCTAssertFalse(store.hasPendingMutations)
         store.teardown()
     }

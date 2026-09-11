@@ -20,7 +20,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .idle)
         XCTAssertEqual(store.currentStackID, stackID)
         XCTAssertEqual(store.currentStack, original.stacks[0])
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         XCTAssertNil(store.lastCleared)
         let commits = await recorder.documents()
         XCTAssertEqual(commits, [])
@@ -72,7 +72,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(outcomeEvents, [
             MutationOutcomeEvent(mutation: "first", outcome: .commitFailed("failed")),
         ])
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         XCTAssertEqual(store.state, .halted)
         XCTAssertEqual(store.error, .commitFailed("failed"))
         XCTAssertTrue(store.hasPendingMutations)
@@ -90,7 +90,7 @@ final class StackStoreTests: XCTestCase {
             MutationOutcomeEvent(mutation: "first", outcome: .committed),
             MutationOutcomeEvent(mutation: "second", outcome: .committed),
         ])
-        XCTAssertEqual(store.currentEntries, [first, second])
+        XCTAssertEqual(store.currentNotes, [first, second])
         XCTAssertNil(store.error)
         XCTAssertFalse(store.hasPendingMutations)
         XCTAssertEqual(callbackCount, 2)
@@ -174,7 +174,7 @@ final class StackStoreTests: XCTestCase {
         }
         await store.waitForIdle()
 
-        XCTAssertEqual(store.currentEntries, notes)
+        XCTAssertEqual(store.currentNotes, notes)
         let commits = await recorder.documents()
         XCTAssertEqual(commits.map { $0.stacks[0].notes.map(\.body) }, [
             ["one"],
@@ -199,7 +199,7 @@ final class StackStoreTests: XCTestCase {
         var callbackSnapshots: [[Note]] = []
         var store: StackStore!
         store = try await StackStore(persistence: persistence) {
-            callbackSnapshots.append(store.currentEntries)
+            callbackSnapshots.append(store.currentNotes)
         }
         let added = makeNote(body: "committed")
 
@@ -208,12 +208,12 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .processing)
         store.retryPendingMutations()
         XCTAssertEqual(store.state, .processing)
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         XCTAssertEqual(callbackSnapshots, [])
 
         await gate.open()
         await store.waitForIdle()
-        XCTAssertEqual(store.currentEntries, [added])
+        XCTAssertEqual(store.currentNotes, [added])
         XCTAssertEqual(callbackSnapshots, [[added]])
         XCTAssertEqual(store.state, .idle)
     }
@@ -241,9 +241,9 @@ final class StackStoreTests: XCTestCase {
         store.mutate(.undoClear)
         await store.waitForIdle()
 
-        XCTAssertEqual(store.currentEntries.count, 1)
-        XCTAssertEqual(store.currentEntries.first?.id, base.id)
-        XCTAssertEqual(store.currentEntries.first?.provenance, enriched)
+        XCTAssertEqual(store.currentNotes.count, 1)
+        XCTAssertEqual(store.currentNotes.first?.id, base.id)
+        XCTAssertEqual(store.currentNotes.first?.provenance, enriched)
         store.teardown()
     }
 
@@ -290,7 +290,7 @@ final class StackStoreTests: XCTestCase {
         ])
         XCTAssertEqual(store.state, .tornDown)
         XCTAssertFalse(store.hasPendingMutations)
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         XCTAssertEqual(callbackCount, 0)
         var commitAttemptCount = await attempts.count()
         XCTAssertEqual(commitAttemptCount, 1)
@@ -306,7 +306,7 @@ final class StackStoreTests: XCTestCase {
             MutationOutcomeEvent(mutation: "active", outcome: .cancelled),
             MutationOutcomeEvent(mutation: "queued", outcome: .cancelled),
         ])
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         XCTAssertEqual(callbackCount, 0)
         XCTAssertEqual(store.state, .tornDown)
         store.retryPendingMutations()
@@ -338,7 +338,7 @@ final class StackStoreTests: XCTestCase {
         await store.waitForIdle()
         XCTAssertEqual(states, [.halted, .processing])
         XCTAssertEqual(outcomes, [.commitFailed("failed"), .committed])
-        XCTAssertEqual(store.currentEntries, [added])
+        XCTAssertEqual(store.currentNotes, [added])
         XCTAssertEqual(store.state, .idle)
         let attempts = await recorder.documents()
         XCTAssertEqual(attempts.count, 2)
@@ -386,7 +386,7 @@ final class StackStoreTests: XCTestCase {
         await drain.value
 
         XCTAssertEqual(store.state, .idle)
-        XCTAssertEqual(store.currentEntries, [added])
+        XCTAssertEqual(store.currentNotes, [added])
     }
 
     func testDrainGivesUpAfterTheTimeoutAndLeavesTheStoreProcessing() async throws {
@@ -401,10 +401,10 @@ final class StackStoreTests: XCTestCase {
         await store.drain(timeout: .milliseconds(20))
 
         XCTAssertEqual(store.state, .processing)
-        XCTAssertEqual(store.currentEntries, [])
+        XCTAssertEqual(store.currentNotes, [])
         await gate.open()
         await store.waitForIdle()
-        XCTAssertEqual(store.currentEntries.count, 1)
+        XCTAssertEqual(store.currentNotes.count, 1)
     }
 
     func testDrainReturnsAtOnceForAnIdleOrHaltedStore() async throws {

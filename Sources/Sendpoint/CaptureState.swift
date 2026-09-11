@@ -1,6 +1,20 @@
 import Foundation
 import SendpointDomain
 
+/// A preference, not a gesture inferred from how long the keys stay down.
+nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
+    case hold
+    case tap
+
+    var title: String { self == .hold ? "Hold" : "Tap" }
+    var detail: String {
+        switch self {
+        case .hold: "Hold to speak, release to save."
+        case .tap: "Press to speak, press again to save."
+        }
+    }
+}
+
 nonisolated struct CaptureSaveRequest: Equatable {
     let target: NoteCaptureTarget
     let destinationStackID: UUID
@@ -31,8 +45,25 @@ nonisolated struct CaptureSession: Equatable {
     var saveAwaitsSelection = false
 }
 
+/// The physical state of the voice key, kept across captures so a key
+/// repeat, an early failure, or Escape cannot start a second recording.
+nonisolated struct VoiceGesture: Equatable {
+    var mode: VoiceRecordingMode = .hold
+    var keyHeld = false
+    /// The current press has done its work; nothing happens until the key comes up.
+    var releasePending = false
+}
+
 nonisolated enum CaptureAction {
     case begin(CaptureMode, NoteCaptureContext)
+    /// The controller could not start a voice capture the reducer asked for.
+    case voiceRefused
+    case voicePressed
+    case voiceReleased
+    /// The status menu item: one press starts, the next finishes.
+    case voiceToggled
+    case voiceEscape
+    case voiceModeChanged(VoiceRecordingMode)
     /// The selection reader has done everything that must happen before the
     /// note box takes over the keyboard; the rest may finish behind it.
     case selectionPending(NoteCaptureContext)
@@ -56,6 +87,8 @@ nonisolated enum CaptureAction {
 nonisolated enum CaptureSurface { case editor, voice }
 
 nonisolated enum CaptureEffect: Equatable {
+    /// Check the store and permissions, then send `.begin(.voice, _)` or `.voiceRefused`.
+    case beginVoice
     case readSelection(NoteCaptureContext, CaptureMode)
     case startRecording(NoteCaptureContext)
     case transcribe(NoteCaptureContext)
@@ -72,32 +105,69 @@ nonisolated enum CaptureEffect: Equatable {
 }
 
 /// Pure workflow rules. Effects run only after the returned state is installed.
-nonisolated enum CaptureState: Equatable {
-    case idle
-    case active(CaptureSession)
-    case tornDown
+nonisolated struct CaptureState: Equatable {
+    enum Lifecycle: Equatable {
+        case idle
+        case active(CaptureSession)
+        case tornDown
+    }
+
+    var lifecycle: Lifecycle = .idle
+    var voice = VoiceGesture()
 
     var session: CaptureSession? {
-        if case let .active(session) = self { return session }
+        if case let .active(session) = lifecycle { return session }
         return nil
     }
 
+    var isTornDown: Bool { lifecycle == .tornDown }
+
     mutating func update(_ action: CaptureAction) -> [CaptureEffect] {
-        guard self != .tornDown else { return [] }
-        if case .teardown = action {
-            self = .tornDown
+        guard lifecycle != .tornDown else { return [] }
+        switch action {
+        case .teardown:
+            lifecycle = .tornDown
             return [.close]
-        }
-        if case let .begin(mode, context) = action {
-            guard self == .idle else {
-                if case .editing = session?.phase { return [.focusEditor] }
-                return [.beep]
+        case let .begin(mode, context):
+            return begin(mode, context)
+        case .voicePressed:
+            guard !voice.keyHeld, !voice.releasePending else { return [] }
+            voice.keyHeld = true
+            guard let session else { return [.beginVoice] }
+            voice.releasePending = true
+            return session.mode == .voice ? finishOrBeep(session) : busy(session)
+        case .voiceRefused:
+            guard voice.keyHeld else { return [] }
+            voice.keyHeld = false
+            voice.releasePending = true
+            return []
+        case .voiceReleased:
+            let wasHeld = voice.keyHeld
+            voice.keyHeld = false
+            if voice.releasePending {
+                voice.releasePending = false
+                return []
             }
-            self = .active(CaptureSession(context: context, mode: mode, phase: mode == .text
-                ? .selectingText : .selectingVoice(recording: false, finishRequested: false)))
-            return mode == .text ? [.readSelection(context, mode)]
-                : [.show(.voice), .startRecording(context), .readSelection(context, mode)]
+            guard wasHeld, voice.mode == .hold, session?.mode == .voice else { return [] }
+            return update(.finishVoice)
+        case .voiceToggled:
+            guard !voice.keyHeld, !voice.releasePending else { return [] }
+            guard let session else { return [.beginVoice] }
+            return session.mode == .voice ? finishOrBeep(session) : busy(session)
+        case .voiceEscape:
+            guard session?.mode == .voice else { return [] }
+            if voice.keyHeld {
+                voice.keyHeld = false
+                voice.releasePending = true
+            }
+            return update(.cancelVoice)
+        case let .voiceModeChanged(mode):
+            voice = VoiceGesture(mode: mode)
+            return session?.mode == .voice ? update(.cancelVoice) : []
+        default:
+            break
         }
+
         guard var session else { return [] }
         var effects: [CaptureEffect] = []
         switch action {
@@ -174,13 +244,13 @@ nonisolated enum CaptureState: Equatable {
             else {
                 if session.phase == .transcribing {
                     session.phase = .failed("No speech was found.")
-                    self = .active(session)
+                    lifecycle = .active(session)
                     return [.failureTimer(session.context)]
                 }
                 if session.target == nil, note.nonblank != nil {
                     // The passage is still on its way; save as soon as it lands.
                     session.saveAwaitsSelection = true
-                    self = .active(session)
+                    lifecycle = .active(session)
                     return []
                 }
                 return [.beep]
@@ -248,14 +318,46 @@ nonisolated enum CaptureState: Equatable {
         case let .failureTimeout(context):
             guard context == session.context, case .failed = session.phase else { return [] }
             return finish(session)
-        case .begin, .teardown: return []
+        case .begin, .teardown, .voiceRefused, .voicePressed, .voiceReleased, .voiceToggled,
+             .voiceEscape, .voiceModeChanged:
+            return []
         }
-        self = .active(session)
+        lifecycle = .active(session)
         return effects
     }
 
+    private mutating func begin(_ mode: CaptureMode, _ context: NoteCaptureContext) -> [CaptureEffect] {
+        guard let session else {
+            lifecycle = .active(CaptureSession(context: context, mode: mode, phase: mode == .text
+                ? .selectingText : .selectingVoice(recording: false, finishRequested: false)))
+            return mode == .text ? [.readSelection(context, mode)]
+                : [.show(.voice), .startRecording(context), .readSelection(context, mode)]
+        }
+        return busy(session)
+    }
+
+    /// A capture is already open; point the user at it.
+    private func busy(_ session: CaptureSession) -> [CaptureEffect] {
+        if case .editing = session.phase { return [.focusEditor] }
+        return [.beep]
+    }
+
+    /// The voice key was pressed while its own capture is up: finish while it
+    /// is still listening, otherwise there is nothing more to finish.
+    private mutating func finishOrBeep(_ session: CaptureSession) -> [CaptureEffect] {
+        switch session.phase {
+        case .selectingVoice, .startingVoice, .recording: return update(.finishVoice)
+        default: return [.beep]
+        }
+    }
+
     private mutating func finish(_ session: CaptureSession, abandon: Bool = true) -> [CaptureEffect] {
-        self = .idle
+        lifecycle = .idle
+        // The key is still down after its capture ended; its release must not start another.
+        if session.mode == .voice, voice.keyHeld {
+            voice.keyHeld = false
+            voice.releasePending = true
+        }
         return (abandon ? session.target.map { [CaptureEffect.abandon($0)] } ?? [] : []) + [.close]
     }
 }

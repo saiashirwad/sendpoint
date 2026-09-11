@@ -18,23 +18,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var storeState: StoreState = .loading
     private var bootstrapTask: Task<Void, Never>?
     private var terminationTask: Task<Void, Never>?
-    private let exportController = ExportController()
+    private let exportController: ExportController
 
     private let settings: AppSettings
     private let captureController: CaptureController
     private let permissionState: PermissionState
     private let hotKeyRegistrar: HotKeyRegistrar
-    private var voiceTrigger = VoiceTriggerMachine()
 
     override init() {
         let settings = AppSettings.shared
         let permissionState = PermissionState()
+        let selection = SelectionCapture.live(monitor: .shared)
         self.settings = settings
         self.permissionState = permissionState
         self.hotKeyRegistrar = HotKeyRegistrar(settings: settings)
+        self.exportController = ExportController(services: .live(selection: selection))
         self.captureController = CaptureController(
             settings: settings,
-            permissionState: permissionState
+            permissionState: permissionState,
+            selection: selection,
+            recorder: .live(.shared)
         )
         super.init()
         captureController.onAccessibilityRequired = { [weak self] in
@@ -42,12 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         captureController.onStatusChange = { [weak self] in
             self?.refreshStatusItem()
-        }
-        captureController.onVoiceCaptureEnded = { [weak self] in
-            self?.handleVoiceTrigger(.captureEnded)
-        }
-        captureController.onVoiceEscape = { [weak self] in
-            self?.handleVoiceTrigger(.escape)
         }
         captureController.onWillPresentEditor = { [weak self] in
             self?.hideAuxiliaryWindows()
@@ -221,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Status item
 
     private func refreshStatusItem() {
-        let count = store?.currentEntries.count ?? 0
+        let count = store?.currentNotes.count ?? 0
         let stackName = store?.currentStack.name ?? "No stack"
         statusItemController.setBaseTitle(
             count > 0 ? " \(count)" : "",
@@ -245,10 +242,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Hot keys
 
     private func registerHotKeys() {
-        handleVoiceTrigger(.configurationChanged(settings.voiceMode))
+        captureController.send(.voiceModeChanged(settings.voiceMode))
         let actions = HotKeyRegistrar.Actions(
-            voicePressed: { [weak self] in self?.handleVoiceTrigger(.pressed) },
-            voiceReleased: { [weak self] in self?.handleVoiceTrigger(.released) },
+            voicePressed: { [weak self] in self?.captureController.send(.voicePressed) },
+            voiceReleased: { [weak self] in self?.captureController.send(.voiceReleased) },
             typedNote: { [weak self] in self?.captureSelection() },
             copy: { [weak self] in self?.copyMarkdown() },
             showStack: { [weak self] in self?.showStack() },
@@ -304,24 +301,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func captureVoiceSelection() {
         Diag.log("voice capture invoked")
-        handleVoiceTrigger(.menuToggle)
-    }
-
-    private func handleVoiceTrigger(_ event: VoiceTriggerEvent) {
-        runVoiceCommands(voiceTrigger.handle(event))
-    }
-
-    private func runVoiceCommands(_ commands: [VoiceTriggerCommand]) {
-        for command in commands {
-            switch command {
-            case .beginCapture:
-                captureController.beginVoiceCapture()
-            case .finishCapture:
-                captureController.endVoiceCapture()
-            case .cancelCapture:
-                captureController.cancelVoiceCapture()
-            }
-        }
+        captureController.send(.voiceToggled)
     }
 
     private func copyMarkdown() {

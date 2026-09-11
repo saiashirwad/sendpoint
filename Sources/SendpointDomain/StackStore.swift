@@ -68,7 +68,7 @@ public final class StackStore {
         document.stacks.first { $0.id == document.currentStackID }!
     }
 
-    public var currentEntries: [Note] {
+    public var currentNotes: [Note] {
         currentStack.notes
     }
 

@@ -92,14 +92,14 @@ struct ExportServices {
     var write: (String) -> Int?
     var paste: (pid_t, Int) async throws -> Bool
 
-    static var live: Self {
+    static func live(selection: SelectionCapture) -> Self {
         Self(write: { text in
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             return pasteboard.setString(text, forType: .string) ? pasteboard.changeCount : nil
         }, paste: { pid, revision in
             try await Task.sleep(for: .milliseconds(120))
-            return try await SelectionCapture.paste(into: pid, expectedRevision: revision)
+            return try await selection.paste(pid, revision)
         })
     }
 }
@@ -110,8 +110,10 @@ final class ExportController {
     @ObservationIgnored private var pasteTask: Task<Void, Never>?
     @ObservationIgnored private weak var store: StackStore?
     @ObservationIgnored private var report: (String) -> Void = { _ in }
+    @ObservationIgnored private var pending: [ExportAction] = []
+    @ObservationIgnored private var isDraining = false
 
-    init(services: ExportServices? = nil) { self.services = services ?? .live }
+    init(services: ExportServices) { self.services = services }
 
     func copy(store: StackStore, stackID: UUID, template: Template,
               pasteTarget: pid_t? = nil, report: @escaping (String) -> Void) {
@@ -135,8 +137,16 @@ final class ExportController {
         report(services.write(PromptComposer.noteMarkdown(note)) == nil ? "Couldn’t copy the note." : "Copied note")
     }
 
+    /// Actions sent while one is being applied wait their turn.
     func send(_ action: ExportAction) {
-        let effects = state.update(action)
+        pending.append(action)
+        guard !isDraining else { return }
+        isDraining = true
+        while !pending.isEmpty { run(state.update(pending.removeFirst())) }
+        isDraining = false
+    }
+
+    private func run(_ effects: [ExportEffect]) {
         for effect in effects {
             switch effect {
             case let .write(request): send(.copied(request.id, revision: services.write(request.markdown)))

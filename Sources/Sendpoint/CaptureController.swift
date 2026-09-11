@@ -2,47 +2,72 @@ import AppKit
 import Observation
 import SendpointDomain
 
-/// Replace these leaves in tests; no microphone, clipboard or windows are required.
-struct CaptureServices {
-    /// Reads the selection. The callback fires once nothing that remains
-    /// needs the front app to still be frontmost, so the editor may open.
-    var selection: (CaptureMode, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
-    var startRecording: () async throws -> Void
-    var transcribe: () async throws -> String
-    var discardRecording: () -> Void
+/// The microphone and recogniser behind a voice note. Tests substitute closures.
+struct VoiceRecorder {
+    /// Asks for microphone access if needed, then starts recording.
+    var start: () async throws -> Void
+    var stopAndTranscribe: () async throws -> String
+    var discard: () -> Void
+    var levelMeter: VoiceLevelMeter
 
-    static var live: Self {
-        Self(selection: { mode, editorMayOpen in
-                try await SelectionCapture.capture(fallback: mode == .text ? .patient : .brief,
-                    editorMayOpen: editorMayOpen)
-            },
-            startRecording: {
-                guard await VoiceNoteService.shared.requestMicrophoneAccess() else {
-                    throw CaptureServiceError.microphoneDenied
+    static func live(_ service: VoiceNoteService) -> Self {
+        Self(
+            start: {
+                guard await service.requestMicrophoneAccess() else {
+                    throw VoiceRecorderError.microphoneDenied
                 }
                 try Task.checkCancellation()
-                try VoiceNoteService.shared.startRecording()
+                try service.startRecording()
             },
-            transcribe: { try await VoiceNoteService.shared.stopAndTranscribe() },
-            discardRecording: { VoiceNoteService.shared.discardRecording() })
+            stopAndTranscribe: { try await service.stopAndTranscribe() },
+            discard: { service.discardRecording() },
+            levelMeter: service.levelMeter
+        )
     }
 }
 
-private enum CaptureServiceError: LocalizedError {
+private enum VoiceRecorderError: LocalizedError {
     case microphoneDenied
     var errorDescription: String? { "Microphone access is off. Turn it on in Settings › Voice." }
+}
+
+/// The windows a capture shows. Tests record the calls instead of opening panels.
+struct CaptureSurfaces {
+    var prepare: () -> Void
+    var show: (CaptureSurface) -> Void
+    var focus: () -> Void
+    var stopEscapeHandling: () -> Void
+    var close: () -> Void
+    var discard: () -> Void
+
+    static func live(_ windows: CaptureWindows) -> Self {
+        Self(
+            prepare: { windows.prepareSurfaces() },
+            show: { windows.show($0) },
+            focus: { windows.focus() },
+            stopEscapeHandling: { windows.stopEscapeHandling() },
+            close: { windows.close() },
+            discard: { windows.discardSurfaces() }
+        )
+    }
 }
 
 /// TEA effect owner. The reducer owns workflow state; this owns native resources.
 @Observable
 final class CaptureController {
-    private(set) var state: CaptureState = .idle
+    private(set) var state = CaptureState()
     @ObservationIgnored private var store: StackStore?
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let permissionState: PermissionState
-    @ObservationIgnored private let services: CaptureServices
-    @ObservationIgnored private lazy var windows = CaptureWindows(model: self)
+    @ObservationIgnored private let selection: SelectionCapture
+    @ObservationIgnored private let recorder: VoiceRecorder
+    @ObservationIgnored private let makeSurfaces: (CaptureController) -> CaptureSurfaces
+    @ObservationIgnored private lazy var surfaces = makeSurfaces(self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
+    /// Actions sent while one is being applied wait their turn, so an effect
+    /// never sees state from halfway through another action.
+    @ObservationIgnored private var pending: [CaptureAction] = []
+    @ObservationIgnored private var isDraining = false
     private enum Work: Hashable { case selection, recording, transcription, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
     @ObservationIgnored private let probe: ProvenanceProbe
@@ -51,13 +76,11 @@ final class CaptureController {
 
     var onAccessibilityRequired: (() -> Void)?
     var onStatusChange: (() -> Void)?
-    var onVoiceCaptureEnded: (() -> Void)?
-    var onVoiceEscape: (() -> Void)?
     /// Runs synchronously before the editor activates the app, so other
     /// windows can get out of the way instead of being dragged forward.
     var onWillPresentEditor: (() -> Void)?
 
-    var levelMeter: VoiceLevelMeter { VoiceNoteService.shared.levelMeter }
+    var levelMeter: VoiceLevelMeter { recorder.levelMeter }
     /// The stack this note lands in: the one fixed when the capture began,
     /// so switching stacks mid-note does not change what the pill says.
     var targetStack: StackItemFacts? {
@@ -84,78 +107,84 @@ final class CaptureController {
     }
 
     init(settings: AppSettings, permissionState: PermissionState,
-         provenanceProbe: ProvenanceProbe = .live(), services: CaptureServices? = nil) {
+         selection: SelectionCapture, recorder: VoiceRecorder,
+         provenanceProbe: ProvenanceProbe = .live(),
+         surfaces: @escaping (CaptureController) -> CaptureSurfaces = { .live(CaptureWindows(model: $0)) }) {
         self.settings = settings
         self.permissionState = permissionState
+        self.selection = selection
+        self.recorder = recorder
         self.probe = provenanceProbe
-        self.services = services ?? .live
+        self.makeSurfaces = surfaces
     }
 
     func configure(store: StackStore) {
-        guard state != .tornDown else { return }
+        guard !state.isTornDown else { return }
         precondition(self.store == nil || self.store === store)
         self.store = store
     }
 
     /// Builds the overlay and the note box ahead of the first hotkey press.
     func warmUp() {
-        guard state != .tornDown else { return }
-        windows.prepareSurfaces()
+        guard !state.isTornDown else { return }
+        surfaces.prepare()
     }
 
-    func beginCapture() { begin(.text) }
-    func beginVoiceCapture() { begin(.voice) }
-    func endVoiceCapture() { send(.finishVoice) }
-    func cancelVoiceCapture() { send(.cancelVoice) }
-    func voiceEscape() {
-        if let onVoiceEscape { onVoiceEscape() } else { send(.cancelVoice) }
+    func beginCapture() {
+        if let context = beginContext() { send(.begin(.text, context)) }
     }
+
     func saveToCurrentStack() {
         if let store { send(.retarget(store.currentStackID)) }
     }
 
-    private func begin(_ mode: CaptureMode) {
-        guard state != .tornDown else { return }
+    /// What a capture needs before the reducer sees it. A refusal is reported
+    /// here, once, and the reducer hears nothing.
+    private func beginContext() -> NoteCaptureContext? {
+        guard !state.isTornDown else { return nil }
         guard let store, store.state != .tornDown else {
             NSSound.beep()
-            if mode == .voice { onVoiceCaptureEnded?() }
-            return
+            return nil
         }
         guard permissionState.isTextCaptureReady else {
             onAccessibilityRequired?()
-            if mode == .voice { onVoiceCaptureEnded?() }
-            return
+            return nil
         }
-        let wasOpen = isOpen
-        if !wasOpen { previousApp = NSWorkspace.shared.frontmostApplication }
-        send(.begin(mode, NoteCaptureContext(stackID: store.currentStackID)))
-        if wasOpen && mode == .voice { onVoiceCaptureEnded?() }
+        if !isOpen { previousApp = NSWorkspace.shared.frontmostApplication }
+        return NoteCaptureContext(stackID: store.currentStackID)
     }
 
     func send(_ action: CaptureAction) {
-        let previous = state.session
-        let effects = state.update(action)
-        for effect in effects { run(effect, previous: previous) }
+        pending.append(action)
+        guard !isDraining else { return }
+        isDraining = true
+        while !pending.isEmpty {
+            let previous = state.session
+            for effect in state.update(pending.removeFirst()) { run(effect, previous: previous) }
+        }
+        isDraining = false
         onStatusChange?()
     }
 
     private func run(_ effect: CaptureEffect, previous: CaptureSession?) {
         switch effect {
+        case .beginVoice:
+            if let context = beginContext() { send(.begin(.voice, context)) } else { send(.voiceRefused) }
         case let .readSelection(context, mode):
-            launch(.selection, context: context) { [services, weak self] in
-                .selection(context, try await services.selection(mode) {
+            launch(.selection, context: context) { [selection, weak self] in
+                .selection(context, try await selection.read(mode == .text ? .patient : .brief) {
                     self?.send(.selectionPending(context))
                 })
             }
         case let .startRecording(context):
-            launch(.recording, context: context) { [services] in
-                try await services.startRecording()
+            launch(.recording, context: context) { [recorder] in
+                try await recorder.start()
                 return .recordingStarted(context)
             }
         case let .transcribe(context):
-            windows.stopEscapeHandling()
-            launch(.transcription, context: context) { [services] in
-                .transcript(context, try await services.transcribe())
+            surfaces.stopEscapeHandling()
+            launch(.transcription, context: context) { [recorder] in
+                .transcript(context, try await recorder.stopAndTranscribe())
             }
         case let .probe(target): provenance.start(for: target)
         case let .save(request):
@@ -165,7 +194,7 @@ final class CaptureController {
             guard let store else { return }
             store.mutate(.addNote(stackID: request.destinationStackID, note: request.note)) {
                 [weak self, weak store] outcome in
-                guard let self, self.state != .tornDown else { return }
+                guard let self, !self.state.isTornDown else { return }
                 switch outcome {
                 case .noOp, .rejected, .cancelled: self.provenance.abandon(for: request.target)
                 case .committed, .commitFailed: break
@@ -176,8 +205,8 @@ final class CaptureController {
             }
         case .retry: store?.retryPendingMutations()
         case let .abandon(target): provenance.abandon(for: target)
-        case let .show(surface): windows.show(surface)
-        case .focusEditor: windows.focus()
+        case let .show(surface): surfaces.show(surface)
+        case .focusEditor: surfaces.focus()
         case let .failureTimer(context):
             cancelWork()
             launch(.failure, context: context) {
@@ -186,13 +215,12 @@ final class CaptureController {
             }
         case .close:
             cancelWork()
-            windows.close()
-            if state != .tornDown, settings.restoreFocusAfterSave,
+            surfaces.close()
+            if !state.isTornDown, settings.restoreFocusAfterSave,
                let previousApp, previousApp.bundleIdentifier != Bundle.main.bundleIdentifier {
                 previousApp.activate()
             }
             previousApp = nil
-            if previous?.mode == .voice { onVoiceCaptureEnded?() }
         case .beep: NSSound.beep()
         }
     }
@@ -222,19 +250,17 @@ final class CaptureController {
     private func cancelWork() {
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
-        services.discardRecording()
+        recorder.discard()
     }
 
     func teardown() {
-        guard state != .tornDown else { return }
-        onVoiceCaptureEnded = nil
+        guard !state.isTornDown else { return }
         send(.teardown)
-        windows.discardSurfaces()
+        surfaces.discard()
         provenance.teardown()
         store = nil
         onAccessibilityRequired = nil
         onStatusChange = nil
-        onVoiceEscape = nil
         onWillPresentEditor = nil
     }
 }

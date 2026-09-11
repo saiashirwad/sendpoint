@@ -49,7 +49,7 @@ final class CaptureWindows {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
             if event.keyCode == UInt16(kVK_Escape) {
-                if self.surface == .voice { self.model.voiceEscape() }
+                if self.surface == .voice { self.model.send(.voiceEscape) }
                 else { self.model.send(.dismiss) }
                 return nil
             }
@@ -103,7 +103,7 @@ final class CaptureWindows {
     private func installVoiceEscapeFallback() {
         voiceEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == UInt16(kVK_Escape) else { return }
-            MainActor.assumeIsolated { self?.model.voiceEscape() }
+            MainActor.assumeIsolated { self?.model.send(.voiceEscape) }
         }
     }
 
@@ -162,7 +162,7 @@ final class CaptureWindows {
             name: .voiceEscape,
             keyCode: UInt16(kVK_Escape),
             carbonModifiers: 0,
-            pressed: { [weak self] in self?.model.voiceEscape() }
+            pressed: { [weak self] in self?.model.send(.voiceEscape) }
         )
         if case .failed = escapeRegistration {
             installVoiceEscapeFallback()

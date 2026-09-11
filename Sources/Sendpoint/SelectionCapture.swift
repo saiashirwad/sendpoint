@@ -17,7 +17,28 @@ nonisolated struct CapturedSelection: Equatable {
 ///     leaves the clipboard alone, but some apps (many Electron ones, Chrome
 ///     with web accessibility off) do not answer.
 ///  2. Synthesise ⌘C, read the pasteboard, then put the old pasteboard back.
-enum SelectionCapture {
+///
+/// Tests substitute the two closures; `live` binds the real monitor and pasteboard.
+struct SelectionCapture {
+    /// `editorMayOpen` is called when the front app no longer needs to be
+    /// frontmost: at once when Accessibility answered, or just after the copy
+    /// keystroke has been delivered. The clipboard may still be read after.
+    var read: (FallbackPolicy, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
+    /// Sends ⌘V to the app that was frontmost when export began.
+    var paste: (_ processIdentifier: pid_t, _ expectedRevision: Int) async throws -> Bool
+
+    static func live(monitor: AutomaticSelectionMonitor, pasteboard: NSPasteboard = .general) -> Self {
+        Self(
+            read: { fallback, editorMayOpen in
+                try await capture(monitor: monitor, pasteboard: pasteboard,
+                    fallback: fallback, editorMayOpen: editorMayOpen)
+            },
+            paste: { processIdentifier, expectedRevision in
+                try await paste(into: processIdentifier, expectedRevision: expectedRevision,
+                    pasteboard: pasteboard)
+            }
+        )
+    }
 
     /// How far to go when Accessibility reports no selection.
     enum FallbackPolicy {
@@ -43,19 +64,18 @@ enum SelectionCapture {
         case unavailable
     }
 
-    /// `editorMayOpen` is called when the front app no longer needs to be
-    /// frontmost: at once when Accessibility answered, or just after the copy
-    /// keystroke has been delivered. The clipboard may still be read after.
-    static func capture(
-        fallback: FallbackPolicy = .patient,
-        editorMayOpen: @escaping @MainActor @Sendable () -> Void = {}
+    private static func capture(
+        monitor: AutomaticSelectionMonitor,
+        pasteboard: NSPasteboard,
+        fallback: FallbackPolicy,
+        editorMayOpen: @escaping @MainActor @Sendable () -> Void
     ) async throws -> CapturedSelection {
         try Task.checkCancellation()
         let app = NSWorkspace.shared.frontmostApplication
         let processIdentifier = app?.processIdentifier ?? 0
         var rect: CGRect?
         var text = ""
-        defer { AutomaticSelectionMonitor.shared.discard() }
+        defer { monitor.discard() }
 
         var answer = accessibilitySelection()
         if case let .text(axText, axRect) = answer {
@@ -64,12 +84,12 @@ enum SelectionCapture {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { answer = .unavailable }
         }
         if case .unavailable = answer {
-            if let automatic = AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) {
+            if let automatic = monitor.takeSelection(for: processIdentifier) {
                 text = automatic
             } else {
-                text = try await copyViaKeystroke(processIdentifier: processIdentifier, fallback: fallback,
-                    afterKeystroke: editorMayOpen)
-                    ?? AutomaticSelectionMonitor.shared.takeSelection(for: processIdentifier) ?? ""
+                text = try await copyViaKeystroke(pasteboard: pasteboard, processIdentifier: processIdentifier,
+                    fallback: fallback, afterKeystroke: editorMayOpen)
+                    ?? monitor.takeSelection(for: processIdentifier) ?? ""
             }
         }
         try Task.checkCancellation()
@@ -157,11 +177,11 @@ enum SelectionCapture {
     private static let keystrokeSettleTime: Duration = .milliseconds(40)
 
     private static func copyViaKeystroke(
+        pasteboard: NSPasteboard,
         processIdentifier: pid_t,
         fallback: FallbackPolicy,
         afterKeystroke: @escaping @MainActor @Sendable () -> Void
     ) async throws -> String? {
-        let pasteboard = NSPasteboard.general
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
 
@@ -194,12 +214,12 @@ enum SelectionCapture {
         return result
     }
 
-    /// Sends ⌘V to the app that was frontmost when export began.
-    static func paste(into processIdentifier: pid_t, expectedRevision: Int) async throws -> Bool {
+    private static func paste(into processIdentifier: pid_t, expectedRevision: Int,
+                              pasteboard: NSPasteboard) async throws -> Bool {
         guard processIdentifier > 0 else { return false }
         try await waitForModifierRelease()
         try Task.checkCancellation()
-        guard NSPasteboard.general.changeCount == expectedRevision else { return false }
+        guard pasteboard.changeCount == expectedRevision else { return false }
         postCommandKey(CGKeyCode(kVK_ANSI_V), processIdentifier: processIdentifier)
         return true
     }

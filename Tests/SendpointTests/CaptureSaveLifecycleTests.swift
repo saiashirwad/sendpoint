@@ -40,7 +40,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(state.update(.retry), [.retry])
         XCTAssertEqual(state.session?.phase, .saving(request))
         XCTAssertEqual(state.update(.saved(request, .committed, destinationExists: true)), [.close])
-        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(state.lifecycle, .idle)
     }
 
     func testMissingDestinationKeepsTheNoteForAnExplicitRetarget() throws {
@@ -114,7 +114,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(queued.update(.begin(.text, context)), [.beep])
         XCTAssertEqual(queued.update(.dismiss), [.close], "a queued save keeps its provenance work")
         XCTAssertEqual(queued.update(.saved(request, .committed, destinationExists: true)), [])
-        XCTAssertEqual(queued, .idle)
+        XCTAssertEqual(queued.lifecycle, .idle)
 
         var (failed, failedRequest) = try saving()
         _ = failed.update(.saved(failedRequest, .commitFailed("offline"), destinationExists: true))
@@ -122,7 +122,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     }
 
     func testEditorOpensAheadOfTheSelectionAndThePassageCatchesUp() {
-        var state = CaptureState.idle
+        var state = CaptureState()
         XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
         XCTAssertEqual(state.update(.selectionPending(context)), [.show(.editor)])
         XCTAssertEqual(state.session?.phase, .editing(""))
@@ -140,7 +140,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     }
 
     func testSaveBeforeThePassageArrivesWaitsForItThenSaves() {
-        var state = CaptureState.idle
+        var state = CaptureState()
         _ = state.update(.begin(.text, context))
         _ = state.update(.selectionPending(context))
         _ = state.update(.changeNote("Quick thought"))
@@ -157,20 +157,20 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(request.target, target)
         XCTAssertEqual(state.session?.saveAwaitsSelection, false)
 
-        var blank = CaptureState.idle
+        var blank = CaptureState()
         _ = blank.update(.begin(.text, context))
         _ = blank.update(.selectionPending(context))
         XCTAssertEqual(blank.update(.save), [.beep], "a blank note still cannot be queued")
     }
 
     func testAFailedSelectionReadOpensTheEditorWithoutAPassage() {
-        var state = CaptureState.idle
+        var state = CaptureState()
         _ = state.update(.begin(.text, context))
         let emptyTarget = context.target(captured: CapturedSelection(text: ""))
         XCTAssertEqual(state.update(.failed(context, "no focused element")), [.probe(emptyTarget), .show(.editor)])
         XCTAssertEqual(state.session?.phase, .editing(""))
 
-        var early = CaptureState.idle
+        var early = CaptureState()
         _ = early.update(.begin(.text, context))
         _ = early.update(.selectionPending(context))
         XCTAssertEqual(early.update(.failed(context, "timed out")), [.probe(emptyTarget)])
@@ -178,7 +178,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     }
 
     private func editing(body: String) throws -> CaptureState {
-        var state = CaptureState.idle
+        var state = CaptureState()
         XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
         let target = context.target(captured: selection)
         XCTAssertEqual(state.update(.selection(context, selection)), [.probe(target), .show(.editor)])

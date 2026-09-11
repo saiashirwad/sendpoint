@@ -29,7 +29,7 @@ final class ExportControllerTests: XCTestCase {
 
         if case .failed = exporter.state {} else { XCTFail("Expected clipboard failure") }
         XCTAssertFalse(attemptedText.isEmpty)
-        XCTAssertEqual(store.currentEntries, [note])
+        XCTAssertEqual(store.currentNotes, [note])
         store.teardown()
     }
 
@@ -52,7 +52,7 @@ final class ExportControllerTests: XCTestCase {
 
         XCTAssertEqual(exporter.state, .idle)
         XCTAssertEqual(written, "Use this template\n\nA note")
-        XCTAssertTrue(store.currentEntries.isEmpty)
+        XCTAssertTrue(store.currentNotes.isEmpty)
         XCTAssertEqual(store.lastCleared?.notes, [note])
         store.teardown()
     }
