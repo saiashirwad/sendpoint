@@ -368,6 +368,62 @@ final class AnnotationStoreTests: XCTestCase {
         XCTAssertEqual(outcomes, [.commitFailed("failed"), .cancelled, .cancelled])
     }
 
+    func testDrainReturnsOnceAQueuedCommitLands() async throws {
+        let original = document()
+        let gate = AsyncGate()
+        let store = try await AnnotationStore(persistence: StorePersistence(
+            load: { original },
+            commit: { _ in await gate.wait() }
+        ))
+        let added = annotation(note: "queued at quit")
+
+        store.mutate(.addAnnotation(sessionID: sessionID, annotation: added))
+        let drain = Task { await store.drain(timeout: .seconds(5)) }
+        await Task.yield()
+        XCTAssertEqual(store.state, .processing)
+
+        await gate.open()
+        await drain.value
+
+        XCTAssertEqual(store.state, .idle)
+        XCTAssertEqual(store.currentEntries, [added])
+    }
+
+    func testDrainGivesUpAfterTheTimeoutAndLeavesTheStoreProcessing() async throws {
+        let original = document()
+        let gate = AsyncGate()
+        let store = try await AnnotationStore(persistence: StorePersistence(
+            load: { original },
+            commit: { _ in await gate.wait() }
+        ))
+
+        store.mutate(.addAnnotation(sessionID: sessionID, annotation: annotation(note: "slow")))
+        await store.drain(timeout: .milliseconds(20))
+
+        XCTAssertEqual(store.state, .processing)
+        XCTAssertEqual(store.currentEntries, [])
+        await gate.open()
+        await store.waitForIdle()
+        XCTAssertEqual(store.currentEntries.count, 1)
+    }
+
+    func testDrainReturnsAtOnceForAnIdleOrHaltedStore() async throws {
+        let original = document()
+        let recorder = AttemptRecorder(failingAttempts: [1])
+        let store = try await AnnotationStore(persistence: StorePersistence(
+            load: { original },
+            commit: { try await recorder.commit($0) }
+        ))
+        await store.drain(timeout: .seconds(5))
+        XCTAssertEqual(store.state, .idle)
+
+        store.mutate(.renameSession(sessionID: sessionID, name: "Fails"))
+        await store.waitForIdle()
+        XCTAssertEqual(store.state, .halted)
+        await store.drain(timeout: .seconds(5))
+        XCTAssertEqual(store.state, .halted)
+    }
+
     func testCancelledLoadCannotReturnAnActiveStore() async {
         let original = document()
         let task = Task {

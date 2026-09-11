@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var storeState: StoreState = .loading
     private var bootstrapTask: Task<Void, Never>?
+    private var terminationTask: Task<Void, Never>?
     private let exportController = ExportController()
 
     private let settings: AppSettings
@@ -141,11 +142,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let profileEditor else { return .terminateNow }
-        return ProfileDialogs.shouldClose(profileEditor) ? .terminateNow : .terminateCancel
+        if let profileEditor, !ProfileDialogs.shouldClose(profileEditor) { return .terminateCancel }
+        guard let store, store.state == .processing else { return .terminateNow }
+        // A save queued just before ⌘Q must reach disk before teardown cancels it.
+        terminationTask = Task {
+            await store.drain(timeout: .seconds(2))
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        terminationTask?.cancel()
+        terminationTask = nil
         bootstrapTask?.cancel()
         bootstrapTask = nil
         exportController.teardown()

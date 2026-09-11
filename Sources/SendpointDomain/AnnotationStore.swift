@@ -45,7 +45,7 @@ public final class AnnotationStore {
 
     private var queuedMutations: [QueuedMutation] = []
     @ObservationIgnored private var processingTask: Task<Void, Never>?
-    @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    @ObservationIgnored private var idleWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     public private(set) var error: AnnotationStoreError?
     public private(set) var state: State = .idle
@@ -142,11 +142,29 @@ public final class AnnotationStore {
         }
     }
 
-    /// Returns when the active drain completes or halts.
+    /// Returns when the active drain completes or halts. Cancelling the
+    /// caller returns early without touching the store.
     public func waitForIdle() async {
         guard state == .processing else { return }
-        await withCheckedContinuation { continuation in
-            idleWaiters.append(continuation)
+        let waiter = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                idleWaiters[waiter] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor in self.idleWaiters.removeValue(forKey: waiter)?.resume() }
+        }
+    }
+
+    /// Waits for queued work to commit, giving up after `timeout`. The store
+    /// keeps processing either way; this only bounds how long the caller waits.
+    public func drain(timeout: Duration) async {
+        guard state == .processing else { return }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.waitForIdle() }
+            group.addTask { try? await Task.sleep(for: timeout) }
+            await group.next()
+            group.cancelAll()
         }
     }
 
@@ -239,7 +257,7 @@ public final class AnnotationStore {
     }
 
     private func resumeIdleWaiters() {
-        let waiters = idleWaiters
+        let waiters = idleWaiters.values
         idleWaiters.removeAll()
         waiters.forEach { $0.resume() }
     }
