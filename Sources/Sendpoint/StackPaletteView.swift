@@ -807,7 +807,7 @@ private struct NoteCard: View {
 
 /// A captured passage set as a quiet quotation: a thin rule down the left
 /// and the text a step softer than the note it belongs to.
-private struct QuotedPassage: View {
+struct QuotedPassage: View {
     let text: String
     @State private var isExpanded = false
     @State private var heights = PassageHeights()

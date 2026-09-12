@@ -151,7 +151,7 @@ final class CaptureWindows {
 
     static func makeEditorPanel(contentView: NSView = NSView()) -> CapturePanel {
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 290),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -166,11 +166,12 @@ final class CaptureWindows {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 380, height: 220)
+        panel.minSize = NSSize(width: 380, height: 270)
         panel.animationBehavior = .utilityWindow
 
-        // The hosting view fills the whole frame, title-bar strip included, so
-        // the material runs edge to edge under the transparent title bar.
+        // The shared sheet draws its own rounded edge beneath the title bar.
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.contentView = contentView
         return panel
     }
