@@ -75,10 +75,20 @@ final class CapturePanelTests: XCTestCase {
 
         let setup = SetupWindowController.makeWindow()
         XCTAssertTrue(setup.styleMask.contains([.titled, .closable]))
+        XCTAssertFalse(setup.styleMask.contains(.resizable))
+        XCTAssertEqual(
+            NSWindow.contentRect(forFrameRect: setup.frame, styleMask: setup.styleMask).size,
+            SetupView.size
+        )
         XCTAssertTrue(setup.canBecomeKey)
 
         let helper = AccessibilityHelperWindowController.makeWindow()
-        XCTAssertTrue(helper.styleMask.contains([.titled, .closable]))
+        XCTAssertTrue(helper.styleMask.contains([.titled, .closable, .fullSizeContentView]))
+        XCTAssertFalse(helper.styleMask.contains(.resizable))
+        XCTAssertEqual(
+            NSWindow.contentRect(forFrameRect: helper.frame, styleMask: helper.styleMask).size,
+            AccessibilityHelperView.size
+        )
         XCTAssertTrue(helper.canBecomeKey)
     }
 }

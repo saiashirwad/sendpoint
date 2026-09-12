@@ -1,16 +1,18 @@
 import AppKit
 
 extension NSWindow {
-    /// A plain titled, closable window that survives being closed, sized for
-    /// `size` and left for the caller to place.
-    static func titledDialog(_ title: String, size: NSSize) -> NSWindow {
+    /// Paper dialog: hidden title, content under the traffic lights, not resizable.
+    static func paperDialog(_ title: String, size: NSSize) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = title
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         return window
     }

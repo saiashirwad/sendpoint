@@ -33,6 +33,35 @@ struct Keycap: View {
     }
 }
 
+/// Footer action: a verb, optionally a keycap. Same treatment as
+/// "Actions ⌘K" on the stack palette.
+struct SettingsFooterButton: View {
+    let title: String
+    var keys: String? = nil
+    let action: () -> Void
+
+    init(_ title: String, keys: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.keys = keys
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                if let keys {
+                    Keycap(keys)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// `⌘↩ Save` — a keycap followed by what it does.
 struct ShortcutHint: View {
     let keys: String
@@ -148,12 +177,11 @@ struct SettingsCaption: View {
         Text(text)
             .font(.system(size: 13))
             .foregroundStyle(.secondary)
-            .padding(.leading, 2)
     }
 }
 
-/// A group of settings rows. Rows carry their own padding, and the negative
-/// inset cancels it so the group aligns with the section captions.
+/// A group of settings rows. Negative inset cancels row padding so titles
+/// line up with the section caption, and dividers stop at the trailing control.
 struct SettingsRowGroup<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
@@ -166,13 +194,15 @@ struct SettingsRowGroup<Content: View>: View {
     }
 }
 
-/// A divider between two rows, indented past the icon column when the
-/// rows carry icons.
+/// A divider between two rows. Inset to the title and the trailing control,
+/// so it does not run past the switch.
 struct SettingsDivider: View {
     var pastIcon = true
 
     var body: some View {
-        Divider().padding(.leading, pastIcon ? SettingsMetrics.iconDividerInset : SettingsMetrics.rowInset)
+        Divider()
+            .padding(.leading, pastIcon ? SettingsMetrics.iconDividerInset : SettingsMetrics.rowInset)
+            .padding(.trailing, SettingsMetrics.rowInset)
     }
 }
 
@@ -206,7 +236,7 @@ struct SettingsRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.body)
@@ -219,6 +249,8 @@ struct SettingsRow<Trailing: View>: View {
             }
             Spacer(minLength: 12)
             trailing()
+                // Sit on the title line; body is ~16pt, the switch is 18pt.
+                .padding(.top, 1)
         }
         .padding(.horizontal, SettingsMetrics.rowInset)
         .padding(.vertical, SettingsMetrics.rowPadding)
@@ -240,9 +272,61 @@ struct SettingsToggleRow: View {
         SettingsRow(title, subtitle: subtitle) {
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
+                .toggleStyle(PaletteToggleStyle())
         }
+    }
+}
+
+/// A monochrome switch: ink track when on, hairline track when off.
+struct PaletteToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) {
+                configuration.isOn.toggle()
+            }
+        } label: {
+            PaletteSwitchTrack(isOn: configuration.isOn)
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(configuration.isOn ? "On" : "Off")
+    }
+}
+
+private struct PaletteSwitchTrack: View {
+    let isOn: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let width: CGFloat = 32
+    private let height: CGFloat = 18
+    private let thumb: CGFloat = 14
+
+    var body: some View {
+        HStack {
+            if isOn { Spacer(minLength: 0) }
+            Circle()
+                .fill(thumbFill)
+                .overlay(
+                    Circle().strokeBorder(Color.primary.opacity(isOn ? 0 : 0.12), lineWidth: 0.75)
+                )
+                .frame(width: thumb, height: thumb)
+            if !isOn { Spacer(minLength: 0) }
+        }
+        .padding(2)
+        .frame(width: width, height: height)
+        .background(Capsule().fill(trackFill))
+        .overlay(
+            Capsule().strokeBorder(Color.primary.opacity(isOn ? 0 : 0.10), lineWidth: 1)
+        )
+        .contentShape(Capsule())
+        .animation(.snappy(duration: 0.2), value: isOn)
+    }
+
+    private var trackFill: Color {
+        isOn ? Color.primary.opacity(0.85) : Color.primary.opacity(0.08)
+    }
+
+    private var thumbFill: Color {
+        isOn ? PaletteTint.surface(colorScheme) : PaletteTint.raised(colorScheme)
     }
 }
 
@@ -269,9 +353,10 @@ struct SettingsIconRow<Trailing: View>: View {
     @ViewBuilder let trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: SettingsMetrics.rowInset) {
+        HStack(alignment: .top, spacing: SettingsMetrics.rowInset) {
             if let icon {
                 SettingsIcon(icon)
+                    .padding(.top, 1)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -283,25 +368,10 @@ struct SettingsIconRow<Trailing: View>: View {
             }
             Spacer(minLength: 12)
             trailing()
+                .padding(.top, 2)
         }
         .padding(.horizontal, SettingsMetrics.rowInset)
         .padding(.vertical, SettingsMetrics.rowPadding)
-    }
-}
-
-/// One step of the voice how-to: a verb, what happens, and optionally the key.
-struct HowToRow: View {
-    let icon: String
-    let lead: String
-    let sentence: String
-    var keycap: String? = nil
-
-    var body: some View {
-        SettingsIconRow(icon: icon, title: lead, detail: sentence) {
-            if let keycap {
-                Keycap(keycap)
-            }
-        }
     }
 }
 

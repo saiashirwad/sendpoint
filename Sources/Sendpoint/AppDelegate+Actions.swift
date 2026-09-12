@@ -177,8 +177,6 @@ extension AppDelegate {
         if setupWindowController == nil {
             setupWindowController = SetupWindowController(
                 settings: settings,
-                shortcuts: shortcuts,
-                voiceSettings: voiceSettings,
                 permissionState: permissionState,
                 surfaces: surfaces,
                 onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() },

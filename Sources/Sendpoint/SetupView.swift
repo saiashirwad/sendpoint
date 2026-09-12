@@ -3,26 +3,21 @@ import SwiftUI
 
 struct SetupView: View {
     @Bindable var settings: AppSettings
-    @Bindable var shortcuts: ShortcutSettings
-    @Bindable var voiceSettings: VoiceSettings
     @Bindable var permissionState: PermissionState
     let onShowAccessibilityHelper: () -> Void
     let onComplete: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
-    static let size = NSSize(width: 540, height: 460)
+    /// Paper clearance, three 40pt rows, air, 36pt footer. Never scrolls.
+    static let size = NSSize(width: 480, height: 320)
 
     init(
         settings: AppSettings,
-        shortcuts: ShortcutSettings,
-        voiceSettings: VoiceSettings,
         permissionState: PermissionState,
         onShowAccessibilityHelper: @escaping () -> Void,
         onComplete: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
-        _shortcuts = Bindable(wrappedValue: shortcuts)
-        _voiceSettings = Bindable(wrappedValue: voiceSettings)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onShowAccessibilityHelper = onShowAccessibilityHelper
         self.onComplete = onComplete
@@ -30,92 +25,34 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 28) {
-                    header
-                    SettingsSection("Setup") {
-                        PermissionCapabilityList(
-                            permissionState: permissionState,
-                            onShowAccessibilityHelper: onShowAccessibilityHelper
-                        )
-                    }
-                    SettingsSection("Capture a note") {
-                        SettingsRowGroup {
-                            HowToRow(
-                                icon: "mic",
-                                lead: "Use your voice",
-                                sentence: voiceSettings.voiceMode.detail,
-                                keycap: shortcuts.voiceCaptureCombo.displayString
-                            )
-                            SettingsDivider()
-                            HowToRow(
-                                icon: "square.and.pencil",
-                                lead: "Type a note",
-                                sentence: "Write alongside the selected passage.",
-                                keycap: shortcuts.captureCombo.displayString
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 48)
-                .padding(.bottom, 24)
-            }
-            .scrollIndicators(.automatic)
+            Color.clear.frame(height: 52)
+            PermissionCapabilityList(
+                permissionState: permissionState,
+                onShowAccessibilityHelper: onShowAccessibilityHelper
+            )
+            Spacer(minLength: 0)
             Divider()
             footer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.emphasizedKeycaps, true)
+        .frame(width: Self.size.width, height: Self.size.height)
         .background(PaletteTint.surface(colorScheme))
         .ignoresSafeArea()
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(nsImage: MenuBarIcon.image(pointSize: 18))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text("Sendpoint")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.primary)
-        }
-    }
-
     private var footer: some View {
-        HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Your notes stay on this Mac", systemImage: "lock")
-                    .font(.system(size: 11, weight: .medium))
-                Text(permissionState.isVoiceReady
-                     ? "Voice transcription runs locally, too."
-                     : "Complete setup above to continue.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        HStack(spacing: 12) {
             Spacer(minLength: 0)
-            Button {
+            SettingsFooterButton("Continue", keys: "↩") {
                 settings.completeSetup()
                 onComplete()
-            } label: {
-                Text("Start using Sendpoint")
-                .font(.system(size: 12, weight: .medium))
-                .padding(.horizontal, 12)
-                .frame(height: 32)
-                .foregroundStyle(PaletteTint.surface(colorScheme))
-                .background(Color.primary, in: RoundedRectangle(cornerRadius: 7))
-                .opacity(permissionState.isVoiceReady ? 1 : 0.35)
-                .contentShape(RoundedRectangle(cornerRadius: 7))
             }
-            .buttonStyle(.plain)
             .disabled(!permissionState.isVoiceReady)
+            .foregroundStyle(permissionState.isVoiceReady ? Color.primary : Color.secondary)
             .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .frame(height: 36)
     }
-
 }
 
 struct PermissionCapabilityList: View {
@@ -131,56 +68,29 @@ struct PermissionCapabilityList: View {
     }
 
     var body: some View {
-        SettingsRowGroup {
-            accessibilityRow
-            SettingsDivider(pastIcon: false)
-            microphoneRow
-            SettingsDivider(pastIcon: false)
-            voiceModelRow
+        VStack(spacing: 0) {
+            CapabilityRow(
+                title: "Accessibility",
+                status: accessibilityStatus,
+                actionTitle: accessibilityActionTitle,
+                action: performAccessibilityAction
+            )
+            CapabilityRow(
+                title: "Microphone",
+                status: microphoneStatus,
+                actionTitle: microphoneActionTitle,
+                action: performMicrophoneAction
+            )
+            CapabilityRow(
+                title: "Voice model",
+                status: voiceModelStatus,
+                actionTitle: voiceModelActionTitle,
+                action: performVoiceModelAction
+            )
         }
         .task {
             await permissionState.watchVoiceModel()
         }
-    }
-
-    private var accessibilityRow: some View {
-        CapabilityRow(
-            title: "Accessibility",
-            reason: "Reads the text you select.",
-            status: accessibilityStatus,
-            actionTitle: accessibilityActionTitle,
-            showsProgress: false,
-            action: performAccessibilityAction
-        )
-    }
-
-    private var microphoneRow: some View {
-        CapabilityRow(
-            title: "Microphone",
-            reason: "Listens only while a voice note is open.",
-            status: microphoneStatus,
-            actionTitle: microphoneActionTitle,
-            showsProgress: false,
-            action: performMicrophoneAction
-        )
-    }
-
-    private var voiceModelRow: some View {
-        CapabilityRow(
-            title: "Local voice model",
-            reason: voiceModelReason,
-            status: voiceModelStatus,
-            actionTitle: voiceModelActionTitle,
-            showsProgress: voiceModelIsDownloading,
-            action: performVoiceModelAction
-        )
-    }
-
-    private var voiceModelReason: String {
-        if case .ready = permissionState.localVoiceModel {
-            return "Parakeet v3, speech to text on this Mac."
-        }
-        return "Parakeet v3, a one-time 460 MB download."
     }
 
     private var accessibilityStatus: CapabilityStatus {
@@ -203,40 +113,35 @@ struct PermissionCapabilityList: View {
         switch permissionState.localVoiceModel {
         case .notDownloaded: .neutral("Not downloaded")
         case let .downloading(progress):
-            .neutral(progress.map { "Downloading… \(Int($0 * 100))%" } ?? "Downloading…")
+            .working(
+                label: progress.map { "\(Int($0 * 100))%" } ?? "Downloading…",
+                fraction: progress
+            )
         case .ready: .ready("Downloaded")
         case .failed(.offline): .attention("No internet connection")
         case .failed(.other): .attention("Download failed")
         }
     }
 
-    private var voiceModelIsDownloading: Bool {
-        if case .downloading = permissionState.localVoiceModel {
-            return true
-        }
-        return false
-    }
-
     private var accessibilityActionTitle: String? {
         switch permissionState.accessibilityAction {
-        case .requestAccessibility: "Grant Access…"
-        case .showAccessibilityHelper: "Finish Setup…"
+        case .requestAccessibility, .showAccessibilityHelper: "Grant"
         default: nil
         }
     }
 
     private var microphoneActionTitle: String? {
         switch permissionState.microphoneAction {
-        case .requestMicrophone: "Allow Microphone…"
-        case .openMicrophoneSettings: "Open System Settings…"
+        case .requestMicrophone: "Allow"
+        case .openMicrophoneSettings: "Settings"
         default: nil
         }
     }
 
     private var voiceModelActionTitle: String? {
         guard permissionState.localVoiceModelAction == .downloadVoiceModel else { return nil }
-        if case .failed = permissionState.localVoiceModel { return "Retry Download…" }
-        return "Download Model…"
+        if case .failed = permissionState.localVoiceModel { return "Retry" }
+        return "Download"
     }
 
     private func performAccessibilityAction() {
@@ -273,61 +178,135 @@ private enum CapabilityStatus {
     case neutral(String)
     case attention(String)
     case ready(String)
+    case working(label: String, fraction: Double?)
 
     var title: String {
         switch self {
-        case let .neutral(title), let .attention(title), let .ready(title): title
+        case let .neutral(title), let .attention(title), let .ready(title):
+            title
+        case let .working(label, _):
+            label
         }
     }
 
-    /// Ready reads quietly once everything is in place; only trouble is loud.
-    var textColor: Color {
-        switch self {
-        case .neutral, .ready: .secondary
-        case .attention: .orange
-        }
-    }
+    var textColor: Color { .secondary }
 }
 
 private struct CapabilityRow: View {
     let title: String
-    let reason: String
     let status: CapabilityStatus
     let actionTitle: String?
-    let showsProgress: Bool
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        SettingsIconRow(title: title, detail: reason) {
-            VStack(alignment: .trailing, spacing: 7) {
-                statusLabel
-                if let actionTitle {
-                    Button(actionTitle, action: action)
-                        .controlSize(.small)
-                }
+        Button(action: action) { label }
+            .buttonStyle(.plain)
+            .background(PaletteTint.wash(highlighted: false, hovering: hovering && actionTitle != nil))
+            .onHover { hovering = $0 }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue(accessibilityValue)
+            .accessibilityAddTraits(actionTitle == nil ? [] : .isButton)
+    }
+
+    private var label: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 14))
+            Spacer(minLength: 8)
+            trailing
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 40)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        if case let .working(label, fraction) = status {
+            HStack(spacing: 8) {
+                Text(label)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                CapabilityProgress(fraction: fraction)
+                    .frame(width: 56)
             }
+        } else if let actionTitle {
+            Text(actionTitle)
+                .font(.system(size: 12, weight: .medium))
+        } else if case .ready = status {
+            ReadyMark()
+        } else {
+            Text(status.title)
+                .font(.caption)
+                .foregroundStyle(status.textColor)
         }
     }
 
-    private var statusLabel: some View {
-        HStack(spacing: 6) {
-            if case .ready = status {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 12)
-            }
-            Text(status.title)
-                .font(.callout)
-                .foregroundStyle(status.textColor)
-            if showsProgress {
-                ProgressView()
-                    .controlSize(.small)
-            }
-        }
-        .accessibilityElement(children: .combine)
+    private var accessibilityValue: String {
+        actionTitle ?? status.title
     }
 }
+
+/// Paper check on a green disc. Pops in once; stays put after that.
+private struct ReadyMark: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var appeared = false
+
+    private enum Metrics {
+        static let size: CGFloat = 16
+        static let check: CGFloat = 8
+        static let fromScale: CGFloat = 0.58
+        static let spring = Animation.spring(duration: 0.36, bounce: 0.30)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(ink)
+            Image(systemName: "checkmark")
+                .font(.system(size: Metrics.check, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .offset(y: 0.4)
+        }
+        .frame(width: Metrics.size, height: Metrics.size)
+        .scaleEffect(appeared ? 1 : Metrics.fromScale)
+        .opacity(appeared ? 1 : 0)
+        .onAppear {
+            withAnimation(Metrics.spring) { appeared = true }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var ink: Color {
+        colorScheme == .dark
+            ? Color(red: 0.36, green: 0.80, blue: 0.54)
+            : Color(red: 0.17, green: 0.63, blue: 0.41)
+    }
+}
+
+private struct CapabilityProgress: View {
+    let fraction: Double?
+
+    var body: some View {
+        if let fraction {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule()
+                        .fill(Color.primary.opacity(0.85))
+                        .frame(width: max(6, geo.size.width * min(1, max(0, fraction))))
+                        .animation(.linear(duration: 0.2), value: fraction)
+                }
+            }
+            .frame(height: 4)
+        } else {
+            ProgressView()
+                .controlSize(.mini)
+        }
+    }
+}
+
 final class SetupWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case active
@@ -340,8 +319,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     init(
         settings: AppSettings,
-        shortcuts: ShortcutSettings,
-        voiceSettings: VoiceSettings,
         permissionState: PermissionState,
         surfaces: SurfaceCoordinator,
         onShowAccessibilityHelper: @escaping () -> Void,
@@ -353,8 +330,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         super.init()
         let hosting = NSHostingView(rootView: SetupView(
             settings: settings,
-            shortcuts: shortcuts,
-            voiceSettings: voiceSettings,
             permissionState: permissionState,
             onShowAccessibilityHelper: onShowAccessibilityHelper,
             onComplete: onComplete
@@ -371,17 +346,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     static func makeWindow() -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: SetupView.size),
-            styleMask: [.titled, .closable, .fullSizeContentView],
-            backing: .buffered, defer: false
-        )
-        window.title = "Set Up Sendpoint"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        return window
+        NSWindow.paperDialog("Set Up Sendpoint", size: SetupView.size)
     }
 
     func show() {
@@ -413,51 +378,52 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-private struct AccessibilityHelperView: View {
+struct AccessibilityHelperView: View {
     @Bindable var permissionState: PermissionState
     let onOpenSettings: () -> Void
     let onClose: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    static let size = NSSize(width: 480, height: 240)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 14) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 52, height: 52)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Sendpoint")
-                        .font(.title2.weight(.semibold))
-                    Label(
-                        permissionState.accessibility == .granted
-                            ? "Accessibility granted"
-                            : "Accessibility needs a manual grant",
-                        systemImage: permissionState.accessibility == .granted
-                            ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-                    )
-                    .foregroundStyle(permissionState.accessibility == .granted ? Color.primary : .orange)
-                }
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 52)
+            VStack(spacing: 5) {
+                Text("Enable Sendpoint")
+                    .font(.title3.weight(.semibold))
+                Text("Privacy & Security → Accessibility")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Finish in System Settings")
-                    .font(.headline)
-                Text("1. Open Privacy & Security → Accessibility.")
-                Text("2. Turn on Sendpoint in the app list.")
-                Text("3. Return here. This window closes when access is granted.")
-            }
-
-            HStack {
-                Button("Close", action: onClose)
-                Spacer()
-                Button("Open Accessibility Settings…", action: onOpenSettings)
-                    .buttonStyle(.borderedProminent)
-            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            footer
         }
-        .padding(24)
-        .frame(width: 470)
+        .frame(width: Self.size.width, height: Self.size.height)
+        .background(PaletteTint.surface(colorScheme))
+        .ignoresSafeArea()
+        .onExitCommand(perform: onClose)
+        .accessibilityHint(permissionState.accessibility == .granted
+            ? "Accessibility granted"
+            : "Accessibility is not granted yet")
+    }
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Text("Closes when granted")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            SettingsFooterButton("Open Settings", keys: "↩", action: onOpenSettings)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 36)
     }
 }
+
 final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case hidden
@@ -477,7 +443,7 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
         let window = Self.makeWindow()
         self.window = window
         super.init()
-        window.contentView = NSHostingView(rootView: AccessibilityHelperView(
+        let hosting = NSHostingView(rootView: AccessibilityHelperView(
             permissionState: permissionState,
             onOpenSettings: { [weak permissionState] in
                 guard let permissionState else { return }
@@ -485,7 +451,9 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
             },
             onClose: { [weak self] in self?.close() }
         ))
-        window.setContentSize(window.contentView?.fittingSize ?? NSSize(width: 470, height: 310))
+        hosting.sizingOptions = []
+        window.contentView = hosting
+        window.setContentSize(AccessibilityHelperView.size)
         window.center()
         window.delegate = self
         surfaces.register(.accessibilityHelper, transitions: .init(
@@ -495,7 +463,7 @@ final class AccessibilityHelperWindowController: NSObject, NSWindowDelegate {
     }
 
     static func makeWindow() -> NSWindow {
-        NSWindow.titledDialog("Accessibility Setup", size: NSSize(width: 470, height: 310))
+        NSWindow.paperDialog("Accessibility Setup", size: AccessibilityHelperView.size)
     }
 
     func show() {

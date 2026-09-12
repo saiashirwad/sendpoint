@@ -9,5 +9,6 @@ struct SettingsPermissionsPane: View {
             permissionState: permissionState,
             onShowAccessibilityHelper: onShowAccessibilityHelper
         )
+        .padding(.horizontal, -16)
     }
 }

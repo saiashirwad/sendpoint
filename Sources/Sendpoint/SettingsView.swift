@@ -18,15 +18,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .permissions: "Permissions"
         }
     }
-
-    var footerContext: String {
-        switch self {
-        case .capture: "Voice, paste, login"
-        case .shortcuts: "Click a shortcut, then press keys"
-        case .templates: ""
-        case .permissions: "Accessibility, microphone, voice model"
-        }
-    }
 }
 
 struct SettingsView: View {
@@ -42,7 +33,6 @@ struct SettingsView: View {
     let onSettingsChanged: () -> Void
 
     @State private var tab: SettingsTab = .capture
-    @State private var newTemplate: NewTemplateDraft?
     @Environment(\.colorScheme) private var colorScheme
 
     /// The smallest the window goes; it can be dragged larger.
@@ -51,11 +41,6 @@ struct SettingsView: View {
     private static let titleBarHeight: CGFloat = 52
     /// Cards stop stretching past this so a wide window stays readable.
     private static let contentMaxWidth: CGFloat = 760
-
-    private struct NewTemplateDraft: Equatable {
-        var name: String
-        var problem: String?
-    }
 
     init(
         settings: AppSettings,
@@ -131,8 +116,10 @@ struct SettingsView: View {
                     .id(tab)
                 }
                 .scrollIndicators(.automatic)
-                Divider()
-                footer
+                if showsFooter {
+                    Divider()
+                    footer
+                }
             }
         }
         .frame(
@@ -147,10 +134,12 @@ struct SettingsView: View {
 
     private var footer: some View {
         HStack(spacing: 12) {
-            Text(footerContext)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if !footerContext.isEmpty {
+                Text(footerContext)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
             footerActions
         }
@@ -158,13 +147,27 @@ struct SettingsView: View {
         .frame(height: 36)
     }
 
+    private var showsFooter: Bool {
+        !footerContext.isEmpty || hasFooterActions
+    }
+
+    private var hasFooterActions: Bool {
+        switch tab {
+        case .capture: !permissionState.isVoiceReady
+        case .shortcuts: false
+        case .templates: templateEditor.isDirty
+        case .permissions: permissionsFooterAction != nil
+        }
+    }
+
     private var footerContext: String {
         switch tab {
         case .templates:
-            let name = templateEditor.draft.name
-            return templateEditor.isDirty ? "\(name) · Unsaved" : name
+            templateEditor.isDirty ? "Unsaved" : ""
+        case .permissions:
+            "Accessibility, microphone, voice model"
         default:
-            return tab.footerContext
+            ""
         }
     }
 
@@ -194,37 +197,7 @@ struct SettingsView: View {
                 .font(.system(size: 12, weight: .medium))
             SettingsFooterButton("Save", keys: "⌘S") { saveTemplate() }
                 .keyboardShortcut("s", modifiers: .command)
-            Divider().frame(height: 14)
         }
-        SettingsFooterButton("New template") {
-            newTemplate = NewTemplateDraft(name: "\(templateEditor.draft.name) Copy")
-        }
-        .popover(
-            isPresented: Binding(
-                get: { newTemplate != nil },
-                set: { if !$0 { newTemplate = nil } }
-            ),
-            arrowEdge: .top
-        ) {
-            NewTemplatePopover(
-                name: Binding(
-                    get: { newTemplate?.name ?? "" },
-                    set: { newTemplate?.name = $0; newTemplate?.problem = nil }
-                ),
-                problem: newTemplate?.problem,
-                onCommit: createTemplate
-            )
-        }
-        Button {
-            TemplateDialogs.delete(templateEditor)
-        } label: {
-            Text("Delete")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.red)
-        }
-        .buttonStyle(.plain)
-        .disabled(!templateEditor.canDelete || templateEditor.isDirty)
-        .help(templateEditor.isDirty ? "Save or revert changes before deleting." : "Delete this template…")
     }
 
     private var permissionsFooterAction: (title: String, run: () -> Void)? {
@@ -243,18 +216,18 @@ struct SettingsView: View {
         }
         switch permissionState.microphoneAction {
         case .requestMicrophone:
-            return ("Allow Microphone…", { permissionState.requestMicrophone() })
+            return ("Allow", { permissionState.requestMicrophone() })
         case .openMicrophoneSettings:
-            return ("Open System Settings", { permissionState.openMicrophoneSettings() })
+            return ("Settings", { permissionState.openMicrophoneSettings() })
         default:
             break
         }
         if permissionState.localVoiceModelAction == .downloadVoiceModel {
             let title: String
             if case .failed = permissionState.localVoiceModel {
-                title = "Retry Download…"
+                title = "Retry"
             } else {
-                title = "Download Model…"
+                title = "Download"
             }
             return (title, { permissionState.downloadModel() })
         }
@@ -263,53 +236,13 @@ struct SettingsView: View {
 
     private var accessibilityFooterTitle: String? {
         switch permissionState.accessibilityAction {
-        case .requestAccessibility: "Grant Access…"
-        case .showAccessibilityHelper: "Finish Setup…"
+        case .requestAccessibility, .showAccessibilityHelper: "Grant"
         default: nil
         }
     }
 
     private func saveTemplate() {
         do { try templateEditor.save() } catch { TemplateDialogs.showError(error) }
-    }
-
-    private func createTemplate() {
-        guard let draft = newTemplate else { return }
-        do {
-            let name = try templateEditor.validatedNewTemplateName(draft.name)
-            _ = try templateEditor.saveAsNew(named: name)
-            newTemplate = nil
-        } catch {
-            newTemplate?.problem = error.localizedDescription
-            NSSound.beep()
-        }
-    }
-}
-
-private struct SettingsFooterButton: View {
-    let title: String
-    var keys: String? = nil
-    let action: () -> Void
-
-    init(_ title: String, keys: String? = nil, action: @escaping () -> Void) {
-        self.title = title
-        self.keys = keys
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                if let keys {
-                    Keycap(keys)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -555,24 +488,45 @@ struct TemplateChip: View {
 }
 
 /// The template's name, set as an editable title rather than a form field.
-struct TemplateNameField: View {
+/// Trailing sits on the name's baseline and shares the rule's right edge.
+struct TemplateNameField<Trailing: View>: View {
     @Binding var text: String
+    @ViewBuilder var trailing: () -> Trailing
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Template name", text: $text)
-                .textFieldStyle(.plain)
-                .font(.body.weight(.medium))
-                .focused($focused)
-                .accessibilityLabel("Template name")
-                .frame(minHeight: 24)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                TextField("Template name", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.body.weight(.medium))
+                    .focused($focused)
+                    .accessibilityLabel("Template name")
+                    .layoutPriority(1)
+                trailing()
+            }
             Rectangle()
                 .fill(Color.primary.opacity(focused ? 0.5 : 0.1))
                 .frame(height: 1)
         }
-        .padding(.horizontal, 2)
         .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+
+/// Footer-weight destructive action: secondary until the pointer is on it.
+struct QuietDeleteButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button("Delete", action: action)
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(hovering ? Color.red : Color.secondary)
+            .fixedSize()
+            .onHover { hovering = $0 }
+            .help("Delete this template…")
+            .accessibilityLabel("Delete template")
     }
 }
 enum TemplateDialogs {
