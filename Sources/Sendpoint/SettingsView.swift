@@ -164,8 +164,6 @@ struct SettingsView: View {
         switch tab {
         case .templates:
             templateEditor.isDirty ? "Unsaved" : ""
-        case .permissions:
-            "Accessibility, microphone, voice model"
         default:
             ""
         }
@@ -355,54 +353,83 @@ struct WindowVisibilityReporter: NSViewRepresentable {
 }
 
 /// A native pop-up so it fills the width it is given; SwiftUI's menu picker
-/// sizes itself to its title instead.
-struct InputDevicePopUp: NSViewRepresentable {
+/// sizes itself to its title instead. The menu shows every title in full
+/// with a checkmark on the current item.
+struct SettingsPopUp<ID: Hashable>: NSViewRepresentable {
     struct Item {
-        var uid: String?
+        var id: ID?
         var title: String
         var isSeparator = false
 
-        static let separator = Item(uid: nil, title: "", isSeparator: true)
+        static var separator: Item { Item(id: nil, title: "", isSeparator: true) }
     }
 
     let items: [Item]
-    let selectedUID: String?
-    let onSelect: (String?) -> Void
+    let selectedID: ID?
+    let onSelect: (ID?) -> Void
 
     func makeNSView(context: Context) -> NSPopUpButton {
-        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        let button = SettingsPopUpButton(frame: .zero, pullsDown: false)
         button.target = context.coordinator
         button.action = #selector(Coordinator.changed(_:))
+        button.autoenablesItems = false
         button.setContentHuggingPriority(.defaultLow, for: .horizontal)
         button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        (button.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
         return button
     }
 
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         context.coordinator.onSelect = onSelect
-        button.removeAllItems()
-        for item in items {
-            if item.isSeparator {
-                button.menu?.addItem(.separator())
-            } else {
-                let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
-                menuItem.representedObject = item.uid
-                button.menu?.addItem(menuItem)
+        if menuDiffers(from: button) {
+            button.removeAllItems()
+            for item in items {
+                if item.isSeparator {
+                    button.menu?.addItem(.separator())
+                } else {
+                    let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
+                    if let id = item.id {
+                        menuItem.representedObject = id
+                    }
+                    button.menu?.addItem(menuItem)
+                }
             }
         }
-        let index = button.itemArray.firstIndex { ($0.representedObject as? String) == selectedUID && !$0.isSeparatorItem }
-        button.selectItem(at: index ?? 0)
+        let index = button.itemArray.firstIndex {
+            !$0.isSeparatorItem && ($0.representedObject as? ID) == selectedID
+        } ?? 0
+        if button.indexOfSelectedItem != index {
+            button.selectItem(at: index)
+        }
+    }
+
+    private func menuDiffers(from button: NSPopUpButton) -> Bool {
+        let current = button.itemArray
+        guard current.count == items.count else { return true }
+        return zip(current, items).contains { menuItem, item in
+            if item.isSeparator { return !menuItem.isSeparatorItem }
+            return menuItem.isSeparatorItem
+                || menuItem.title != item.title
+                || (menuItem.representedObject as? ID) != item.id
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect) }
     final class Coordinator: NSObject {
-        var onSelect: (String?) -> Void
+        var onSelect: (ID?) -> Void
 
-        init(onSelect: @escaping (String?) -> Void) { self.onSelect = onSelect }
+        init(onSelect: @escaping (ID?) -> Void) { self.onSelect = onSelect }
 
         @objc func changed(_ sender: NSPopUpButton) {
-            onSelect(sender.selectedItem?.representedObject as? String)
+            onSelect(sender.selectedItem?.representedObject as? ID)
         }
+    }
+}
+
+/// Intrinsic width would shrink to the title; SwiftUI needs a flexible width.
+private final class SettingsPopUpButton: NSPopUpButton {
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
     }
 }
 
@@ -455,40 +482,8 @@ private struct SettingsSidebarRow: View {
     }
 }
 
-struct TemplateChip: View {
-    let name: String
-    let isSelected: Bool
-    let isDirty: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Text(name)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                if isDirty {
-                    Circle()
-                        .fill(Color.primary)
-                        .frame(width: 5, height: 5)
-                        .accessibilityLabel("Unsaved changes")
-                }
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 26)
-            .background(
-                Capsule().fill(Color.primary.opacity(isSelected ? 0.14 : 0.06))
-            )
-            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-}
-
-/// The template's name, set as an editable title rather than a form field.
-/// Trailing sits on the name's baseline and shares the rule's right edge.
+/// The template's name as a form field. Trailing sits on the name line and
+/// shares the rule's right edge.
 struct TemplateNameField<Trailing: View>: View {
     @Binding var text: String
     @ViewBuilder var trailing: () -> Trailing
@@ -496,10 +491,10 @@ struct TemplateNameField<Trailing: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                TextField("Template name", text: $text)
+            HStack(alignment: .center, spacing: 12) {
+                TextField("Name", text: $text)
                     .textFieldStyle(.plain)
-                    .font(.body.weight(.medium))
+                    .font(.body)
                     .focused($focused)
                     .accessibilityLabel("Template name")
                     .layoutPriority(1)
@@ -513,22 +508,32 @@ struct TemplateNameField<Trailing: View>: View {
     }
 }
 
-/// Footer-weight destructive action: secondary until the pointer is on it.
-struct QuietDeleteButton: View {
+/// Footer-weight icon: secondary until the pointer is on it.
+struct QuietIconButton: View {
+    let systemName: String
+    var hoverColor: Color = .primary
     let action: () -> Void
     @State private var hovering = false
 
+    init(_ systemName: String, hoverColor: Color = .primary, action: @escaping () -> Void) {
+        self.systemName = systemName
+        self.hoverColor = hoverColor
+        self.action = action
+    }
+
     var body: some View {
-        Button("Delete", action: action)
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(hovering ? Color.red : Color.secondary)
-            .fixedSize()
-            .onHover { hovering = $0 }
-            .help("Delete this template…")
-            .accessibilityLabel("Delete template")
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(hovering ? hoverColor : Color.secondary)
+        .onHover { hovering = $0 }
     }
 }
+
 enum TemplateDialogs {
     static func resolvePendingSelection(_ editor: TemplateEditorState) -> Bool {
         guard editor.pendingTemplateID != nil else { return true }

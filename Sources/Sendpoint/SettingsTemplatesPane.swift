@@ -15,73 +15,24 @@ struct SettingsTemplatesPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            templateChips
-            templateEditor
-        }
-    }
-
-    private var templateChips: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SettingsCaption("Active template")
-            HStack(spacing: 6) {
-                ForEach(editor.templates) { template in
-                    TemplateChip(
-                        name: template.name,
-                        isSelected: template.id == editor.editedTemplateID,
-                        isDirty: template.id == editor.editedTemplateID && editor.isDirty
-                    ) {
-                        onSelectTemplate(template.id)
-                    }
+            SettingsPopUp(
+                items: editor.templates.map { .init(id: $0.id, title: $0.name) },
+                selectedID: editor.editedTemplateID,
+                onSelect: { id in
+                    guard let id else { return }
+                    onSelectTemplate(id)
                 }
-                newTemplateChip
-            }
-        }
-    }
-
-    private var newTemplateChip: some View {
-        Button {
-            newTemplate = NewTemplateDraft(name: "\(editor.draft.name) Copy")
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .bold))
-                Text("New")
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 26)
-            .background(Capsule().fill(Color.primary.opacity(0.06)))
-            .foregroundStyle(.secondary)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help("New template from this draft…")
-        .accessibilityLabel("New template")
-        .popover(
-            isPresented: Binding(
-                get: { newTemplate != nil },
-                set: { if !$0 { newTemplate = nil } }
-            ),
-            arrowEdge: .bottom
-        ) {
-            NewTemplatePopover(
-                name: Binding(
-                    get: { newTemplate?.name ?? "" },
-                    set: { newTemplate?.name = $0; newTemplate?.problem = nil }
-                ),
-                problem: newTemplate?.problem,
-                onCommit: create
             )
+            .accessibilityLabel("Template")
+            templateEditor
         }
     }
 
     private var templateEditor: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            TemplateNameField(text: $editor.draft.name) {
-                if editor.canDelete {
-                    QuietDeleteButton {
-                        TemplateDialogs.delete(editor)
-                    }
+            SettingsSection("Name") {
+                TemplateNameField(text: $editor.draft.name) {
+                    nameActions
                 }
             }
             SettingsSection("Prompt") {
@@ -120,7 +71,39 @@ struct SettingsTemplatesPane: View {
                 }
             }
         }
-        .animation(.snappy(duration: 0.22), value: editor.isDirty)
+    }
+
+    private var nameActions: some View {
+        HStack(spacing: 2) {
+            QuietIconButton("plus") {
+                newTemplate = NewTemplateDraft(name: "\(editor.draft.name) Copy")
+            }
+            .help("New template from this draft…")
+            .accessibilityLabel("New template")
+            .popover(
+                isPresented: Binding(
+                    get: { newTemplate != nil },
+                    set: { if !$0 { newTemplate = nil } }
+                ),
+                arrowEdge: .bottom
+            ) {
+                NewTemplatePopover(
+                    name: Binding(
+                        get: { newTemplate?.name ?? "" },
+                        set: { newTemplate?.name = $0; newTemplate?.problem = nil }
+                    ),
+                    problem: newTemplate?.problem,
+                    onCommit: create
+                )
+            }
+            if editor.canDelete {
+                QuietIconButton("trash", hoverColor: .red) {
+                    TemplateDialogs.delete(editor)
+                }
+                .help("Delete this template…")
+                .accessibilityLabel("Delete template")
+            }
+        }
     }
 
     private func create() {

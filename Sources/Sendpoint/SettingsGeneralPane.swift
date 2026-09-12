@@ -127,19 +127,19 @@ struct SettingsGeneralPane: View {
     }
 
     private var microphonePicker: some View {
-        var items: [InputDevicePopUp.Item] = [.init(uid: nil, title: systemDefaultLabel)]
+        var items: [SettingsPopUp<String>.Item] = [.init(id: nil, title: systemDefaultLabel)]
         if !inputDevices.devices.isEmpty {
             items.append(.separator)
-            items += inputDevices.devices.map { .init(uid: $0.uid, title: $0.name) }
+            items += inputDevices.devices.map { .init(id: $0.uid, title: $0.name) }
         }
         if let uid = voiceSettings.inputDeviceUID, !selectedDeviceIsConnected {
             items.append(.separator)
             items.append(.init(
-                uid: uid,
+                id: uid,
                 title: "\(voiceSettings.inputDeviceName ?? "Saved microphone") (not connected)"
             ))
         }
-        return InputDevicePopUp(items: items, selectedUID: voiceSettings.inputDeviceUID) { uid in
+        return SettingsPopUp(items: items, selectedID: voiceSettings.inputDeviceUID) { uid in
             let name = inputDevices.devices.first { $0.uid == uid }?.name
             captureController.chooseMicrophone(uid: uid, name: name)
         }

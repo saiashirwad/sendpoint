@@ -55,6 +55,131 @@ struct SetupView: View {
     }
 }
 
+struct PermissionItem: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let status: CapabilityStatus
+    let actionTitle: String?
+    let run: () -> Void
+}
+
+enum PermissionCatalog {
+    static func items(
+        state: PermissionState,
+        onShowAccessibilityHelper: @escaping () -> Void
+    ) -> [PermissionItem] {
+        [
+            PermissionItem(
+                id: "accessibility",
+                title: "Accessibility",
+                detail: "Reads the selected text when you take a typed note.",
+                status: accessibilityStatus(state),
+                actionTitle: accessibilityActionTitle(state),
+                run: { performAccessibilityAction(state, onShowAccessibilityHelper) }
+            ),
+            PermissionItem(
+                id: "microphone",
+                title: "Microphone",
+                detail: "Records when you use the voice shortcut.",
+                status: microphoneStatus(state),
+                actionTitle: microphoneActionTitle(state),
+                run: { performMicrophoneAction(state) }
+            ),
+            PermissionItem(
+                id: "voice-model",
+                title: "Voice model",
+                detail: "Transcribes on this Mac, without sending audio away.",
+                status: voiceModelStatus(state),
+                actionTitle: voiceModelActionTitle(state),
+                run: { performVoiceModelAction(state) }
+            ),
+        ]
+    }
+
+    private static func accessibilityStatus(_ state: PermissionState) -> CapabilityStatus {
+        switch state.accessibility {
+        case .notGranted: .attention("Required")
+        case .granted: .ready("Granted")
+        }
+    }
+
+    private static func microphoneStatus(_ state: PermissionState) -> CapabilityStatus {
+        switch state.microphone {
+        case .notDetermined: .neutral("Not enabled")
+        case .denied: .attention("Denied")
+        case .restricted: .attention("Restricted")
+        case .granted: .ready("Granted")
+        }
+    }
+
+    private static func voiceModelStatus(_ state: PermissionState) -> CapabilityStatus {
+        switch state.localVoiceModel {
+        case .notDownloaded: .neutral("Not downloaded")
+        case let .downloading(progress):
+            .working(
+                label: progress.map { "\(Int($0 * 100))%" } ?? "Downloading…",
+                fraction: progress
+            )
+        case .ready: .ready("Downloaded")
+        case .failed(.offline): .attention("No internet connection")
+        case .failed(.other): .attention("Download failed")
+        }
+    }
+
+    private static func accessibilityActionTitle(_ state: PermissionState) -> String? {
+        switch state.accessibilityAction {
+        case .requestAccessibility, .showAccessibilityHelper: "Grant"
+        default: nil
+        }
+    }
+
+    private static func microphoneActionTitle(_ state: PermissionState) -> String? {
+        switch state.microphoneAction {
+        case .requestMicrophone: "Allow"
+        case .openMicrophoneSettings: "Settings"
+        default: nil
+        }
+    }
+
+    private static func voiceModelActionTitle(_ state: PermissionState) -> String? {
+        guard state.localVoiceModelAction == .downloadVoiceModel else { return nil }
+        if case .failed = state.localVoiceModel { return "Retry" }
+        return "Download"
+    }
+
+    private static func performAccessibilityAction(
+        _ state: PermissionState,
+        _ onShowAccessibilityHelper: @escaping () -> Void
+    ) {
+        switch state.accessibilityAction {
+        case .requestAccessibility:
+            state.requestAccessibility()
+            onShowAccessibilityHelper()
+        case .showAccessibilityHelper:
+            onShowAccessibilityHelper()
+        default:
+            break
+        }
+    }
+
+    private static func performMicrophoneAction(_ state: PermissionState) {
+        switch state.microphoneAction {
+        case .requestMicrophone:
+            state.requestMicrophone()
+        case .openMicrophoneSettings:
+            state.openMicrophoneSettings()
+        default:
+            break
+        }
+    }
+
+    private static func performVoiceModelAction(_ state: PermissionState) {
+        guard state.localVoiceModelAction == .downloadVoiceModel else { return }
+        state.downloadModel()
+    }
+}
+
 struct PermissionCapabilityList: View {
     @Bindable var permissionState: PermissionState
     let onShowAccessibilityHelper: () -> Void
@@ -69,112 +194,29 @@ struct PermissionCapabilityList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CapabilityRow(
-                title: "Accessibility",
-                status: accessibilityStatus,
-                actionTitle: accessibilityActionTitle,
-                action: performAccessibilityAction
-            )
-            CapabilityRow(
-                title: "Microphone",
-                status: microphoneStatus,
-                actionTitle: microphoneActionTitle,
-                action: performMicrophoneAction
-            )
-            CapabilityRow(
-                title: "Voice model",
-                status: voiceModelStatus,
-                actionTitle: voiceModelActionTitle,
-                action: performVoiceModelAction
-            )
+            ForEach(items) { item in
+                CapabilityRow(
+                    title: item.title,
+                    status: item.status,
+                    actionTitle: item.actionTitle,
+                    action: item.run
+                )
+            }
         }
         .task {
             await permissionState.watchVoiceModel()
         }
     }
 
-    private var accessibilityStatus: CapabilityStatus {
-        switch permissionState.accessibility {
-        case .notGranted: .attention("Required")
-        case .granted: .ready("Granted")
-        }
+    private var items: [PermissionItem] {
+        PermissionCatalog.items(
+            state: permissionState,
+            onShowAccessibilityHelper: onShowAccessibilityHelper
+        )
     }
-
-    private var microphoneStatus: CapabilityStatus {
-        switch permissionState.microphone {
-        case .notDetermined: .neutral("Not enabled")
-        case .denied: .attention("Denied")
-        case .restricted: .attention("Restricted")
-        case .granted: .ready("Granted")
-        }
-    }
-
-    private var voiceModelStatus: CapabilityStatus {
-        switch permissionState.localVoiceModel {
-        case .notDownloaded: .neutral("Not downloaded")
-        case let .downloading(progress):
-            .working(
-                label: progress.map { "\(Int($0 * 100))%" } ?? "Downloading…",
-                fraction: progress
-            )
-        case .ready: .ready("Downloaded")
-        case .failed(.offline): .attention("No internet connection")
-        case .failed(.other): .attention("Download failed")
-        }
-    }
-
-    private var accessibilityActionTitle: String? {
-        switch permissionState.accessibilityAction {
-        case .requestAccessibility, .showAccessibilityHelper: "Grant"
-        default: nil
-        }
-    }
-
-    private var microphoneActionTitle: String? {
-        switch permissionState.microphoneAction {
-        case .requestMicrophone: "Allow"
-        case .openMicrophoneSettings: "Settings"
-        default: nil
-        }
-    }
-
-    private var voiceModelActionTitle: String? {
-        guard permissionState.localVoiceModelAction == .downloadVoiceModel else { return nil }
-        if case .failed = permissionState.localVoiceModel { return "Retry" }
-        return "Download"
-    }
-
-    private func performAccessibilityAction() {
-        switch permissionState.accessibilityAction {
-        case .requestAccessibility:
-            permissionState.requestAccessibility()
-            onShowAccessibilityHelper()
-        case .showAccessibilityHelper:
-            onShowAccessibilityHelper()
-        default:
-            break
-        }
-    }
-
-    private func performMicrophoneAction() {
-        switch permissionState.microphoneAction {
-        case .requestMicrophone:
-            permissionState.requestMicrophone()
-        case .openMicrophoneSettings:
-            permissionState.openMicrophoneSettings()
-        default:
-            break
-        }
-    }
-
-    private func performVoiceModelAction() {
-        guard permissionState.localVoiceModelAction == .downloadVoiceModel else { return }
-        permissionState.downloadModel()
-    }
-
 }
 
-private enum CapabilityStatus {
+enum CapabilityStatus {
     case neutral(String)
     case attention(String)
     case ready(String)
@@ -188,8 +230,6 @@ private enum CapabilityStatus {
             label
         }
     }
-
-    var textColor: Color { .secondary }
 }
 
 private struct CapabilityRow: View {
@@ -222,8 +262,22 @@ private struct CapabilityRow: View {
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
     private var trailing: some View {
+        CapabilityAccessory(status: status, actionTitle: actionTitle)
+    }
+
+    private var accessibilityValue: String {
+        actionTitle ?? status.title
+    }
+}
+
+/// Status on the trailing edge of a capability row: progress, a verb, a
+/// ready mark, or a quiet caption.
+struct CapabilityAccessory: View {
+    let status: CapabilityStatus
+    var actionTitle: String? = nil
+
+    var body: some View {
         if case let .working(label, fraction) = status {
             HStack(spacing: 8) {
                 Text(label)
@@ -240,17 +294,13 @@ private struct CapabilityRow: View {
         } else {
             Text(status.title)
                 .font(.caption)
-                .foregroundStyle(status.textColor)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    private var accessibilityValue: String {
-        actionTitle ?? status.title
     }
 }
 
 /// Paper check on a green disc. Pops in once; stays put after that.
-private struct ReadyMark: View {
+struct ReadyMark: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
 
@@ -285,7 +335,7 @@ private struct ReadyMark: View {
     }
 }
 
-private struct CapabilityProgress: View {
+struct CapabilityProgress: View {
     let fraction: Double?
 
     var body: some View {
