@@ -21,7 +21,9 @@ tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
 ## Stacks
 
 - [ ] Hold the switch shortcut, cycle with repeated presses, release. The lit stack becomes current.
-- [ ] Hold the switch shortcut, press Up or Down. The palette opens on the lit stack.
+- [ ] Hold the switch shortcut, press Up or Down. The palette opens on the lit stack, sidebar focused, notes on the right.
+- [ ] In the palette: Tab moves focus between the stack list and the notes; the unfocused pane dims its highlight.
+- [ ] Show Stack opens at the bottom of the newest stack's notes, last note highlighted.
 - [ ] In the palette: rename, delete with confirmation, undo a clear.
 - [ ] Only one stack: the switch shortcut beeps.
 

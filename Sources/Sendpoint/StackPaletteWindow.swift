@@ -72,10 +72,9 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         return panel
     }
 
-    func show(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
+    func show(focus: PalettePane, highlighting stackID: UUID? = nil) {
         guard lifecycle == .active else { return }
-        model.send(.open(level))
-        if let stackID, level == .stacks { model.send(.chooseStack(stackID)) }
+        model.send(.open(focus, highlighting: stackID))
         surfaces.present(.palette)
     }
 
@@ -184,7 +183,6 @@ extension PaletteKey {
         case UInt16(kVK_Return) where command, UInt16(kVK_ANSI_KeypadEnter) where command:
             self = .commandActivate
         case UInt16(kVK_Escape) where plain: self = .escape
-        case UInt16(kVK_Delete) where plain: self = .delete
         case UInt16(kVK_Delete) where command: self = .commandDelete
         case UInt16(kVK_Delete) where shiftCommand: self = .shiftCommandDelete
         default:

@@ -28,7 +28,7 @@ extension AppDelegate {
                     hotKeyCenter: environment.hotKeyCenter,
                     surfaces: surfaces,
                     onOpenPalette: { [weak self] id in
-                        self?.presentPalette(at: .stacks, highlighting: id)
+                        self?.presentPalette(focus: .stacks, highlighting: id)
                     },
                     onSwitched: { [weak self] stack in
                         self?.statusItemController.flash(stack.name)

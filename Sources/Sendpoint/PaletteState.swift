@@ -1,15 +1,10 @@
 import Foundation
 import SendpointDomain
 
-/// Where the palette is: the list of every stack, or inside one of them.
-nonisolated enum PaletteLevel: Equatable, Hashable {
+/// Which pane owns the keyboard: the stack sidebar or the note list.
+nonisolated enum PalettePane: Equatable, Hashable {
     case stacks
-    case notes(UUID)
-
-    var stackID: UUID? {
-        if case let .notes(id) = self { return id }
-        return nil
-    }
+    case notes
 }
 
 /// Which note carries the keyboard highlight inside a stack.
@@ -40,7 +35,6 @@ nonisolated struct NoteHighlightState: Equatable {
 /// Everything the palette can do from the keyboard or the ⌘K menu.
 nonisolated enum PaletteAction: Hashable {
     case switchToStack(UUID)
-    case openStack(UUID)
     case createStack(String)
     case newStack
     case renameStack(UUID)
@@ -54,7 +48,6 @@ nonisolated enum PaletteAction: Hashable {
     case deleteNote(UUID)
     case moveNoteUp(UUID)
     case moveNoteDown(UUID)
-    case backToStacks
 }
 
 /// One entry of the ⌘K menu: the action, how it reads, and its keys.
@@ -77,10 +70,10 @@ nonisolated struct PaletteActionContext: Equatable {
         case nothing
     }
 
-    var level: PaletteLevel
+    var pane: PalettePane
     var focus: Focus
-    /// The stack the notes level is inside, when it is.
-    var openStack: StackItemFacts?
+    /// The stack the note pane shows: the sidebar highlight.
+    var shownStack: StackItemFacts?
     var canDeleteStack: Bool
     var undo: StackUndoFacts?
     var templateName: String
@@ -108,48 +101,51 @@ nonisolated enum PaletteActionCatalog {
             add(.clearStack(stack.id), "Clear “\(stack.name)”", "⇧⌘⌫",
                 subtitle: "Sets the notes aside; undo with ⌘Z", destructive: true)
         }
-
-        switch context.level {
-        case .stacks:
-            switch context.focus {
-            case let .stack(stack):
+        func stackActions(_ stack: StackItemFacts, switchKeys: String, copyKeys: String,
+                          showsCurrent: Bool) {
+            if showsCurrent || !stack.isCurrent {
                 add(.switchToStack(stack.id),
-                    stack.isCurrent ? "Keep “\(stack.name)” current" : "Switch to “\(stack.name)”", "↩")
-                add(.openStack(stack.id), "Open “\(stack.name)”", "→")
-                copy(stack, keys: "⌘C")
-                add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
-                add(.newStack, "New Stack", "⌘N")
-                template()
-                undo()
-                clear(stack)
-                if context.canDeleteStack {
-                    add(.deleteStack(stack.id), "Delete “\(stack.name)”", "⌘⌫", destructive: true)
-                }
-            case let .createStack(name):
-                add(.createStack(name), "Create “\(name)”", "↩")
-                template()
-            case .note, .nothing:
-                add(.newStack, "New Stack", "⌘N")
-                template()
-                undo()
+                    stack.isCurrent ? "Keep “\(stack.name)” current" : "Switch to “\(stack.name)”",
+                    switchKeys)
             }
-        case .notes:
-            if case let .note(id, index, count) = context.focus {
-                add(.editNote(id), "Edit Note", "↩")
-                add(.copyNote(id), "Copy Note", "⌘C")
-                if index > 0 { add(.moveNoteUp(id), "Move Note Up", "⌥↑") }
-                if index < count - 1 { add(.moveNoteDown(id), "Move Note Down", "⌥↓") }
-                add(.deleteNote(id), "Delete Note", "⌘⌫", destructive: true)
+            copy(stack, keys: copyKeys)
+            add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
+            add(.newStack, "New Stack", "⌘N")
+        }
+
+        switch context.focus {
+        case let .stack(stack):
+            stackActions(stack, switchKeys: "↩", copyKeys: "⌘C", showsCurrent: true)
+            template()
+            undo()
+            clear(stack)
+            if context.canDeleteStack {
+                add(.deleteStack(stack.id), "Delete “\(stack.name)”", "⌘⌫", destructive: true)
             }
-            if let stack = context.openStack {
-                if !stack.isCurrent { add(.switchToStack(stack.id), "Switch to “\(stack.name)”", "⌘↩") }
-                copy(stack, keys: "⇧⌘C")
-                add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
+        case let .createStack(name):
+            add(.createStack(name), "Create “\(name)”", "↩")
+            template()
+        case let .note(id, index, count):
+            add(.editNote(id), "Edit Note", "↩")
+            add(.copyNote(id), "Copy Note", "⌘C")
+            if index > 0 { add(.moveNoteUp(id), "Move Note Up", "⌥↑") }
+            if index < count - 1 { add(.moveNoteDown(id), "Move Note Down", "⌥↓") }
+            add(.deleteNote(id), "Delete Note", "⌘⌫", destructive: true)
+            if let stack = context.shownStack {
+                stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
             }
             template()
-            add(.backToStacks, "All Stacks", "←")
             undo()
-            if let stack = context.openStack { clear(stack) }
+            if let stack = context.shownStack { clear(stack) }
+        case .nothing:
+            if context.pane == .notes, let stack = context.shownStack {
+                stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
+            } else {
+                add(.newStack, "New Stack", "⌘N")
+            }
+            template()
+            undo()
+            if context.pane == .notes, let stack = context.shownStack { clear(stack) }
         }
         return items
     }
@@ -167,7 +163,7 @@ nonisolated enum PaletteKey: Equatable {
     case tab, backTab
     case activate, commandActivate
     case escape
-    case delete, commandDelete, shiftCommandDelete
+    case commandDelete, shiftCommandDelete
     case commandDigit(Int)
     case command(Character)
     case shiftCommand(Character)

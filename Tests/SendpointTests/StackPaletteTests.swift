@@ -50,11 +50,11 @@ final class StackPaletteTests: XCTestCase {
         XCTAssertNil(state.highlight)
     }
 
-    func testStackLevelActionsFollowTheHighlightedStack() {
+    func testStackPaneActionsFollowTheHighlightedStack() {
         let context = PaletteActionContext(
-            level: .stacks,
+            pane: .stacks,
             focus: .stack(StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false)),
-            openStack: nil,
+            shownStack: nil,
             canDeleteStack: true,
             undo: StackUndoFacts(
                 stackID: otherStackID, stackName: "Default", noteCount: 1,
@@ -63,7 +63,7 @@ final class StackPaletteTests: XCTestCase {
         )
         let items = PaletteActionCatalog.items(for: context)
         XCTAssertEqual(items.map(\.action), [
-            .switchToStack(stackID), .openStack(stackID), .copyStack(stackID),
+            .switchToStack(stackID), .copyStack(stackID),
             .renameStack(stackID), .newStack, .chooseTemplate, .undoClear,
             .clearStack(stackID), .deleteStack(stackID),
         ])
@@ -73,28 +73,28 @@ final class StackPaletteTests: XCTestCase {
         XCTAssertTrue(items.last?.isDestructive ?? false)
 
         let empty = PaletteActionCatalog.items(for: PaletteActionContext(
-            level: .stacks,
+            pane: .stacks,
             focus: .stack(StackItemFacts(id: stackID, name: "crdt", noteCount: 0, isCurrent: true)),
-            openStack: nil, canDeleteStack: false, undo: nil, templateName: "Plain"
+            shownStack: nil, canDeleteStack: false, undo: nil, templateName: "Plain"
         ))
         XCTAssertEqual(empty.map(\.action), [
-            .switchToStack(stackID), .openStack(stackID), .renameStack(stackID), .newStack,
+            .switchToStack(stackID), .renameStack(stackID), .newStack,
             .chooseTemplate,
         ], "an empty, only stack cannot be copied, cleared, or deleted")
         XCTAssertEqual(empty.first?.title, "Keep “crdt” current")
 
         let create = PaletteActionCatalog.items(for: PaletteActionContext(
-            level: .stacks, focus: .createStack(name: "New"), openStack: nil,
+            pane: .stacks, focus: .createStack(name: "New"), shownStack: nil,
             canDeleteStack: true, undo: nil, templateName: "Plain"
         ))
         XCTAssertEqual(create.map(\.action), [.createStack("New"), .chooseTemplate])
     }
 
-    func testNoteLevelActionsFollowTheHighlightedNoteAndOpenStack() {
+    func testNotePaneActionsFollowTheHighlightedNoteAndShownStack() {
         let context = PaletteActionContext(
-            level: .notes(stackID),
+            pane: .notes,
             focus: .note(id: secondNoteID, index: 1, count: 3),
-            openStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false),
+            shownStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false),
             canDeleteStack: true,
             undo: nil,
             templateName: "Coherent"
@@ -103,34 +103,34 @@ final class StackPaletteTests: XCTestCase {
         XCTAssertEqual(items.map(\.action), [
             .editNote(secondNoteID), .copyNote(secondNoteID),
             .moveNoteUp(secondNoteID), .moveNoteDown(secondNoteID), .deleteNote(secondNoteID),
-            .switchToStack(stackID), .copyStack(stackID), .renameStack(stackID),
-            .chooseTemplate, .backToStacks, .clearStack(stackID),
+            .switchToStack(stackID), .copyStack(stackID), .renameStack(stackID), .newStack,
+            .chooseTemplate, .clearStack(stackID),
         ])
         XCTAssertEqual(items.first { $0.action == .switchToStack(stackID) }?.keys, "⌘↩")
         XCTAssertEqual(items.first { $0.action == .copyStack(stackID) }?.keys, "⇧⌘C")
 
         let last = PaletteActionCatalog.items(for: PaletteActionContext(
-            level: .notes(stackID),
+            pane: .notes,
             focus: .note(id: thirdNoteID, index: 2, count: 3),
-            openStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: true),
+            shownStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: true),
             canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertFalse(last.contains { $0.action == .moveNoteDown(thirdNoteID) }, "last note cannot move down")
         XCTAssertFalse(last.contains { $0.action == .switchToStack(stackID) }, "current stack needs no switch")
 
         let nothing = PaletteActionCatalog.items(for: PaletteActionContext(
-            level: .notes(stackID), focus: .nothing,
-            openStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 0, isCurrent: true),
+            pane: .notes, focus: .nothing,
+            shownStack: StackItemFacts(id: stackID, name: "crdt", noteCount: 0, isCurrent: true),
             canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
-        XCTAssertEqual(nothing.map(\.action), [.renameStack(stackID), .chooseTemplate, .backToStacks])
+        XCTAssertEqual(nothing.map(\.action), [.renameStack(stackID), .newStack, .chooseTemplate])
     }
 
     func testActionFilterMatchesTitleAndSubtitle() {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
-            level: .stacks,
+            pane: .stacks,
             focus: .stack(StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false)),
-            openStack: nil, canDeleteStack: true, undo: nil, templateName: "Coherent"
+            shownStack: nil, canDeleteStack: true, undo: nil, templateName: "Coherent"
         ))
         XCTAssertEqual(
             PaletteActionCatalog.filter(items, query: "del").map(\.action), [.deleteStack(stackID)])

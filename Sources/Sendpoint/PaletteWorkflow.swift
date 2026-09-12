@@ -8,15 +8,19 @@ enum PaletteField: Hashable {
 enum PaletteEdit: Equatable {
     case renameStack(id: UUID, text: String, problem: String?)
     case createStack(text: String, problem: String?)
-    case note(id: UUID, text: String)
+    case note(stackID: UUID, id: UUID, text: String)
 
     var noteID: UUID? {
-        if case let .note(id, _) = self { return id }
+        if case let .note(_, id, _) = self { return id }
+        return nil
+    }
+    var stackID: UUID? {
+        if case let .note(stackID, _, _) = self { return stackID }
         return nil
     }
     var text: String {
         switch self {
-        case let .renameStack(_, text, _), let .createStack(text, _), let .note(_, text): return text
+        case let .renameStack(_, text, _), let .createStack(text, _), let .note(_, _, text): return text
         }
     }
     var problem: String? {
@@ -30,8 +34,8 @@ enum PaletteEdit: Equatable {
 enum PaletteOverlay { case actions, templates }
 
 enum PaletteEvent {
-    case open(PaletteLevel), close, teardown, documentChanged
-    case query(String), chooseStack(UUID), chooseCreate(String), chooseNote(UUID)
+    case open(PalettePane, highlighting: UUID?), close, teardown, documentChanged
+    case query(String), chooseStack(UUID), chooseCreate(String), chooseNote(UUID), focusPane(PalettePane)
     case perform(PaletteAction), key(PaletteKey, textHasSelection: Bool)
     case editText(String), commitEdit, cancelEdit, noteFocus(UUID?)
     case toggleOverlay(PaletteOverlay), closeOverlay, overlayQuery(String), overlayHighlight(Int)
@@ -60,7 +64,7 @@ enum PaletteInteraction {
 struct PaletteWorkflow {
     enum Lifecycle { case closed, open, tornDown }
     var lifecycle: Lifecycle = .closed
-    var level: PaletteLevel = .stacks
+    var focusedPane: PalettePane = .stacks
     var query = ""
     var stackState = QuickSwitchState()
     var noteState = NoteHighlightState()
@@ -92,7 +96,7 @@ struct PaletteWorkflow {
         if case let .failed(_, message, _) = interaction { return message }
         return inlineEdit?.problem
     }
-    mutating func focus(_ field: PaletteField) {
+    mutating func requestFocus(_ field: PaletteField) {
         focusRequest = (field, focusRequest.generation + 1)
     }
 }
@@ -128,31 +132,26 @@ struct PaletteProjection {
     }
 
     var stackListing: QuickSwitchListing {
-        QuickSwitchListing(facts: facts, query: state.level == .stacks ? state.query : "")
+        QuickSwitchListing(facts: facts, query: state.focusedPane == .stacks ? state.query : "")
     }
 
-    /// The stack whose notes are shown: the open one, or the highlighted one
-    /// as a preview.
+    /// The stack whose notes the note pane shows: the sidebar highlight.
     var shownStack: Stack? {
-        let id = state.level.stackID ?? state.stackState.selectedStackID
-        return id.flatMap { context.stacks.stack(id: $0) }
+        state.stackState.selectedStackID.flatMap { context.stacks.stack(id: $0) }
     }
 
     var noteListing: NoteListing {
-        NoteListing(notes: shownStack?.notes ?? [], query: state.level == .stacks ? "" : state.query)
+        NoteListing(notes: shownStack?.notes ?? [], query: state.focusedPane == .notes ? state.query : "")
     }
 
-    var highlightedNoteID: UUID? {
-        guard case .notes = state.level else { return nil }
-        return state.noteState.highlight
-    }
+    var highlightedNoteID: UUID? { state.noteState.highlight }
 
     var activeTemplate: Template { context.activeTemplate }
 
     var actionContext: PaletteActionContext {
         let facts = facts
         let focus: PaletteActionContext.Focus
-        switch state.level {
+        switch state.focusedPane {
         case .stacks:
             switch state.stackState.highlight {
             case let .stack(id): focus = facts.stack(id: id).map { .stack($0) } ?? .nothing
@@ -168,9 +167,9 @@ struct PaletteProjection {
             }
         }
         return PaletteActionContext(
-            level: state.level,
+            pane: state.focusedPane,
             focus: focus,
-            openStack: state.level.stackID.flatMap { facts.stack(id: $0) },
+            shownStack: state.stackState.selectedStackID.flatMap { facts.stack(id: $0) },
             canDeleteStack: facts.canDelete,
             undo: facts.undo,
             templateName: context.activeTemplate.name
@@ -214,21 +213,26 @@ struct PaletteUpdate {
             state.lifecycle = .tornDown
             effects.append(.close)
             return true
-        case let .open(level):
+        case let .open(pane, stackID):
             if state.lifecycle == .open, finishEdit(before: event) { return true }
             state.lifecycle = .open
             state.interaction = .browsing
-            navigate(level)
+            open(pane, highlighting: stackID)
             return true
         default: guard state.lifecycle == .open else { return true }
         }
         switch event {
         case .documentChanged:
-            if let id = state.level.stackID, !context.stacks.contains(where: { $0.id == id }) {
-                // Keep a pending draft until its exact mutation reports rejection.
-                if !state.isBusy { state.interaction = .browsing; navigate(.stacks) }
-            }
+            let shownBefore = view.shownStack?.id
             state.stackState.synchronize(with: view.facts)
+            if view.shownStack?.id != shownBefore {
+                state.noteState.select(view.noteListing.ids.last)
+            }
+            // A draft whose stack vanished cannot be shown anywhere. A draft
+            // already on its way to the store is kept until its result lands.
+            if !state.isBusy, let edit = state.inlineEdit, !editTargetExists(edit) {
+                state.interaction = .browsing
+            }
             confine()
         case let .mutationResult(id, outcome): receive(id, outcome)
         case .retry:
@@ -253,22 +257,32 @@ struct PaletteUpdate {
             switch edit {
             case let .renameStack(id, _, _): state.interaction = .editing(.renameStack(id: id, text: text, problem: nil))
             case .createStack: state.interaction = .editing(.createStack(text: text, problem: nil))
-            case let .note(id, _): state.interaction = .editing(.note(id: id, text: text))
+            case let .note(stackID, id, _): state.interaction = .editing(.note(stackID: stackID, id: id, text: text))
             }
         case .commitEdit: finishEdit(before: nil)
         case .cancelEdit:
-            if case .editing = state.interaction { state.interaction = .browsing; state.focus(.search) }
-            if case .failed(_, _, false) = state.interaction { state.interaction = .browsing; state.focus(.search) }
+            if case .editing = state.interaction { state.interaction = .browsing; state.requestFocus(.search) }
+            if case .failed(_, _, false) = state.interaction { state.interaction = .browsing; state.requestFocus(.search) }
         case let .noteFocus(id):
             if let id { chooseNote(id, editing: true) }
             else if state.inlineEdit?.noteID != nil { finishEdit(before: nil) }
         case let .chooseStack(id):
-            guard !state.isBusy, state.inlineEdit == nil, state.level == .stacks else { break }
+            guard !state.isBusy, state.inlineEdit == nil, view.facts.stack(id: id) != nil else { break }
+            if state.focusedPane != .stacks { state.focusedPane = .stacks; state.query = "" }
             _ = state.stackState.choose(id, from: view.facts)
+            state.noteState.select(view.noteListing.ids.last)
+            confine()
         case let .chooseCreate(name):
-            guard !state.isBusy, state.inlineEdit == nil, state.level == .stacks else { break }
+            guard !state.isBusy, state.inlineEdit == nil else { break }
+            if state.focusedPane != .stacks { state.focusedPane = .stacks; state.query = "" }
             state.stackState.highlight(.create(name))
+            state.noteState.select(nil)
         case let .chooseNote(id): chooseNote(id, editing: false)
+        case let .focusPane(pane):
+            guard pane != state.focusedPane, !state.isBusy, state.inlineEdit == nil else { break }
+            state.focusedPane = pane
+            state.query = ""
+            confine()
         case let .perform(action):
             guard !finishEdit(before: event) else { break }
             state.interaction = .browsing
@@ -296,18 +310,21 @@ struct PaletteUpdate {
     private mutating func perform(_ action: PaletteAction) {
         switch action {
         case let .switchToStack(id): enqueue(.switchStack(stackID: id), then: .close)
-        case let .openStack(id): navigate(.notes(id))
-        case .backToStacks: navigate(.stacks)
         case .newStack:
-            state.interaction = .editing(.createStack(text: view.stackListing.creatableName ?? "", problem: nil))
-            state.focus(.create)
+            let draft = state.focusedPane == .stacks ? view.stackListing.creatableName ?? "" : ""
+            state.focusedPane = .stacks
+            state.query = ""
+            state.interaction = .editing(.createStack(text: draft, problem: nil))
+            state.requestFocus(.create)
         case let .createStack(name):
             state.interaction = .editing(.createStack(text: name, problem: nil))
             finishEdit(before: .close)
         case let .renameStack(id):
             guard let stack = view.facts.stack(id: id) else { break }
+            state.focusedPane = .stacks
+            state.query = ""
             state.interaction = .editing(.renameStack(id: id, text: stack.name, problem: nil))
-            state.focus(.rename(id))
+            state.requestFocus(.rename(id))
         case let .deleteStack(id):
             guard view.facts.canDelete else { effects.append(.beep); break }
             state.interaction = .confirmingDelete(id)
@@ -320,19 +337,36 @@ struct PaletteUpdate {
         case let .copyNote(id):
             if let note = view.noteListing.notes.first(where: { $0.id == id }) { effects.append(.copyNote(note)) }
         case let .deleteNote(id):
-            if let stackID = state.level.stackID { enqueue(.removeNote(stackID: stackID, noteID: id)) }
+            if let stackID = view.shownStack?.id { enqueue(.removeNote(stackID: stackID, noteID: id)) }
         case let .moveNoteUp(id): moveNote(id, offset: -1)
         case let .moveNoteDown(id): moveNote(id, offset: 1)
         }
     }
 
     private mutating func chooseNote(_ id: UUID, editing: Bool) {
-        guard state.level.stackID != nil, let note = view.noteListing.notes.first(where: { $0.id == id }) else { return }
+        guard let stack = view.shownStack,
+              let note = view.noteListing.notes.first(where: { $0.id == id }) else { return }
         if state.inlineEdit?.noteID == id { return }
         let next: PaletteEvent = editing ? .perform(.editNote(id)) : .chooseNote(id)
         guard !finishEdit(before: next) else { return }
+        if state.focusedPane != .notes { state.focusedPane = .notes; state.query = "" }
         state.noteState.select(id)
-        if editing { state.interaction = .editing(.note(id: id, text: note.body)); state.focus(.note(id)) }
+        if editing {
+            state.interaction = .editing(.note(stackID: stack.id, id: id, text: note.body))
+            state.requestFocus(.note(id))
+        }
+    }
+
+    /// Whether an unsaved draft still names something in the document.
+    private func editTargetExists(_ edit: PaletteEdit) -> Bool {
+        switch edit {
+        case let .note(stackID, noteID, _):
+            return context.stacks.stack(id: stackID)?.notes.contains { $0.id == noteID } ?? false
+        case let .renameStack(id, _, _):
+            return context.stacks.contains { $0.id == id }
+        case .createStack:
+            return true
+        }
     }
 
     /// Navigation waits for the draft's own commit. Focus loss never drops it.
@@ -347,8 +381,7 @@ struct PaletteUpdate {
         case let .editing(edit):
             let mutation: StackDocumentMutation
             switch edit {
-            case let .note(id, text):
-                guard let stackID = state.level.stackID else { return true }
+            case let .note(stackID, id, text):
                 mutation = .updateNoteBody(stackID: stackID, noteID: id, body: text)
             case let .renameStack(_, text, _), let .createStack(text, _):
                 let excluded: UUID?
@@ -386,7 +419,7 @@ struct PaletteUpdate {
         switch outcome {
         case .committed, .noOp:
             state.interaction = .browsing
-            state.focus(.search)
+            state.requestFocus(.search)
             confine()
             if let next = pending.continuation { update(next) }
         case let .commitFailed(message): state.interaction = .failed(pending, message, retryable: true)
@@ -395,16 +428,39 @@ struct PaletteUpdate {
         }
     }
 
-    private mutating func navigate(_ level: PaletteLevel) {
-        state.level = level.stackID.map { id in
-            context.stacks.contains(where: { $0.id == id }) ? level : .stacks
-        } ?? .stacks
+    /// Opens on a pane, with the sidebar highlight on `stackID` when it is
+    /// still there, and the newest note ready.
+    private mutating func open(_ pane: PalettePane, highlighting stackID: UUID?) {
+        state.focusedPane = pane
         state.query = ""
-        if state.level == .stacks { state.stackState.selectCurrent(from: view.facts) }
-        else { state.noteState.select(nil) }
+        if let stackID, view.facts.stack(id: stackID) != nil {
+            _ = state.stackState.choose(stackID, from: view.facts)
+        } else {
+            state.stackState.selectCurrent(from: view.facts)
+        }
+        state.noteState.select(view.noteListing.ids.last)
         confine()
-        state.focus(.search)
+        state.requestFocus(.search)
     }
+
+    /// Tab and the arrow keys flip which pane owns the keyboard. Each pane
+    /// keeps its own highlight; only the query resets.
+    private mutating func toggleFocus() {
+        switch state.focusedPane {
+        case .stacks:
+            guard view.shownStack != nil else { return }
+            if state.noteState.highlight == nil {
+                state.noteState.select(view.noteListing.ids.last)
+            }
+            state.focusedPane = .notes
+        case .notes:
+            state.focusedPane = .stacks
+        }
+        state.query = ""
+        confine()
+        state.requestFocus(.search)
+    }
+
     private mutating func confine() {
         state.stackState.confine(to: view.stackListing.rows, preferring: context.currentStackID)
         state.noteState.confine(to: view.noteListing.ids)
@@ -419,13 +475,13 @@ struct PaletteUpdate {
         state.overlayQuery = ""
         state.overlayHighlight = overlay == .templates
             ? context.templates.firstIndex(where: { $0.id == context.activeTemplate.id }) ?? 0 : 0
-        state.focus(.overlay)
+        state.requestFocus(.overlay)
     }
     private mutating func closeOverlay() {
         guard state.overlay != nil else { return }
         state.interaction = .browsing
         state.overlayQuery = ""
-        state.focus(.search)
+        state.requestFocus(.search)
     }
 
     private mutating func handle(_ key: PaletteKey, textHasSelection: Bool) -> Bool {
@@ -467,46 +523,42 @@ struct PaletteUpdate {
         switch key {
         case .up, .down:
             let offset = key == .up ? -1 : 1
-            if state.level == .stacks { state.stackState.move(by: offset, in: view.stackListing.rows) }
-            else { state.noteState.move(by: offset, in: view.noteListing.ids) }
+            if state.focusedPane == .stacks {
+                state.stackState.move(by: offset, in: view.stackListing.rows)
+                state.noteState.select(view.noteListing.ids.last)
+            } else {
+                state.noteState.move(by: offset, in: view.noteListing.ids)
+            }
         case .escape:
             if !state.query.isEmpty { update(.query("")) }
-            else if state.level != .stacks { navigate(.stacks) }
             else { update(.close) }
         case .command("k"): openOverlay(.actions)
         case .command("p"): openOverlay(.templates)
         case let .commandDigit(digit):
             let index = digit - 1
-            if state.level == .stacks, view.stackListing.stacks.indices.contains(index) {
+            if view.stackListing.stacks.indices.contains(index) {
                 update(.perform(.switchToStack(view.stackListing.stacks[index].id)))
-            } else if view.noteListing.ids.indices.contains(index) {
-                state.noteState.select(view.noteListing.ids[index])
             }
         case .activate, .commandActivate:
-            if state.level == .stacks {
+            if state.focusedPane == .stacks {
                 switch state.stackState.highlight {
                 case let .stack(id): update(.perform(.switchToStack(id)))
                 case let .create(name): update(.perform(.createStack(name)))
                 case nil: effects.append(.beep)
                 }
-            } else if key == .commandActivate, let id = state.level.stackID {
+            } else if key == .commandActivate, let id = view.shownStack?.id {
                 update(.perform(.switchToStack(id)))
             } else if let id = state.noteState.highlight { chooseNote(id, editing: true) }
-        case .tab, .right:
-            guard key == .tab || state.query.isEmpty else { return false }
-            guard state.level == .stacks, let id = state.stackState.selectedStackID else { return false }
-            navigate(.notes(id))
-        case .backTab, .left, .delete:
-            guard key == .backTab || state.query.isEmpty else { return false }
-            guard state.level != .stacks else { return false }
-            navigate(.stacks)
+        case .tab, .backTab, .left, .right:
+            guard key == .tab || key == .backTab || state.query.isEmpty else { return false }
+            toggleFocus()
         default:
             if key == .command("c"), textHasSelection { return false }
             if key == .commandDelete, !state.query.isEmpty { return false }
             let shortcut: String
             switch key {
             case .command("c"): shortcut = "⌘C"
-            case .shiftCommand("c"): shortcut = state.level == .stacks ? "⌘C" : "⇧⌘C"
+            case .shiftCommand("c"): shortcut = state.focusedPane == .stacks ? "⌘C" : "⇧⌘C"
             case .command("z"): shortcut = "⌘Z"
             case .command("r"): shortcut = "⌘R"
             case .command("n"): shortcut = "⌘N"

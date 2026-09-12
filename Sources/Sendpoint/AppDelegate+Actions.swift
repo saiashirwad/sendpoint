@@ -124,11 +124,11 @@ extension AppDelegate {
 
     private func showStack() {
         guard let store else { NSSound.beep(); return }
-        presentPalette(at: .notes(store.currentStackID))
+        presentPalette(focus: .notes, highlighting: store.currentStackID)
     }
 
     private func showQuickSwitcher() {
-        presentPalette(at: .stacks)
+        presentPalette(focus: .stacks)
     }
 
     private func cycleStacks(reverse: Bool) {
@@ -146,9 +146,9 @@ extension AppDelegate {
         switcher.step(-1)
     }
 
-    func presentPalette(at level: PaletteLevel, highlighting stackID: UUID? = nil) {
+    func presentPalette(focus: PalettePane, highlighting stackID: UUID? = nil) {
         guard store != nil, let palette else { NSSound.beep(); return }
-        palette.show(at: level, highlighting: stackID)
+        palette.show(focus: focus, highlighting: stackID)
     }
 
     func buildPalette(store: StackStore) {
