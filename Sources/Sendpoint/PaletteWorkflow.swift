@@ -144,6 +144,13 @@ struct PaletteProjection {
         NoteListing(notes: shownStack?.notes ?? [], query: state.focusedPane == .notes ? state.query : "")
     }
 
+    var searchPlaceholder: String {
+        switch state.focusedPane {
+        case .stacks: "Find or create a stack"
+        case .notes: shownStack.map { "Search notes in \($0.name)" } ?? "Search notes"
+        }
+    }
+
     var highlightedNoteID: UUID? { state.noteState.highlight }
 
     var activeTemplate: Template { context.activeTemplate }

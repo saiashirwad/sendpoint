@@ -19,6 +19,10 @@ struct StackPaletteView: View {
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let undo = model.projection.facts.undo {
+                Divider()
+                undoBanner(undo)
+            }
             if let message = model.state.problem {
                 HStack {
                     Text(message).foregroundStyle(.red)
@@ -74,7 +78,7 @@ struct StackPaletteView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            TextField(searchPlaceholder, text: $model.query)
+            TextField(model.projection.searchPlaceholder, text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .focused($focus, equals: .search)
@@ -98,13 +102,6 @@ struct StackPaletteView: View {
         .frame(height: 52)
     }
 
-    private var searchPlaceholder: String {
-        switch model.state.focusedPane {
-        case .stacks: return "Switch to or create a stack"
-        case .notes: return "Search notes"
-        }
-    }
-
     private var templateButton: some View {
         Button {
             model.send(.toggleOverlay(.templates))
@@ -112,7 +109,7 @@ struct StackPaletteView: View {
             HStack(spacing: 5) {
                 Image(systemName: "text.quote")
                     .font(.system(size: 10, weight: .semibold))
-                Text(model.projection.activeTemplate.name)
+                Text("Copy as: \(model.projection.activeTemplate.name)")
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -146,15 +143,12 @@ struct StackPaletteView: View {
     /// A sidebar that stays readable at the minimum width and stops growing
     /// once it is wide enough.
     private func sidebarWidth(for totalWidth: CGFloat) -> CGFloat {
-        min(max(totalWidth * 0.3, 220), 320)
+        min(max(totalWidth * 0.25, 220), 260)
     }
 
     private var stackColumn: some View {
         let listing = model.projection.stackListing
         return VStack(spacing: 0) {
-            if let undo = model.projection.facts.undo {
-                undoBanner(undo)
-            }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
@@ -216,26 +210,28 @@ struct StackPaletteView: View {
     }
 
     private func undoBanner(_ undo: StackUndoFacts) -> some View {
-        Button {
-            model.send(.perform(.undoClear))
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(undo.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Keycap("⌘Z")
+        HStack(spacing: 8) {
+            Text(undo.notification)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(undo.notification)
+            Spacer(minLength: 8)
+            Button {
+                model.send(.perform(.undoClear))
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Undo")
+                        .font(.system(size: 12, weight: .medium))
+                    Keycap("⌘Z")
+                }
             }
-            .foregroundStyle(Color.primary)
-            .padding(.horizontal, 16)
-            .frame(height: 34)
-            .background(PaletteTint.hover)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .help("Put the cleared notes back")
         }
-        .buttonStyle(.plain)
-        .help("Put the cleared notes back")
+        .padding(.horizontal, 16)
+        .frame(height: 34)
+        .background(PaletteTint.hover)
     }
 
     private func stackRow(_ stack: StackItemFacts, position: Int) -> some View {
@@ -251,7 +247,6 @@ struct StackPaletteView: View {
             if isRenaming {
                 StackRow(
                     noteCount: stack.noteCount,
-                    isHighlighted: isHighlighted,
                     position: position,
                     showsDigit: false
                 ) {
@@ -262,7 +257,6 @@ struct StackPaletteView: View {
                     name: stack.name,
                     noteCount: stack.noteCount,
                     isCurrent: stack.isCurrent,
-                    isHighlighted: isHighlighted,
                     position: position,
                     showsDigit: true
                 )
@@ -533,11 +527,11 @@ struct StackPaletteView: View {
         switch model.state.focusedPane {
         case .stacks:
             let count = model.projection.facts.stacks.count
-            return "\(count) stack\(count == 1 ? "" : "s") · ↑↓ preview · ⇥ notes · ↩ switch · esc close"
+            return "\(count) stack\(count == 1 ? "" : "s") · ↑↓ preview · ⇥ notes"
         case .notes:
             let count = model.projection.shownStack?.notes.count ?? 0
             let name = model.projection.shownStack?.name ?? ""
-            return "\(name) · \(noteCountLabel(count)) · ↑↓ move · ⇥ stacks · ↩ edit"
+            return "\(name) · \(noteCountLabel(count)) · ↑↓ select · ⇥ stacks"
         }
     }
 
@@ -680,8 +674,8 @@ enum PaletteTint {
     }
     /// Highlighted row or menu item.
     static let selection = Color.primary.opacity(0.10)
-    /// Highlighted body: a little quieter, so a tall block of text does not glare.
-    static let noteSelection = Color.primary.opacity(0.06)
+    /// The other pane retains its selection without the keyboard focus marker.
+    static let inactiveSelection = Color.primary.opacity(0.04)
     /// Pointer resting on a row.
     static let hover = Color.primary.opacity(0.04)
     /// Ring around the note being edited.
@@ -691,9 +685,8 @@ enum PaletteTint {
 }
 
 /// A palette row: flat and full-bleed, washed edge to edge when highlighted.
-/// The unfocused pane keeps its highlight at half strength, the way a Finder
-/// column greys when it is not the active one. One click highlights it, a
-/// second click on the same row runs it.
+/// The unfocused pane keeps a quiet selection. A leading rule identifies
+/// keyboard focus. One click highlights the row; a double click activates it.
 private struct PaletteRow<Content: View>: View {
     let isHighlighted: Bool
     var isDimmed = false
@@ -709,6 +702,11 @@ private struct PaletteRow<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .background(highlightColor)
+            .overlay(alignment: .leading) {
+                if isHighlighted && !isDimmed {
+                    Rectangle().fill(Color.primary.opacity(0.65)).frame(width: 3)
+                }
+            }
             .onHover { hovering = $0 }
             .onTapGesture(count: 2) { onActivate() }
             .onTapGesture { onSelect() }
@@ -716,7 +714,7 @@ private struct PaletteRow<Content: View>: View {
 
     private var highlightColor: Color {
         guard isHighlighted else { return hovering ? PaletteTint.hover : .clear }
-        return isDimmed ? PaletteTint.selection.opacity(0.5) : PaletteTint.selection
+        return isDimmed ? PaletteTint.inactiveSelection : PaletteTint.selection
     }
 }
 
@@ -741,10 +739,6 @@ private struct NoteCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !quote.isEmpty {
-                QuotedPassage(text: quote)
-            }
-
             // Only the note being edited is a text field. Every other note is
             // plain text, so ↑↓ never re-measures a column of editors; ↩ or
             // a click on the text swaps the editor in.
@@ -775,12 +769,20 @@ private struct NoteCard: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onEdit() }
             }
+            if !quote.isEmpty {
+                QuotedPassage(text: quote, isExpanded: isEditing)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         // Notes sit on one continuous surface; the highlighted one simply
         // lifts to a soft grey.
         .background(highlightColor)
+        .overlay(alignment: .leading) {
+            if isHighlighted && !isDimmed {
+                Rectangle().fill(Color.primary.opacity(0.65)).frame(width: 3)
+            }
+        }
         .overlay(
             Rectangle()
                 .strokeBorder(PaletteTint.editing, lineWidth: 1)
@@ -795,7 +797,7 @@ private struct NoteCard: View {
 
     private var highlightColor: Color {
         guard isHighlighted else { return hovering ? PaletteTint.hover : .clear }
-        return isDimmed ? PaletteTint.noteSelection.opacity(0.5) : PaletteTint.noteSelection
+        return isDimmed ? PaletteTint.inactiveSelection : PaletteTint.selection
     }
 }
 
@@ -803,12 +805,13 @@ private struct NoteCard: View {
 /// and the text a step softer than the note it belongs to.
 private struct QuotedPassage: View {
     let text: String
+    let isExpanded: Bool
 
     var body: some View {
         Text(text)
-            .font(.body)
+            .font(.callout)
             .lineSpacing(2)
-            .lineLimit(6)
+            .lineLimit(isExpanded ? nil : 3)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .textSelection(.enabled)

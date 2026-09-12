@@ -326,7 +326,6 @@ struct StackSwitcherView: View {
                         name: row.name,
                         noteCount: row.noteCount,
                         isCurrent: row.isCurrent,
-                        isHighlighted: lit,
                         position: position,
                         showsDigit: true
                     )

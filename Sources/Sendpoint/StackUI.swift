@@ -28,6 +28,10 @@ nonisolated struct StackUndoFacts: Equatable {
     let noteCount: Int
     let isCurrentStack: Bool
 
+    var notification: String {
+        "Cleared \(noteCountLabel(noteCount)) in \(stackName)"
+    }
+
     var title: String {
         let count = "\(noteCount)"
         return isCurrentStack

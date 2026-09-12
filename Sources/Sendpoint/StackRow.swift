@@ -4,7 +4,6 @@ import SwiftUI
 /// and the stack switcher. Callers supply the surrounding chrome.
 struct StackRow<Name: View>: View {
     let noteCount: Int
-    let isHighlighted: Bool
     let position: Int
     let showsDigit: Bool
     @ViewBuilder let name: () -> Name
@@ -16,16 +15,12 @@ struct StackRow<Name: View>: View {
             Spacer(minLength: 8)
 
             if showsDigit, position < 9 {
-                Text("⌘\(position + 1)")
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .opacity(isHighlighted ? 1 : 0.7)
+                Keycap("⌘\(position + 1)")
             }
 
             Text("\(noteCount)")
                 .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(noteCount == 0
-                    ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.secondary))
+                .foregroundStyle(.secondary)
                 .frame(minWidth: 18, alignment: .trailing)
                 .accessibilityLabel(countLabel)
         }
@@ -41,13 +36,11 @@ extension StackRow where Name == StackRowName {
         name: String,
         noteCount: Int,
         isCurrent: Bool,
-        isHighlighted: Bool,
         position: Int,
         showsDigit: Bool
     ) {
         self.init(
             noteCount: noteCount,
-            isHighlighted: isHighlighted,
             position: position,
             showsDigit: showsDigit
         ) {

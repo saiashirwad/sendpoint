@@ -54,7 +54,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     static func makePanel() -> CapturePanel {
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 920, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 520),
             styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false

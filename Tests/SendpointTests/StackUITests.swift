@@ -43,6 +43,7 @@ final class StackUITests: XCTestCase {
 
         XCTAssertEqual(facts.undo?.stackID, firstID)
         XCTAssertEqual(facts.undo?.title, "Undo Clear in Reading (2)")
+        XCTAssertEqual(facts.undo?.notification, "Cleared 2 notes in Reading")
     }
 
     func testNameDraftTrimsAndRejectsBlankOrFoldedDuplicates() {

@@ -135,6 +135,23 @@ final class PaletteWorkflowTests: XCTestCase {
         }
     }
 
+    func testSearchScopeAndReturnActionFollowThePreviewedStackAndPane() {
+        var harness = makeHarness()
+        harness.send(.open(.stacks, highlighting: secondStackID))
+        var projection = PaletteProjection(state: harness.state, context: harness.context)
+        XCTAssertEqual(projection.searchPlaceholder, "Find or create a stack")
+        XCTAssertEqual(projection.primaryAction?.action, .switchToStack(secondStackID))
+
+        harness.send(.focusPane(.notes))
+        projection = PaletteProjection(state: harness.state, context: harness.context)
+        XCTAssertEqual(projection.searchPlaceholder, "Search notes in Writing")
+        XCTAssertEqual(projection.primaryAction?.action, .editNote(fourthNoteID))
+        harness.send(.query("One"))
+        projection = PaletteProjection(state: harness.state, context: harness.context)
+        XCTAssertTrue(projection.noteListing.notes.isEmpty, "Search must stay in the named stack")
+        XCTAssertNil(projection.primaryAction, "An empty result must not advertise Return to edit")
+    }
+
     // MARK: - Harness
 
     private func makeHarness() -> Harness {
