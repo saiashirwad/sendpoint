@@ -17,6 +17,11 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private let surfaces: SurfaceCoordinator
     private var keyMonitor: Any?
     private var lifecycle: Lifecycle = .active
+    var onCycleClosed: () -> Void = {}
+
+    var canBeginCycle: Bool {
+        lifecycle == .active && !model.state.isBusy && model.state.inlineEdit == nil
+    }
 
     init(
         store: StackStore,
@@ -46,6 +51,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
         panel.delegate = self
         installKeyMonitor()
+        surfaces.register(.switcher, transitions: .init(
+            show: { [weak self] in self?.presentCycle() },
+            hide: { [weak self] in self?.hideCycle() }
+        ))
         surfaces.register(.palette, transitions: .init(
             show: { [weak self] in self?.present() },
             hide: { [weak self] in self?.hide() }
@@ -55,7 +64,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     static func makePanel() -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 520),
-            styleMask: [.borderless, .resizable],
+            styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -74,11 +83,46 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     func show(focus: PalettePane, highlighting stackID: UUID? = nil) {
         guard lifecycle == .active else { return }
+        if model.state.presentation == .cycling { closeCycle() }
         model.send(.open(focus, highlighting: stackID))
         surfaces.present(.palette)
     }
 
+    func previewStack(_ id: UUID) {
+        guard canBeginCycle else { return }
+        if !surfaces.visible.contains(.switcher) { surfaces.dismiss(.palette) }
+        model.send(.previewStack(id))
+        surfaces.present(.switcher)
+    }
+
+    func closeCycle() { surfaces.dismiss(.switcher) }
+
+    private func presentCycle() {
+        if !panel.isVisible {
+            if !panel.setFrameUsingName(Self.frameAutosaveName) { placeNearTop() }
+        }
+        panel.ignoresMouseEvents = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.makeFirstResponder(nil)
+        panel.resignKey()
+        panel.orderFrontRegardless()
+        panel.contentView?.layoutSubtreeIfNeeded()
+        panel.displayIfNeeded()
+    }
+
+    private func hideCycle() {
+        guard lifecycle == .active else { return }
+        model.send(.close)
+        panel.orderOut(nil)
+        panel.ignoresMouseEvents = false
+        onCycleClosed()
+    }
+
     private func present() {
+        panel.ignoresMouseEvents = false
+        panel.level = .normal
+        panel.collectionBehavior = []
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()
@@ -93,6 +137,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     func teardown() {
         guard lifecycle == .active else { return }
         model.send(.teardown)
+        surfaces.unregister(.switcher)
         surfaces.unregister(.palette)
         releaseWindow()
     }
@@ -124,6 +169,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard lifecycle == .active else { return }
+        guard model.state.presentation != .cycling else { return }
         surfaces.resignedKey(.palette)
     }
 
@@ -134,7 +180,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     /// key the model declines falls through to the field.
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.lifecycle == .active, event.window === self.panel,
+            guard let self, self.lifecycle == .active, self.model.state.presentation != .cycling, event.window === self.panel,
                   let key = PaletteKey(event: event)
             else { return event }
             let selection = (self.panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0

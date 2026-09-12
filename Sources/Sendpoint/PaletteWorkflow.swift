@@ -35,6 +35,7 @@ enum PaletteOverlay { case actions, templates }
 
 enum PaletteEvent {
     case open(PalettePane, highlighting: UUID?), close, teardown, documentChanged
+    case previewStack(UUID)
     case query(String), chooseStack(UUID), chooseCreate(String), chooseNote(UUID), focusPane(PalettePane)
     case perform(PaletteAction), key(PaletteKey, textHasSelection: Bool)
     case editText(String), commitEdit, cancelEdit, noteFocus(UUID?)
@@ -61,9 +62,12 @@ enum PaletteInteraction {
     case failed(PalettePending, String, retryable: Bool)
 }
 
+enum PalettePresentation { case browsing, cycling }
+
 struct PaletteWorkflow {
     enum Lifecycle { case closed, open, tornDown }
     var lifecycle: Lifecycle = .closed
+    var presentation: PalettePresentation = .browsing
     var focusedPane: PalettePane = .stacks
     var query = ""
     var stackState = QuickSwitchState()
@@ -220,13 +224,28 @@ struct PaletteUpdate {
             state.lifecycle = .tornDown
             effects.append(.close)
             return true
+        case let .previewStack(id):
+            guard !state.isBusy, state.inlineEdit == nil, view.facts.stack(id: id) != nil else { return true }
+            state.lifecycle = .open
+            state.presentation = .cycling
+            state.interaction = .browsing
+            state.flash = nil
+            open(.stacks, highlighting: id)
+            return true
         case let .open(pane, stackID):
             if state.lifecycle == .open, finishEdit(before: event) { return true }
             state.lifecycle = .open
+            state.presentation = .browsing
             state.interaction = .browsing
             open(pane, highlighting: stackID)
             return true
         default: guard state.lifecycle == .open else { return true }
+        }
+        if state.presentation == .cycling {
+            switch event {
+            case .close, .documentChanged: break
+            default: return true
+            }
         }
         switch event {
         case .documentChanged:
@@ -309,7 +328,7 @@ struct PaletteUpdate {
             state.flash = (text, state.nextFlash)
         case let .clearFlash(generation):
             if state.flash?.generation == generation { state.flash = nil }
-        case .open, .teardown: break
+        case .open, .previewStack, .teardown: break
         }
         return true
     }

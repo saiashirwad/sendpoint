@@ -60,18 +60,11 @@ final class CapturePanelTests: XCTestCase {
         )
     }
 
-    func testPaletteAndSwitcherFactoriesKeepWindowInvariants() {
+    func testPaletteFactoryKeepsWindowInvariants() {
         let palette = StackPaletteWindowController.makePanel()
-        XCTAssertTrue(palette.styleMask.contains([.borderless, .resizable]))
+        XCTAssertTrue(palette.styleMask.contains([.borderless, .resizable, .nonactivatingPanel]))
         XCTAssertTrue(palette.canBecomeKey)
         XCTAssertFalse(palette.ignoresMouseEvents)
-
-        let switcher = StackSwitcherController.makePanel(model: StackSwitcherModel())
-        XCTAssertTrue(switcher.styleMask.contains([.borderless, .nonactivatingPanel]))
-        XCTAssertEqual(switcher.level, .floating)
-        XCTAssertFalse(switcher.canBecomeKey)
-        XCTAssertTrue(switcher.ignoresMouseEvents)
-        XCTAssertTrue(switcher.collectionBehavior.contains([.canJoinAllSpaces, .fullScreenAuxiliary]))
     }
 
     func testSettingsAndSetupFactoriesKeepWindowInvariants() {

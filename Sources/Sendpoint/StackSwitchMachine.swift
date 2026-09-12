@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the switcher walks. The strip always shows the listed order, so each
+/// What the switcher walks. The palette always shows the listed order, so each
 /// stack keeps its row and can be recognised by place. Recency decides only
 /// where a cycle starts: the first press lights the stack used just before
 /// this one, wherever it sits; further presses move down the fixed list.
@@ -26,8 +26,8 @@ nonisolated enum StackSwitchEvent: Equatable {
 }
 
 nonisolated enum StackSwitchCommand: Equatable {
-    case showOverlay
-    case hideOverlay
+    case showPreview
+    case hidePreview
     case switchTo(UUID)
     case openPalette(highlighting: UUID)
     case startLinger
@@ -36,23 +36,23 @@ nonisolated enum StackSwitchCommand: Equatable {
 
 /// ⌘Tab for stacks, as a pure transition table. The owner supplies the
 /// current orders with each event and runs the returned commands; the
-/// machine holds the frozen list the overlay draws and which row is lit.
+/// machine holds the frozen list the palette draws and which row is lit.
 nonisolated struct StackSwitchMachine: Equatable {
     enum State: Equatable {
         case idle
         /// Modifiers held; each press moves the highlight.
         case cycling
-        /// A switch was committed and the overlay shows the result briefly.
+        /// A switch was committed and the palette shows the result briefly.
         case lingering
         case tornDown
     }
 
     private(set) var state: State = .idle
-    /// The stacks the overlay lists, in the fixed listed order.
+    /// The stacks the palette lists, in the fixed listed order.
     private(set) var order: [UUID] = []
     private(set) var highlight: UUID?
 
-    var isShowingOverlay: Bool { state == .cycling || state == .lingering }
+    var isShowingPreview: Bool { state == .cycling || state == .lingering }
 
     mutating func handle(_ event: StackSwitchEvent, orders: StackSwitchOrders) -> [StackSwitchCommand] {
         guard state != .tornDown else { return [] }
@@ -61,7 +61,7 @@ nonisolated struct StackSwitchMachine: Equatable {
             state = .tornDown
             order = []
             highlight = nil
-            return [.hideOverlay]
+            return [.hidePreview]
 
         case let .press(reverse):
             switch state {
@@ -72,14 +72,14 @@ nonisolated struct StackSwitchMachine: Equatable {
                 let wasLingering = state == .lingering
                 order = orders.listed
                 // Forward starts at the stack used last; backwards starts one
-                // row above the current one, so ⇧ reads as "up" on the strip.
+                // row above the current one, so ⇧ reads as "up" on the palette.
                 if reverse {
                     highlight = order[(current - 1 + order.count) % order.count]
                 } else {
                     highlight = orders.recent[1]
                 }
                 state = .cycling
-                return wasLingering ? [] : [.showOverlay]
+                return wasLingering ? [] : [.showPreview]
             case .cycling:
                 move(by: reverse ? -1 : 1)
                 return []
@@ -89,16 +89,15 @@ nonisolated struct StackSwitchMachine: Equatable {
 
         case .release:
             guard state == .cycling, let highlight else { return [] }
-            state = .lingering
-            return [.switchTo(highlight), .startLinger]
+            return finish(with: [.switchTo(highlight), .hidePreview])
 
         case .escape:
-            guard state == .cycling else { return [] }
-            return finish(with: [.hideOverlay])
+            guard isShowingPreview else { return [] }
+            return finish(with: [.hidePreview])
 
         case .pin:
             guard state == .cycling, let highlight else { return [] }
-            return finish(with: [.hideOverlay, .openPalette(highlighting: highlight)])
+            return finish(with: [.hidePreview, .openPalette(highlighting: highlight)])
 
         case let .step(offset):
             guard state != .cycling else { return [] }
@@ -111,11 +110,11 @@ nonisolated struct StackSwitchMachine: Equatable {
             order = listed
             highlight = target
             state = .lingering
-            return (wasVisible ? [] : [.showOverlay]) + [.switchTo(target), .startLinger]
+            return (wasVisible ? [] : [.showPreview]) + [.switchTo(target), .startLinger]
 
         case .ordersChanged:
             guard state == .cycling else { return [] }
-            guard orders.listed.count > 1 else { return finish(with: [.hideOverlay]) }
+            guard orders.listed.count > 1 else { return finish(with: [.hidePreview]) }
             let previousIndex = highlight.flatMap { order.firstIndex(of: $0) } ?? 0
             order = orders.listed
             if let highlight, order.contains(highlight) { return [] }
@@ -124,7 +123,7 @@ nonisolated struct StackSwitchMachine: Equatable {
 
         case .lingerElapsed:
             guard state == .lingering else { return [] }
-            return finish(with: [.hideOverlay])
+            return finish(with: [.hidePreview])
         }
     }
 

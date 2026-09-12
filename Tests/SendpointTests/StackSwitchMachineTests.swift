@@ -14,16 +14,16 @@ final class StackSwitchMachineTests: XCTestCase {
 
     func testTapAndReleaseSwitchesToTheStackUsedLast() {
         var machine = StackSwitchMachine()
-        XCTAssertEqual(machine.handle(.press(reverse: false), orders: orders), [.showOverlay])
+        XCTAssertEqual(machine.handle(.press(reverse: false), orders: orders), [.showPreview])
         XCTAssertEqual(machine.state, .cycling)
-        XCTAssertEqual(machine.order, [c, a, b], "the strip keeps the listed order so rows stay put")
+        XCTAssertEqual(machine.order, [c, a, b], "the palette keeps the listed order so rows stay put")
         XCTAssertEqual(machine.highlight, b, "the first press lights the stack used last")
 
-        XCTAssertEqual(machine.handle(.release, orders: orders), [.switchTo(b), .startLinger])
-        XCTAssertEqual(machine.state, .lingering)
-        XCTAssertEqual(machine.highlight, b, "the chosen row stays lit while the overlay lingers")
+        XCTAssertEqual(machine.handle(.release, orders: orders), [.switchTo(b), .hidePreview])
+        XCTAssertEqual(machine.state, .idle)
+        XCTAssertNil(machine.highlight)
         XCTAssertEqual(machine.handle(.release, orders: orders), [], "a second release is inert")
-        XCTAssertEqual(machine.handle(.lingerElapsed, orders: orders), [.hideOverlay])
+        XCTAssertEqual(machine.handle(.lingerElapsed, orders: orders), [])
         XCTAssertEqual(machine.state, .idle)
         XCTAssertNil(machine.highlight)
     }
@@ -38,12 +38,12 @@ final class StackSwitchMachineTests: XCTestCase {
         XCTAssertEqual(machine.highlight, a, "the current stack is a row like any other")
         _ = machine.handle(.press(reverse: true), orders: orders)
         XCTAssertEqual(machine.highlight, c)
-        XCTAssertEqual(machine.handle(.release, orders: orders), [.switchTo(c), .startLinger])
+        XCTAssertEqual(machine.handle(.release, orders: orders), [.switchTo(c), .hidePreview])
     }
 
     func testReversePressFromIdleLightsTheRowAboveTheCurrentStack() {
         var machine = StackSwitchMachine()
-        XCTAssertEqual(machine.handle(.press(reverse: true), orders: orders), [.showOverlay])
+        XCTAssertEqual(machine.handle(.press(reverse: true), orders: orders), [.showPreview])
         XCTAssertEqual(machine.highlight, c, "a is current in row two, so ⇧ lights row one")
 
         // Current at the top wraps to the bottom.
@@ -52,14 +52,14 @@ final class StackSwitchMachineTests: XCTestCase {
         XCTAssertEqual(wrapped.highlight, b)
     }
 
-    func testPressWhileLingeringStartsANewCycleFromTheNewOrder() {
+    func testNextCycleStartsFromTheNewCurrentStack() {
         var machine = StackSwitchMachine()
         _ = machine.handle(.press(reverse: false), orders: orders)
         _ = machine.handle(.release, orders: orders)
         // The switch to b committed: b is current, a is what was used before.
         let after = StackSwitchOrders(recent: [b, a, c], listed: [c, a, b])
-        XCTAssertEqual(machine.handle(.press(reverse: false), orders: after), [],
-            "the overlay is already up, so no second show")
+        XCTAssertEqual(machine.handle(.press(reverse: false), orders: after), [.showPreview],
+            "each hold opens a new preview")
         XCTAssertEqual(machine.state, .cycling)
         XCTAssertEqual(machine.order, [c, a, b], "rows do not move between openings")
         XCTAssertEqual(machine.highlight, a, "a second tap toggles straight back")
@@ -68,7 +68,7 @@ final class StackSwitchMachineTests: XCTestCase {
     func testEscapeCancelsWithoutSwitching() {
         var machine = StackSwitchMachine()
         _ = machine.handle(.press(reverse: false), orders: orders)
-        XCTAssertEqual(machine.handle(.escape, orders: orders), [.hideOverlay])
+        XCTAssertEqual(machine.handle(.escape, orders: orders), [.hidePreview])
         XCTAssertEqual(machine.state, .idle)
         XCTAssertEqual(machine.handle(.release, orders: orders), [], "the release that follows does nothing")
         XCTAssertEqual(machine.handle(.escape, orders: orders), [], "escape outside a cycle is inert")
@@ -78,7 +78,7 @@ final class StackSwitchMachineTests: XCTestCase {
         var machine = StackSwitchMachine()
         _ = machine.handle(.press(reverse: false), orders: orders)
         _ = machine.handle(.press(reverse: false), orders: orders)
-        XCTAssertEqual(machine.handle(.pin, orders: orders), [.hideOverlay, .openPalette(highlighting: c)])
+        XCTAssertEqual(machine.handle(.pin, orders: orders), [.hidePreview, .openPalette(highlighting: c)])
         XCTAssertEqual(machine.state, .idle)
         XCTAssertEqual(machine.handle(.release, orders: orders), [])
         XCTAssertEqual(machine.handle(.pin, orders: orders), [], "pin outside a cycle is inert")
@@ -86,18 +86,18 @@ final class StackSwitchMachineTests: XCTestCase {
 
     func testStepWalksTheListedOrderAndSwitchesAtOnce() {
         var machine = StackSwitchMachine()
-        XCTAssertEqual(machine.handle(.step(1), orders: orders), [.showOverlay, .switchTo(b), .startLinger])
+        XCTAssertEqual(machine.handle(.step(1), orders: orders), [.showPreview, .switchTo(b), .startLinger])
         XCTAssertEqual(machine.state, .lingering)
-        XCTAssertEqual(machine.order, [c, a, b], "the overlay shows the listed order for a step")
+        XCTAssertEqual(machine.order, [c, a, b], "the palette shows the listed order for a step")
         XCTAssertEqual(machine.highlight, b)
 
-        // b committed. Stepping again while the overlay lingers keeps it up.
+        // b committed. Stepping again while the preview lingers keeps it up.
         let after = StackSwitchOrders(recent: [b, a, c], listed: [c, a, b])
         XCTAssertEqual(machine.handle(.step(1), orders: after), [.switchTo(c), .startLinger])
         XCTAssertEqual(machine.highlight, c)
 
         var backwards = StackSwitchMachine()
-        XCTAssertEqual(backwards.handle(.step(-1), orders: orders), [.showOverlay, .switchTo(c), .startLinger])
+        XCTAssertEqual(backwards.handle(.step(-1), orders: orders), [.showPreview, .switchTo(c), .startLinger])
     }
 
     func testStepIsIgnoredWhileCycling() {
@@ -137,14 +137,13 @@ final class StackSwitchMachineTests: XCTestCase {
 
         // Only one stack left: nothing to choose between.
         XCTAssertEqual(machine.handle(.ordersChanged,
-            orders: StackSwitchOrders(recent: [a], listed: [a])), [.hideOverlay])
+            orders: StackSwitchOrders(recent: [a], listed: [a])), [.hidePreview])
         XCTAssertEqual(machine.state, .idle)
     }
 
     func testOrdersChangingWhileLingeringLeavesTheConfirmationAlone() {
         var machine = StackSwitchMachine()
-        _ = machine.handle(.press(reverse: false), orders: orders)
-        _ = machine.handle(.release, orders: orders)
+        _ = machine.handle(.step(1), orders: orders)
         let after = StackSwitchOrders(recent: [b, a, c], listed: [c, a, b])
         XCTAssertEqual(machine.handle(.ordersChanged, orders: after), [])
         XCTAssertEqual(machine.order, [c, a, b], "the frozen list does not jump as the switch commits")
@@ -154,7 +153,7 @@ final class StackSwitchMachineTests: XCTestCase {
     func testTeardownHidesAndIgnoresEverythingAfter() {
         var machine = StackSwitchMachine()
         _ = machine.handle(.press(reverse: false), orders: orders)
-        XCTAssertEqual(machine.handle(.teardown, orders: orders), [.hideOverlay])
+        XCTAssertEqual(machine.handle(.teardown, orders: orders), [.hidePreview])
         XCTAssertEqual(machine.state, .tornDown)
         XCTAssertEqual(machine.handle(.press(reverse: false), orders: orders), [])
         XCTAssertEqual(machine.handle(.release, orders: orders), [])

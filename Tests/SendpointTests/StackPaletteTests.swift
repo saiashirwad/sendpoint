@@ -4,6 +4,37 @@ import XCTest
 @testable import Sendpoint
 
 final class StackPaletteTests: XCTestCase {
+    @MainActor
+    func testCyclingPreviewUpdatesBothPanesWithoutMutatingTheCurrentStack() {
+        var workflow = PaletteWorkflow()
+        let first = Stack(name: "First", notes: [Note(subject: .standalone, body: "First note")])
+        let second = Stack(name: "Second", notes: [Note(subject: .standalone, body: "Second note")])
+        let template = Template.builtIns[0]
+        let context = PaletteContext(stacks: [first, second], currentStackID: first.id,
+            lastCleared: nil, templates: [template], activeTemplate: template)
+        for stack in [second, first, second] {
+            var update = PaletteUpdate(state: workflow, context: context, operationID: UUID(), now: Date())
+            update.update(.previewStack(stack.id))
+            workflow = update.state
+            let view = PaletteProjection(state: workflow, context: context)
+            XCTAssertEqual(workflow.presentation, .cycling)
+            XCTAssertEqual(workflow.focusedPane, .stacks)
+            XCTAssertEqual(view.shownStack?.id, stack.id)
+            XCTAssertEqual(view.noteListing.notes.map(\.body), stack.notes.map(\.body))
+            XCTAssertEqual(context.currentStackID, first.id)
+            XCTAssertTrue(update.effects.isEmpty)
+        }
+        var update = PaletteUpdate(state: workflow, context: context, operationID: UUID(), now: Date())
+        update.update(.key(.activate, textHasSelection: false))
+        update.update(.chooseStack(first.id))
+        XCTAssertTrue(update.effects.isEmpty, "Preview cannot commit or edit through browsing controls")
+        XCTAssertEqual(update.state.stackState.selectedStackID, second.id)
+        update.update(.close)
+        update.update(.open(.notes, highlighting: first.id))
+        XCTAssertEqual(update.state.presentation, .browsing)
+        XCTAssertEqual(update.state.focusedPane, .notes)
+    }
+
     private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let otherStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
     private let firstNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!

@@ -26,7 +26,9 @@ extension AppDelegate {
                     store: store,
                     settings: shortcuts,
                     hotKeyCenter: environment.hotKeyCenter,
-                    surfaces: surfaces,
+                    showPreview: { [weak self] id in self?.palette?.previewStack(id) },
+                    hidePreview: { [weak self] in self?.palette?.closeCycle() },
+                    canBeginCycle: { [weak self] in self?.palette?.canBeginCycle == true },
                     onOpenPalette: { [weak self] id in
                         self?.presentPalette(focus: .stacks, highlighting: id)
                     },
@@ -34,6 +36,7 @@ extension AppDelegate {
                         self?.statusItemController.flash(stack.name)
                     }
                 )
+                palette?.onCycleClosed = { [weak self] in self?.switcher?.cancel() }
                 refreshStatusItem()
             } catch is CancellationError {
                 // App termination owns cancellation and teardown.

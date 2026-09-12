@@ -25,6 +25,20 @@ final class PaletteWorkflowTests: XCTestCase {
         ]
     }
 
+    func testCycleCannotReplaceAnInlineDraftOrReopenAfterTeardown() {
+        var harness = makeHarness()
+        harness.send(.open(.notes, highlighting: firstStackID))
+        harness.send(.key(.activate, textHasSelection: false))
+        let draft = harness.state.inlineEdit
+        XCTAssertNotNil(draft)
+        harness.send(.previewStack(secondStackID))
+        XCTAssertEqual(harness.state.presentation, .browsing)
+        XCTAssertEqual(harness.state.inlineEdit, draft)
+        harness.send(.teardown)
+        harness.send(.previewStack(secondStackID))
+        XCTAssertEqual(harness.state.lifecycle, .tornDown)
+    }
+
     func testTabAndArrowsToggleFocusAndClearTheQuery() {
         var harness = makeHarness()
         harness.send(.open(.stacks, highlighting: firstStackID))

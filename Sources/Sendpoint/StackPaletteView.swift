@@ -19,7 +19,7 @@ struct StackPaletteView: View {
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let undo = model.projection.facts.undo {
+            if model.state.presentation != .cycling, let undo = model.projection.facts.undo {
                 Divider()
                 undoBanner(undo)
             }
@@ -50,15 +50,16 @@ struct StackPaletteView: View {
             RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous)
                 .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
         )
+        .allowsHitTesting(model.state.presentation != .cycling)
         .ignoresSafeArea()
         .onAppear {
-            DispatchQueue.main.async { focus = .search }
+            DispatchQueue.main.async { focus = model.state.presentation == .cycling ? nil : .search }
         }
         .onChange(of: model.state.focusRequest.generation) {
             // The target field may be created by the same update; focus it
             // once it exists.
             let field = model.state.focusRequest.field
-            DispatchQueue.main.async { focus = field }
+            DispatchQueue.main.async { focus = model.state.presentation == .cycling ? nil : field }
         }
         .onChange(of: focus) { old, new in
             if case let .note(id) = new {
@@ -78,11 +79,16 @@ struct StackPaletteView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            TextField(model.projection.searchPlaceholder, text: $model.query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 17))
-                .focused($focus, equals: .search)
-                .disabled(model.state.inlineEdit != nil || model.state.overlay != nil)
+            if model.state.presentation == .cycling {
+                Text("Switch stack").font(.system(size: 17))
+                Spacer()
+            } else {
+                TextField(model.projection.searchPlaceholder, text: $model.query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 17))
+                    .focused($focus, equals: .search)
+                    .disabled(model.state.inlineEdit != nil || model.state.overlay != nil)
+            }
 
             if !model.query.isEmpty {
                 Button {
@@ -470,7 +476,24 @@ struct StackPaletteView: View {
 
     // MARK: - Footer
 
+    @ViewBuilder
     private var footer: some View {
+        if model.state.presentation == .cycling {
+            HStack {
+                Text("\(model.shortcuts.switchStackCombo.displayString) cycle · ⇧ reverse")
+                Spacer()
+                Text("Release modifiers to switch · esc cancel")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .frame(height: 36)
+        } else {
+            browsingFooter
+        }
+    }
+
+    private var browsingFooter: some View {
         HStack(spacing: 12) {
             if let flash = model.state.flash {
                 HStack(spacing: 5) {

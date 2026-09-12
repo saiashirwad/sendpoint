@@ -61,7 +61,7 @@ final class SurfaceCoordinator {
     func present(_ surface: Surface) {
         switch surface {
         case .captureEditor:
-            for hidden in [Surface.palette, .settings, .setup, .accessibilityHelper] {
+            for hidden in [Surface.palette, .switcher, .settings, .setup, .accessibilityHelper] {
                 dismiss(hidden)
             }
         case .switcher:
