@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The name, command-digit, and note-count row shared by the stack palette
-/// and the stack switcher. Callers supply the surrounding chrome.
+/// The name, command-digit, and note-count row in the stack palette.
+/// Callers supply the surrounding chrome.
 struct StackRow<Name: View>: View {
     let noteCount: Int
     let position: Int
