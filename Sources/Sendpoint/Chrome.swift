@@ -1,7 +1,13 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var settingsIconTileStrength: Double = 1
+    @Entry var emphasizedKeycaps = false
+}
+
 /// A small keyboard-key badge, for shortcut hints.
 struct Keycap: View {
+    @Environment(\.emphasizedKeycaps) private var emphasized
     let text: String
     var size: CGFloat = 10.5
 
@@ -24,7 +30,7 @@ struct Keycap: View {
                 RoundedRectangle(cornerRadius: size * 0.4, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             )
-            .foregroundStyle(.secondary)
+            .foregroundStyle(emphasized ? Color.primary : Color.secondary)
     }
 }
 
@@ -249,6 +255,7 @@ struct SettingsToggleRow: View {
 /// The monochrome glyph tile at the leading edge of a row: a faint fill,
 /// a hairline rim, and a glyph in the text colour.
 struct SettingsIcon: View {
+    @Environment(\.settingsIconTileStrength) private var tileStrength
     let name: String
 
     init(_ name: String) { self.name = name }
@@ -260,8 +267,8 @@ struct SettingsIcon: View {
             .font(.system(size: 14, weight: .medium))
             .foregroundStyle(Color.primary)
             .frame(width: SettingsMetrics.iconSize, height: SettingsMetrics.iconSize)
-            .background(shape.fill(Color.primary.opacity(0.07)))
-            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75))
+            .background(shape.fill(Color.primary.opacity(0.07 * tileStrength)))
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.12 * tileStrength), lineWidth: 0.75))
             .accessibilityHidden(true)
     }
 }

@@ -8,6 +8,9 @@ struct SetupView: View {
     @Bindable var permissionState: PermissionState
     let onShowAccessibilityHelper: () -> Void
     let onComplete: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    static let size = NSSize(width: 540, height: 460)
 
     init(
         settings: AppSettings,
@@ -26,85 +29,94 @@ struct SetupView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 0) {
-                VStack(spacing: 10) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 72, height: 72)
-                        .accessibilityHidden(true)
-                    Text("Set Up Sendpoint")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("Select text anywhere and use \(shortcuts.voiceCaptureCombo.displayString) to say what you think. Sendpoint keeps the passage and your words together in a stack you can copy out as one prompt.")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.bottom, 24)
-
-                PermissionCapabilityList(
-                    permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper
-                )
-
-                shortcutGuide
-
-                VStack(spacing: 14) {
-                    Label {
-                        Text("Selected text, notes, audio, transcription, and voice-model work stay on this Mac.")
-                    } icon: {
-                        Image(systemName: "lock.shield")
-                            .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 28) {
+                    header
+                    SettingsSection("Setup") {
+                        PermissionCapabilityList(
+                            permissionState: permissionState,
+                            onShowAccessibilityHelper: onShowAccessibilityHelper
+                        )
                     }
-                    .font(.callout)
+                    SettingsSection("Capture a note") {
+                        SettingsRowGroup {
+                            HowToRow(
+                                icon: "mic",
+                                lead: "Use your voice",
+                                sentence: voiceSettings.voiceMode.detail,
+                                keycap: shortcuts.voiceCaptureCombo.displayString
+                            )
+                            SettingsDivider()
+                            HowToRow(
+                                icon: "square.and.pencil",
+                                lead: "Type a note",
+                                sentence: "Write alongside the selected passage.",
+                                keycap: shortcuts.captureCombo.displayString
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 48)
+                .padding(.bottom, 24)
+            }
+            .scrollIndicators(.automatic)
+            Divider()
+            footer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.settingsIconTileStrength, 0.5)
+        .environment(\.emphasizedKeycaps, true)
+        .background(PaletteTint.surface(colorScheme))
+        .ignoresSafeArea()
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: MenuBarIcon.image(pointSize: 18))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Sendpoint")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private var footer: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Your notes stay on this Mac", systemImage: "lock")
+                    .font(.system(size: 11, weight: .medium))
+                Text(permissionState.isVoiceReady
+                     ? "Voice transcription runs locally, too."
+                     : "Complete setup above to continue.")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-
-                    Button("Start Using Sendpoint") {
-                        settings.completeSetup()
-                        onComplete()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!permissionState.isVoiceReady)
-                    .keyboardShortcut(.defaultAction)
-
-                    if !permissionState.isVoiceReady {
-                        Text("Finish the three steps above to start using Sendpoint.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.top, 24)
             }
-            .padding(30)
-            .frame(width: 640)
+            Spacer(minLength: 0)
+            Button {
+                settings.completeSetup()
+                onComplete()
+            } label: {
+                Text("Start using Sendpoint")
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .foregroundStyle(PaletteTint.surface(colorScheme))
+                .background(Color.primary, in: RoundedRectangle(cornerRadius: 7))
+                .opacity(permissionState.isVoiceReady ? 1 : 0.35)
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+            .disabled(!permissionState.isVoiceReady)
+            .keyboardShortcut(.defaultAction)
         }
-        .frame(width: 640, height: 620)
-        .scrollIndicators(.automatic)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 14)
     }
 
-    private var shortcutGuide: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("How to use it")
-                .font(.headline)
-            SettingsRowGroup {
-                HowToRow(
-                    icon: "mic.fill",
-                    lead: voiceSettings.voiceMode.title,
-                    sentence: voiceSettings.voiceMode.detail,
-                    keycap: shortcuts.voiceCaptureCombo.displayString
-                )
-                SettingsDivider()
-                HowToRow(
-                    icon: "square.and.pencil",
-                    lead: "Type instead",
-                    sentence: "For when you can't talk out loud.",
-                    keycap: shortcuts.captureCombo.displayString
-                )
-            }
-        }
-    }
 }
 
 struct PermissionCapabilityList: View {
@@ -355,7 +367,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         self.surfaces = surfaces
         self.window = window
         super.init()
-        window.contentView = NSHostingView(rootView: SetupView(
+        let hosting = NSHostingView(rootView: SetupView(
             settings: settings,
             shortcuts: shortcuts,
             voiceSettings: voiceSettings,
@@ -363,7 +375,9 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
             onShowAccessibilityHelper: onShowAccessibilityHelper,
             onComplete: onComplete
         ))
-        window.setContentSize(window.contentView?.fittingSize ?? NSSize(width: 640, height: 600))
+        hosting.sizingOptions = []
+        window.contentView = hosting
+        window.setContentSize(SetupView.size)
         window.center()
         window.delegate = self
         surfaces.register(.setup, transitions: .init(
@@ -373,7 +387,17 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     static func makeWindow() -> NSWindow {
-        NSWindow.titledDialog("Set Up Sendpoint", size: NSSize(width: 640, height: 600))
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: SetupView.size),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered, defer: false
+        )
+        window.title = "Set Up Sendpoint"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
+        return window
     }
 
     func show() {
