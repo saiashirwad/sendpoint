@@ -293,65 +293,64 @@ final class StackSwitcherController {
     }
 }
 
-/// The switcher strip, drawn in the stack palette's own language: the same
-/// solid sheet, rim, row wash and type, so it reads as the palette's compact
-/// form rather than a different surface. Every stack in the order being
-/// walked, the lit one washed, each with its note count.
+/// A compact stack list with the palette's row highlight and selection rule.
 struct StackSwitcherView: View {
     let model: StackSwitcherModel
     @Environment(\.colorScheme) private var colorScheme
 
-    static let width: CGFloat = 320
-    private static let rowHeight: CGFloat = 40
-    private static let rowSpacing: CGFloat = 0
+    static let width: CGFloat = 300
+    private static let rowHeight: CGFloat = 36
+    private static let maximumVisibleRows = 6
     private static let inset: CGFloat = 8
-    private static let footerHeight: CGFloat = 34
     /// Room for the shadow around the sheet.
     private static let margin: CGFloat = 32
 
-    /// The hosting size for a strip of `rows` stacks, computed rather than
-    /// measured so the panel is right before SwiftUI has laid anything out.
+    private static func listHeight(rows: Int) -> CGFloat {
+        CGFloat(min(max(rows, 1), maximumVisibleRows)) * rowHeight
+    }
+
+    /// Size the panel before SwiftUI lays it out, including long stack lists.
     static func size(rows: Int) -> CGSize {
-        let count = CGFloat(max(rows, 1))
-        let list = count * rowHeight + (count - 1) * rowSpacing + inset * 2
-        return CGSize(width: width + margin * 2, height: list + footerHeight + margin * 2)
+        CGSize(width: width + margin * 2,
+               height: listHeight(rows: rows) + inset * 2 + margin * 2)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: Self.rowSpacing) {
-                ForEach(Array(model.rows.enumerated()), id: \.element.id) { position, row in
-                    let lit = row.id == model.highlight
-                    StackRow(
-                        name: row.name,
-                        noteCount: row.noteCount,
-                        isCurrent: row.isCurrent,
-                        position: position,
-                        showsDigit: true
-                    )
-                    .padding(.horizontal, 8)
-                    .frame(height: Self.rowHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(lit ? PaletteTint.selection : Color.clear)
-                    )
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(row.name + (lit ? ", chosen" : "") + (row.isCurrent ? ", current" : ""))
-                    .accessibilityValue(row.countLabel)
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    ForEach(Array(model.rows.enumerated()), id: \.element.id) { position, row in
+                        let lit = row.id == model.highlight
+                        StackRow(noteCount: row.noteCount, position: position, showsDigit: false) {
+                            Text(row.name)
+                                .font(.system(size: 14, weight: lit ? .medium : .regular))
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: Self.rowHeight)
+                        .background(lit ? PaletteTint.selection : Color.clear)
+                        .overlay(alignment: .leading) {
+                            if lit {
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.65))
+                                    .frame(width: 3)
+                            }
+                        }
+                        .animation(.easeOut(duration: 0.06), value: lit)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(row.name + (lit ? ", chosen" : "") + (row.isCurrent ? ", current" : ""))
+                        .accessibilityValue(row.countLabel)
+                        .id(row.id)
+                    }
                 }
             }
-            .padding(Self.inset)
-            Divider()
-            HStack(spacing: 0) {
-                Text(footer)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: Self.footerHeight)
+            .scrollIndicators(.hidden)
+            .frame(height: Self.listHeight(rows: model.rows.count))
+            .onAppear { revealSelection(using: proxy) }
+            .onChange(of: model.highlight) { revealSelection(using: proxy) }
+            .onChange(of: model.rows.map(\.id)) { revealSelection(using: proxy) }
         }
+        .padding(.vertical, Self.inset)
         .frame(width: Self.width)
         .background(PaletteTint.surface(colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous))
@@ -360,18 +359,14 @@ struct StackSwitcherView: View {
                 .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.22), radius: 22, y: 10)
-        // Appears at once, like ⌘⇥; only the highlight glides.
         .opacity(model.visible ? 1 : 0)
         .animation(nil, value: model.visible)
-        .animation(.easeOut(duration: 0.06), value: model.highlight)
         .padding(Self.margin)
         .fixedSize()
     }
 
-    /// The palette footer's cadence: what is chosen, then the keys.
-    private var footer: String {
-        let chosen = model.rows.first { $0.id == model.highlight }
-        let lead = chosen.map { "\($0.name) · \($0.countLabel)" } ?? "Stacks"
-        return "\(lead) · let go to switch · ↑↓ all stacks · ⎋ cancel"
+    private func revealSelection(using proxy: ScrollViewProxy) {
+        guard let highlight = model.highlight else { return }
+        proxy.scrollTo(highlight)
     }
 }
