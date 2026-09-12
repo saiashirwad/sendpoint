@@ -58,6 +58,6 @@ struct StackRowName: View {
         Text(name)
             .font(.system(size: 14, weight: isCurrent ? .semibold : .medium))
             .lineLimit(1)
-            .accessibilityLabel(isCurrent ? "\(name), current" : name)
+            .accessibilityLabel(isCurrent ? "\(name), current capture stack" : name)
     }
 }

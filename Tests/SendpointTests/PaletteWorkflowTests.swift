@@ -59,6 +59,9 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.state.focusedPane, .notes)
         XCTAssertEqual(harness.state.query, "", "the stack query must not become a note query")
         XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
+        XCTAssertNil(harness.state.inlineEdit, "Selecting a note must not start editing")
+        harness.send(.key(.activate, textHasSelection: false))
+        XCTAssertEqual(harness.state.inlineEdit?.noteID, secondNoteID)
     }
 
     func testOpenNotesHighlightsTheNewestNote() {

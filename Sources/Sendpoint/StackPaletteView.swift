@@ -216,7 +216,6 @@ struct StackPaletteView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .help(undo.notification)
-            Spacer(minLength: 8)
             Button {
                 model.send(.perform(.undoClear))
             } label: {
@@ -228,6 +227,7 @@ struct StackPaletteView: View {
             }
             .buttonStyle(.plain)
             .help("Put the cleared notes back")
+            Spacer(minLength: 8)
         }
         .padding(.horizontal, 16)
         .frame(height: 34)
@@ -703,8 +703,10 @@ private struct PaletteRow<Content: View>: View {
             .contentShape(Rectangle())
             .background(highlightColor)
             .overlay(alignment: .leading) {
-                if isHighlighted && !isDimmed {
-                    Rectangle().fill(Color.primary.opacity(0.65)).frame(width: 3)
+                if isHighlighted {
+                    Rectangle()
+                        .fill(Color.primary.opacity(isDimmed ? 0.25 : 0.65))
+                        .frame(width: 3)
                 }
             }
             .onHover { hovering = $0 }
@@ -741,7 +743,7 @@ private struct NoteCard: View {
         VStack(alignment: .leading, spacing: 10) {
             // Only the note being edited is a text field. Every other note is
             // plain text, so ↑↓ never re-measures a column of editors; ↩ or
-            // a click on the text swaps the editor in.
+            // a double click swaps the editor in.
             if isEditing {
                 TextField(
                     quote.isEmpty ? "Write a thought…" : "Add a note about this passage…",
@@ -760,17 +762,15 @@ private struct NoteCard: View {
                     .lineLimit(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture { onEdit() }
             } else {
                 Text("Add a note…")
                     .font(.body)
                     .foregroundStyle(.quaternary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture { onEdit() }
             }
             if !quote.isEmpty {
-                QuotedPassage(text: quote, isExpanded: isEditing)
+                QuotedPassage(text: quote)
             }
         }
         .padding(.horizontal, 16)
@@ -789,7 +789,11 @@ private struct NoteCard: View {
                 .opacity(isEditing ? 1 : 0)
         )
         .contentShape(Rectangle())
-        .onTapGesture { onSelect() }
+        .gesture(
+            TapGesture(count: 2).onEnded { onEdit() }
+                .exclusively(before: TapGesture().onEnded { onSelect() }),
+            including: isEditing ? .subviews : .all
+        )
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(.easeOut(duration: 0.12), value: isHighlighted)
@@ -805,22 +809,74 @@ private struct NoteCard: View {
 /// and the text a step softer than the note it belongs to.
 private struct QuotedPassage: View {
     let text: String
-    let isExpanded: Bool
+    @State private var isExpanded = false
+    @State private var heights = PassageHeights()
+
+    private var isTruncated: Bool { heights.full > heights.preview + 1 }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            passage
+                .lineLimit(isExpanded ? nil : 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    passage.lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .background(GeometryReader { proxy in
+                            Color.clear.preference(key: PassageHeightsKey.self,
+                                value: PassageHeights(preview: proxy.size.height))
+                        })
+                        .hidden()
+                }
+                .background {
+                    passage.lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .background(GeometryReader { proxy in
+                            Color.clear.preference(key: PassageHeightsKey.self,
+                                value: PassageHeights(full: proxy.size.height))
+                        })
+                        .hidden()
+                }
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(PaletteTint.quoteRule)
+                        .frame(width: 2)
+                }
+            if isTruncated {
+                Button(isExpanded ? "Collapse" : "Show passage") {
+                    isExpanded.toggle()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
+                .accessibilityLabel(isExpanded ? "Collapse passage" : "Show full passage")
+            }
+        }
+        .onPreferenceChange(PassageHeightsKey.self) { heights = $0 }
+        .onChange(of: text) { isExpanded = false }
+    }
+
+    private var passage: some View {
         Text(text)
             .font(.callout)
             .lineSpacing(2)
-            .lineLimit(isExpanded ? nil : 3)
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
-            .padding(.leading, 12)
-            .overlay(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(PaletteTint.quoteRule)
-                    .frame(width: 2)
-            }
+    }
+}
+
+private struct PassageHeights: Equatable {
+    var preview: CGFloat = 0
+    var full: CGFloat = 0
+}
+
+private struct PassageHeightsKey: PreferenceKey {
+    static let defaultValue = PassageHeights()
+    static func reduce(value: inout PassageHeights, nextValue: () -> PassageHeights) {
+        let next = nextValue()
+        value.preview = max(value.preview, next.preview)
+        value.full = max(value.full, next.full)
     }
 }
 
