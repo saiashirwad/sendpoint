@@ -24,6 +24,10 @@ final class CapturePanel: NSPanel {
 
 /// The destination button must accept a click while another app remains active.
 final class CaptureHostingView<Content: View>: NSHostingView<Content> {
+    // Swift 6.3.3 crashes in EarlyPerfInliner on this generic subclass's
+    // synthesized deinitializer during release builds.
+    @inline(never) deinit {}
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
