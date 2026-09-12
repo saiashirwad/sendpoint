@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var storeState: StoreState = .loading
     var bootstrapTask: Task<Void, Never>?
     var terminationTask: Task<Void, Never>?
+    var userOpenedObserver: (any NSObjectProtocol)?
     override init() {
         environment = AppEnvironment()
         super.init()
@@ -39,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.log("=== launch pid=\(ProcessInfo.processInfo.processIdentifier) ===")
+        observeUserOpened()
         NSApp.mainMenu = MainMenu.build()
         statusItemController.onAction = { [weak self] action in self?.perform(action) }
         captureController.warmUp()
@@ -47,9 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment.selectionMonitor.start()
 
         bootstrapStore()
-        if !settings.hasCompletedSetup {
-            presentSetup()
-        }
+        presentLaunchSurface(kind: .fromCurrentAppleEvent())
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        presentLaunchSurface(kind: .userOpen)
+        return false
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -83,6 +88,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityHelperWindowController = nil
         settingsWindowController?.teardown()
         settingsWindowController = nil
+        if let userOpenedObserver {
+            DistributedNotificationCenter.default().removeObserver(userOpenedObserver)
+            self.userOpenedObserver = nil
+        }
         captureController.teardown()
         permissionState.teardown()
         statusItemController.teardown()

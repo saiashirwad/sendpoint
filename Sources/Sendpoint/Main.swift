@@ -11,6 +11,7 @@ enum Main {
            let bundleID = Bundle.main.bundleIdentifier,
            let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
                .first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+            LaunchPresentation.notifyRunningInstance(bundleIdentifier: bundleID)
             running.activate()
             exit(0)
         }

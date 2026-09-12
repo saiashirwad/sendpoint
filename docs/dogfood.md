@@ -39,4 +39,5 @@ tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
 - [ ] Rebind a shortcut. It works at once without relaunch.
 - [ ] Toggle Launch at Login on and off. System Settings agrees.
 - [ ] `tccutil reset Accessibility app.sendpoint`, relaunch, re-grant. Capture works again.
-- [ ] Launch a second copy. It exits and the first activates.
+- [ ] Launch a second copy. It exits and the first shows Settings.
+- [ ] Open Sendpoint from Raycast or the Dock. Settings appears. A login launch does not.

@@ -205,6 +205,27 @@ extension AppDelegate {
         accessibilityHelperWindowController?.show()
     }
 
+    func presentLaunchSurface(kind: LaunchPresentation.Kind) {
+        switch LaunchPresentation.decide(hasCompletedSetup: settings.hasCompletedSetup, kind: kind) {
+        case .setup: presentSetup()
+        case .settings: showSettings()
+        case .none: break
+        }
+    }
+
+    func observeUserOpened() {
+        guard userOpenedObserver == nil else { return }
+        userOpenedObserver = DistributedNotificationCenter.default().addObserver(
+            forName: LaunchPresentation.userOpenedNotification,
+            object: Bundle.main.bundleIdentifier,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.presentLaunchSurface(kind: .userOpen)
+            }
+        }
+    }
+
     private func showSettings() {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
