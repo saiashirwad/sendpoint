@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    @Entry var settingsIconTileStrength: Double = 1
     @Entry var emphasizedKeycaps = false
 }
 
@@ -120,26 +119,26 @@ extension View {
 // MARK: - Settings chrome
 //
 // Shared by the settings window and the setup flow so the two read as one
-// surface: the same card, the same icon tile, the same row metrics.
+// surface: the same paper, the same row metrics, the same caption style.
 
 enum SettingsMetrics {
     /// Row padding on each side.
     static let rowInset: CGFloat = 14
-    /// Icon tile size in a row.
-    static let iconSize: CGFloat = 30
+    /// Quiet leading glyph, when a row still carries one.
+    static let iconSize: CGFloat = 16
     /// Where a divider starts when the rows above and below carry an icon.
     static let iconDividerInset: CGFloat = rowInset + iconSize + rowInset
     /// Corner radius of the template text editor.
-    static let cardRadius: CGFloat = 10
+    static let cardRadius: CGFloat = 8
     /// Vertical padding inside every row.
     static let rowPadding: CGFloat = 10
     /// Gap between a caption and its content, and between loose items.
-    static let captionSpacing: CGFloat = 10
+    static let captionSpacing: CGFloat = 8
     /// Gap between one section and the next, the same on every pane.
-    static let sectionSpacing: CGFloat = 28
+    static let sectionSpacing: CGFloat = 18
 }
 
-/// Small uppercase label above a card.
+/// Sentence-case label above a cluster of rows.
 struct SettingsCaption: View {
     let text: String
 
@@ -147,9 +146,7 @@ struct SettingsCaption: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
-            .textCase(.uppercase)
-            .tracking(0.5)
+            .font(.system(size: 13))
             .foregroundStyle(.secondary)
             .padding(.leading, 2)
     }
@@ -245,44 +242,37 @@ struct SettingsToggleRow: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                // Green reads as "on" at a glance; it is the same green as
-                // a granted permission.
-                .tint(.green)
         }
     }
 }
 
-/// The monochrome glyph tile at the leading edge of a row: a faint fill,
-/// a hairline rim, and a glyph in the text colour.
+/// A 14pt glyph with no tile, used only where a row still needs a picture.
 struct SettingsIcon: View {
-    @Environment(\.settingsIconTileStrength) private var tileStrength
     let name: String
 
     init(_ name: String) { self.name = name }
 
-    private let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-
     var body: some View {
         Image(systemName: name)
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(.secondary)
             .frame(width: SettingsMetrics.iconSize, height: SettingsMetrics.iconSize)
-            .background(shape.fill(Color.primary.opacity(0.07 * tileStrength)))
-            .overlay(shape.strokeBorder(Color.primary.opacity(0.12 * tileStrength), lineWidth: 0.75))
             .accessibilityHidden(true)
     }
 }
 
-/// Icon, title, one-line detail, and whatever sits at the trailing edge.
+/// Title, one-line detail, and whatever sits at the trailing edge.
 struct SettingsIconRow<Trailing: View>: View {
-    let icon: String
+    var icon: String? = nil
     let title: String
     let detail: String
     @ViewBuilder let trailing: () -> Trailing
 
     var body: some View {
         HStack(spacing: SettingsMetrics.rowInset) {
-            SettingsIcon(icon)
+            if let icon {
+                SettingsIcon(icon)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.body.weight(.medium))
@@ -315,17 +305,29 @@ struct HowToRow: View {
     }
 }
 
-/// The macOS sidebar material, so the source list picks up window vibrancy.
-struct SidebarMaterial: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        // Lighter than the stock sidebar material so the selected row shows
-        // in light mode; still tinted by what is behind the window.
-        view.material = .underWindowBackground
-        view.blendingMode = .behindWindow
-        view.state = .followsWindowActiveState
-        return view
-    }
+/// Two or more text options; the selected one takes the palette wash.
+struct TextSegmentPicker<Value: Hashable>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(values, id: \.self) { value in
+                let isSelected = value == selection
+                Button {
+                    selection = value
+                } label: {
+                    Text(title(value))
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 11)
+                        .frame(height: 26)
+                        .background(isSelected ? PaletteTint.selection : Color.clear)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+            }
+        }
+    }
 }

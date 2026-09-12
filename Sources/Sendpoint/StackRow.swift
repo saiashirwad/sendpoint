@@ -19,8 +19,8 @@ struct StackRow<Name: View>: View {
             }
 
             Text("\(noteCount)")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.tertiary)
                 .frame(minWidth: 18, alignment: .trailing)
                 .accessibilityLabel(countLabel)
         }

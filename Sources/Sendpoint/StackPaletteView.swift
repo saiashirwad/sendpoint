@@ -112,20 +112,13 @@ struct StackPaletteView: View {
         Button {
             model.send(.toggleOverlay(.templates))
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "text.quote")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Copy as: \(model.projection.activeTemplate.name)")
+            HStack(spacing: 6) {
+                Text("Copy as \(model.projection.activeTemplate.name)")
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                Keycap("⌘P")
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color.primary.opacity(model.state.overlay == .templates ? 0.12 : 0.06)))
-            .contentShape(Capsule())
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Template used when copying (⌘P)")
@@ -683,6 +676,9 @@ struct StackPaletteView: View {
 /// same in either appearance.
 enum PaletteTint {
     static let cornerRadius: CGFloat = 16
+    static let railWidth: CGFloat = 3
+    static let focusRailOpacity = 0.65
+    static let dimmedRailOpacity = 0.45
 
     static func surface(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? Color(white: 0.09) : .white
@@ -705,6 +701,23 @@ enum PaletteTint {
     static let editing = Color.primary.opacity(0.35)
     /// The rule beside a captured passage.
     static let quoteRule = Color.primary.opacity(0.22)
+
+    static func wash(highlighted: Bool, dimmed: Bool = false, hovering: Bool = false) -> Color {
+        guard highlighted else { return hovering ? hover : .clear }
+        return dimmed ? inactiveSelection : selection
+    }
+
+    /// 3px leading rule that marks keyboard focus. Dimmed when the other pane
+    /// owns the keys, still dark enough to read at a glance.
+    struct FocusRail: View {
+        var isDimmed = false
+
+        var body: some View {
+            Rectangle()
+                .fill(Color.primary.opacity(isDimmed ? dimmedRailOpacity : focusRailOpacity))
+                .frame(width: railWidth)
+        }
+    }
 }
 
 /// A palette row: flat and full-bleed, washed edge to edge when highlighted.
@@ -724,22 +737,15 @@ private struct PaletteRow<Content: View>: View {
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .background(highlightColor)
+            .background(PaletteTint.wash(highlighted: isHighlighted, dimmed: isDimmed, hovering: hovering))
             .overlay(alignment: .leading) {
                 if isHighlighted {
-                    Rectangle()
-                        .fill(Color.primary.opacity(isDimmed ? 0.25 : 0.65))
-                        .frame(width: 3)
+                    PaletteTint.FocusRail(isDimmed: isDimmed)
                 }
             }
             .onHover { hovering = $0 }
             .onTapGesture(count: 2) { onActivate() }
             .onTapGesture { onSelect() }
-    }
-
-    private var highlightColor: Color {
-        guard isHighlighted else { return hovering ? PaletteTint.hover : .clear }
-        return isDimmed ? PaletteTint.inactiveSelection : PaletteTint.selection
     }
 }
 
@@ -793,17 +799,17 @@ private struct NoteCard: View {
                     .contentShape(Rectangle())
             }
             if !quote.isEmpty {
-                QuotedPassage(text: quote)
+                QuotedPassage(text: quote, isSubdued: isHighlighted)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         // Notes sit on one continuous surface; the highlighted one simply
         // lifts to a soft grey.
-        .background(highlightColor)
+        .background(PaletteTint.wash(highlighted: isHighlighted, dimmed: isDimmed, hovering: hovering))
         .overlay(alignment: .leading) {
-            if isHighlighted && !isDimmed {
-                Rectangle().fill(Color.primary.opacity(0.65)).frame(width: 3)
+            if isHighlighted {
+                PaletteTint.FocusRail(isDimmed: isDimmed)
             }
         }
         .overlay(
@@ -821,17 +827,14 @@ private struct NoteCard: View {
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(.easeOut(duration: 0.12), value: isHighlighted)
     }
-
-    private var highlightColor: Color {
-        guard isHighlighted else { return hovering ? PaletteTint.hover : .clear }
-        return isDimmed ? PaletteTint.inactiveSelection : PaletteTint.selection
-    }
 }
 
 /// A captured passage set as a quiet quotation: a thin rule down the left
 /// and the text a step softer than the note it belongs to.
 struct QuotedPassage: View {
     let text: String
+    /// Soften the quote rule when a selection rail already marks the card.
+    var isSubdued = false
     @State private var isExpanded = false
     @State private var heights = PassageHeights()
 
@@ -860,10 +863,10 @@ struct QuotedPassage: View {
                         })
                         .hidden()
                 }
-                .padding(.leading, 12)
+                .padding(.leading, isSubdued ? 16 : 12)
                 .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(PaletteTint.quoteRule)
+                        .fill(PaletteTint.quoteRule.opacity(isSubdued ? 0.5 : 1))
                         .frame(width: 2)
                 }
             if isTruncated {
@@ -873,7 +876,7 @@ struct QuotedPassage: View {
                 .buttonStyle(.plain)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.leading, 12)
+                .padding(.leading, isSubdued ? 16 : 12)
                 .accessibilityLabel(isExpanded ? "Collapse passage" : "Show full passage")
             }
         }
@@ -927,7 +930,7 @@ private struct OverlayPanel<Rows: View>: View {
                 .padding(.bottom, 4)
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 2) {
+                    VStack(spacing: 0) {
                         rows()
                         if isEmpty {
                             Text(emptyText)
@@ -936,7 +939,7 @@ private struct OverlayPanel<Rows: View>: View {
                                 .frame(maxWidth: .infinity, minHeight: 40)
                         }
                     }
-                    .padding(8)
+                    .padding(.vertical, 4)
                 }
                 .frame(maxHeight: 380)
                 .fixedSize(horizontal: false, vertical: true)
@@ -978,16 +981,18 @@ private struct OverlayRow<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, minHeight: 40)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isHighlighted ? PaletteTint.selection : Color.clear)
-        )
+        .background(PaletteTint.wash(highlighted: isHighlighted))
+        .overlay(alignment: .leading) {
+            if isHighlighted {
+                PaletteTint.FocusRail()
+            }
+        }
         .onHover { if $0 { onHover() } }
     }
 }

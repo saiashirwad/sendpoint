@@ -19,12 +19,12 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var footerContext: String {
         switch self {
-        case .shortcuts: "keyboard.fill"
-        case .templates: "text.quote"
-        case .capture: "gearshape.fill"
-        case .permissions: "checkmark.shield.fill"
+        case .capture: "Voice, paste, login"
+        case .shortcuts: "Click a shortcut, then press keys"
+        case .templates: ""
+        case .permissions: "Accessibility, microphone, voice model"
         }
     }
 }
@@ -42,13 +42,20 @@ struct SettingsView: View {
     let onSettingsChanged: () -> Void
 
     @State private var tab: SettingsTab = .capture
+    @State private var newTemplate: NewTemplateDraft?
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The smallest the window goes; it can be dragged larger.
     static let size = CGSize(width: 780, height: 620)
-    private static let sidebarWidth: CGFloat = 200
+    private static let sidebarWidth: CGFloat = 220
     private static let titleBarHeight: CGFloat = 52
     /// Cards stop stretching past this so a wide window stays readable.
     private static let contentMaxWidth: CGFloat = 760
+
+    private struct NewTemplateDraft: Equatable {
+        var name: String
+        var problem: String?
+    }
 
     init(
         settings: AppSettings,
@@ -106,7 +113,6 @@ struct SettingsView: View {
                                 voiceSettings: voiceSettings,
                                 permissionState: permissionState,
                                 captureController: captureController,
-                                onOpenPermissions: { tab = .permissions },
                                 onSettingsChanged: onSettingsChanged
                             )
                         case .permissions:
@@ -116,29 +122,195 @@ struct SettingsView: View {
                             )
                         }
                     }
-                    .padding(24)
+                    .padding(16)
                     // The sidebar names the pane, so content starts level
                     // with the first sidebar row instead of under a title.
-                    .padding(.top, Self.titleBarHeight - 24)
+                    .padding(.top, Self.titleBarHeight - 16)
                     .frame(maxWidth: Self.contentMaxWidth, alignment: .topLeading)
                     .frame(maxWidth: .infinity)
                     .id(tab)
                 }
                 .scrollIndicators(.automatic)
+                Divider()
+                footer
             }
-            .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(
             minWidth: Self.size.width, maxWidth: .infinity,
             minHeight: Self.size.height, maxHeight: .infinity
         )
+        .background(PaletteTint.surface(colorScheme))
         .ignoresSafeArea()
         .overlayScrollers()
-        // Monochrome controls: an "on" toggle or selected segment takes the
-        // text colour; off states keep the system grey.
         .tint(Color.primary.opacity(0.85))
     }
 
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Text(footerContext)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            footerActions
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 36)
+    }
+
+    private var footerContext: String {
+        switch tab {
+        case .templates:
+            let name = templateEditor.draft.name
+            return templateEditor.isDirty ? "\(name) · Unsaved" : name
+        default:
+            return tab.footerContext
+        }
+    }
+
+    @ViewBuilder
+    private var footerActions: some View {
+        switch tab {
+        case .capture:
+            if !permissionState.isVoiceReady {
+                SettingsFooterButton("Permissions") { tab = .permissions }
+            }
+        case .shortcuts:
+            EmptyView()
+        case .templates:
+            templateFooterActions
+        case .permissions:
+            if let action = permissionsFooterAction {
+                SettingsFooterButton(action.title, action: action.run)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var templateFooterActions: some View {
+        if templateEditor.isDirty {
+            Button("Revert", action: templateEditor.revert)
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+            SettingsFooterButton("Save", keys: "⌘S") { saveTemplate() }
+                .keyboardShortcut("s", modifiers: .command)
+            Divider().frame(height: 14)
+        }
+        SettingsFooterButton("New template") {
+            newTemplate = NewTemplateDraft(name: "\(templateEditor.draft.name) Copy")
+        }
+        .popover(
+            isPresented: Binding(
+                get: { newTemplate != nil },
+                set: { if !$0 { newTemplate = nil } }
+            ),
+            arrowEdge: .top
+        ) {
+            NewTemplatePopover(
+                name: Binding(
+                    get: { newTemplate?.name ?? "" },
+                    set: { newTemplate?.name = $0; newTemplate?.problem = nil }
+                ),
+                problem: newTemplate?.problem,
+                onCommit: createTemplate
+            )
+        }
+        Button {
+            TemplateDialogs.delete(templateEditor)
+        } label: {
+            Text("Delete")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.red)
+        }
+        .buttonStyle(.plain)
+        .disabled(!templateEditor.canDelete || templateEditor.isDirty)
+        .help(templateEditor.isDirty ? "Save or revert changes before deleting." : "Delete this template…")
+    }
+
+    private var permissionsFooterAction: (title: String, run: () -> Void)? {
+        if let title = accessibilityFooterTitle {
+            return (title, { [onShowAccessibilityHelper, permissionState] in
+                switch permissionState.accessibilityAction {
+                case .requestAccessibility:
+                    permissionState.requestAccessibility()
+                    onShowAccessibilityHelper()
+                case .showAccessibilityHelper:
+                    onShowAccessibilityHelper()
+                default:
+                    break
+                }
+            })
+        }
+        switch permissionState.microphoneAction {
+        case .requestMicrophone:
+            return ("Allow Microphone…", { permissionState.requestMicrophone() })
+        case .openMicrophoneSettings:
+            return ("Open System Settings", { permissionState.openMicrophoneSettings() })
+        default:
+            break
+        }
+        if permissionState.localVoiceModelAction == .downloadVoiceModel {
+            let title: String
+            if case .failed = permissionState.localVoiceModel {
+                title = "Retry Download…"
+            } else {
+                title = "Download Model…"
+            }
+            return (title, { permissionState.downloadModel() })
+        }
+        return nil
+    }
+
+    private var accessibilityFooterTitle: String? {
+        switch permissionState.accessibilityAction {
+        case .requestAccessibility: "Grant Access…"
+        case .showAccessibilityHelper: "Finish Setup…"
+        default: nil
+        }
+    }
+
+    private func saveTemplate() {
+        do { try templateEditor.save() } catch { TemplateDialogs.showError(error) }
+    }
+
+    private func createTemplate() {
+        guard let draft = newTemplate else { return }
+        do {
+            let name = try templateEditor.validatedNewTemplateName(draft.name)
+            _ = try templateEditor.saveAsNew(named: name)
+            newTemplate = nil
+        } catch {
+            newTemplate?.problem = error.localizedDescription
+            NSSound.beep()
+        }
+    }
+}
+
+private struct SettingsFooterButton: View {
+    let title: String
+    var keys: String? = nil
+    let action: () -> Void
+
+    init(_ title: String, keys: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.keys = keys
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                if let keys {
+                    Keycap(keys)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 /// A small anchored prompt: type a name, press Return.
@@ -177,8 +349,7 @@ struct NewTemplatePopover: View {
 
 // MARK: - Building blocks
 
-/// The input meter from System Settings: a row of pills that fill from the
-/// left as the microphone gets louder.
+/// A row of pills that fill from the left as the microphone gets louder.
 struct InputLevelBar: View {
     let level: Float
     let isActive: Bool
@@ -186,21 +357,13 @@ struct InputLevelBar: View {
     private let segments = 24
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text("Input level")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize()
-            HStack(spacing: 3) {
-                ForEach(0..<segments, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(index < litSegments ? Color.green : Color.primary.opacity(0.12))
-                        .frame(height: 8)
-                }
+        HStack(spacing: 3) {
+            ForEach(0..<segments, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(index < litSegments ? Color.primary.opacity(0.85) : Color.primary.opacity(0.12))
+                    .frame(height: 8)
             }
-            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 2)
         .opacity(isActive ? 1 : 0.5)
         .animation(.linear(duration: 0.05), value: litSegments)
         .accessibilityElement(children: .ignore)
@@ -310,43 +473,14 @@ struct InputDevicePopUp: NSViewRepresentable {
     }
 }
 
-/// A round, quiet icon button for secondary actions beside a title.
-struct CircleIconButton: View {
-    let icon: String
-    let help: String
-    let label: String
-    let action: () -> Void
-
-    init(_ icon: String, help: String, label: String, action: @escaping () -> Void) {
-        self.icon = icon
-        self.help = help
-        self.label = label
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(Color.primary.opacity(0.06)))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .help(help)
-        .accessibilityLabel(label)
-    }
-}
-
-/// The source list on the left, with a coloured tile per section.
+/// The source list on the left. Selected pane uses the same wash and 3px
+/// rail as a stack row.
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsTab
     let topInset: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             Color.clear.frame(height: topInset)
             ForEach(SettingsTab.allCases) { tab in
                 SettingsSidebarRow(tab: tab, isSelected: tab == selection) {
@@ -355,15 +489,7 @@ private struct SettingsSidebar: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 10)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(
-            SidebarMaterial()
-                // Light mode: wash the material toward white so the pane
-                // reads as paper and the selected row carries the contrast.
-                .overlay(Color.white.opacity(colorScheme == .dark ? 0 : 0.6))
-                .ignoresSafeArea()
-        )
     }
 }
 
@@ -373,50 +499,26 @@ private struct SettingsSidebarRow: View {
     let action: () -> Void
 
     @State private var hovering = false
-    @Environment(\.colorScheme) private var colorScheme
-
-    /// Light mode needs a heavier wash for the row to read as selected.
-    private var selectedOpacity: Double { colorScheme == .dark ? 0.09 : 0.14 }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
-                SidebarTile(icon: tab.icon, isSelected: isSelected)
-                Text(tab.title)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .frame(height: 34)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            Text(tab.title)
+                .font(.system(size: 14, weight: isSelected ? .medium : .regular))
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.primary.opacity(isSelected ? selectedOpacity : hovering ? 0.04 : 0))
-        )
+        .foregroundStyle(Color.primary)
+        .background(PaletteTint.wash(highlighted: isSelected, hovering: hovering))
+        .overlay(alignment: .leading) {
+            if isSelected {
+                PaletteTint.FocusRail()
+            }
+        }
         .onHover { hovering = $0 }
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-}
-
-/// A monochrome tile: a faint fill, a hairline rim, and a glyph that takes
-/// the row's text colour so every section reads as one set.
-private struct SidebarTile: View {
-    let icon: String
-    let isSelected: Bool
-
-    private let shape = RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-
-    var body: some View {
-        Image(systemName: icon)
-            .font(.system(size: 12, weight: .semibold))
-            .frame(width: 24, height: 24)
-            .background(shape.fill(Color.primary.opacity(isSelected ? 0.12 : 0.07)))
-            .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.75))
-            .accessibilityHidden(true)
     }
 }
 
@@ -453,22 +555,18 @@ struct TemplateChip: View {
 }
 
 /// The template's name, set as an editable title rather than a form field.
-struct TemplateNameField<Accessory: View>: View {
+struct TemplateNameField: View {
     @Binding var text: String
-    @ViewBuilder let accessory: () -> Accessory
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
-                TextField("Template name", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(.body.weight(.medium))
-                    .focused($focused)
-                    .accessibilityLabel("Template name")
-                accessory()
-            }
-            .frame(minHeight: 24)
+            TextField("Template name", text: $text)
+                .textFieldStyle(.plain)
+                .font(.body.weight(.medium))
+                .focused($focused)
+                .accessibilityLabel("Template name")
+                .frame(minHeight: 24)
             Rectangle()
                 .fill(Color.primary.opacity(focused ? 0.5 : 0.1))
                 .frame(height: 1)

@@ -27,7 +27,7 @@ struct KeyRecorder: NSViewRepresentable {
 }
 
 /// Drawn to look like a keycap: a light face over a slightly darker rim.
-/// While recording it turns accent-tinted and asks for the keys.
+/// While recording it takes the palette editing ring and asks for the keys.
 final class KeyRecorderView: NSView {
     var onChange: ((KeyCombo?) -> Void)?
     var clearable = false
@@ -123,12 +123,12 @@ final class KeyRecorderView: NSView {
         let face = NSBezierPath(roundedRect: faceRect, xRadius: radius - 1, yRadius: radius - 1)
 
         if recording {
-            NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+            NSColor.labelColor.withAlphaComponent(0.16).setFill()
             rim.fill()
-            NSColor.controlAccentColor.withAlphaComponent(0.12).setFill()
+            NSColor.controlBackgroundColor.setFill()
             face.fill()
-            NSColor.controlAccentColor.setStroke()
-            rim.lineWidth = 1.5
+            NSColor.labelColor.withAlphaComponent(0.35).setStroke()
+            rim.lineWidth = 1
             rim.stroke()
         } else {
             NSColor.labelColor.withAlphaComponent(hovering ? 0.22 : 0.16).setFill()
@@ -145,7 +145,7 @@ final class KeyRecorderView: NSView {
         let font: NSFont
         if recording {
             text = "Press keys…"
-            color = .controlAccentColor
+            color = .labelColor
             font = .systemFont(ofSize: 12, weight: .medium)
         } else if let combo {
             text = combo.displayString

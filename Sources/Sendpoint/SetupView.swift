@@ -66,7 +66,6 @@ struct SetupView: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.settingsIconTileStrength, 0.5)
         .environment(\.emphasizedKeycaps, true)
         .background(PaletteTint.surface(colorScheme))
         .ignoresSafeArea()
@@ -134,9 +133,9 @@ struct PermissionCapabilityList: View {
     var body: some View {
         SettingsRowGroup {
             accessibilityRow
-            SettingsDivider()
+            SettingsDivider(pastIcon: false)
             microphoneRow
-            SettingsDivider()
+            SettingsDivider(pastIcon: false)
             voiceModelRow
         }
         .task {
@@ -146,7 +145,6 @@ struct PermissionCapabilityList: View {
 
     private var accessibilityRow: some View {
         CapabilityRow(
-            icon: "text.viewfinder",
             title: "Accessibility",
             reason: "Reads the text you select.",
             status: accessibilityStatus,
@@ -158,7 +156,6 @@ struct PermissionCapabilityList: View {
 
     private var microphoneRow: some View {
         CapabilityRow(
-            icon: "mic",
             title: "Microphone",
             reason: "Listens only while a voice note is open.",
             status: microphoneStatus,
@@ -170,7 +167,6 @@ struct PermissionCapabilityList: View {
 
     private var voiceModelRow: some View {
         CapabilityRow(
-            icon: "waveform",
             title: "Local voice model",
             reason: voiceModelReason,
             status: voiceModelStatus,
@@ -284,14 +280,6 @@ private enum CapabilityStatus {
         }
     }
 
-    var color: Color {
-        switch self {
-        case .neutral: .secondary
-        case .attention: .orange
-        case .ready: .green
-        }
-    }
-
     /// Ready reads quietly once everything is in place; only trouble is loud.
     var textColor: Color {
         switch self {
@@ -302,7 +290,6 @@ private enum CapabilityStatus {
 }
 
 private struct CapabilityRow: View {
-    let icon: String
     let title: String
     let reason: String
     let status: CapabilityStatus
@@ -311,7 +298,7 @@ private struct CapabilityRow: View {
     let action: () -> Void
 
     var body: some View {
-        SettingsIconRow(icon: icon, title: title, detail: reason) {
+        SettingsIconRow(title: title, detail: reason) {
             VStack(alignment: .trailing, spacing: 7) {
                 statusLabel
                 if let actionTitle {
@@ -322,23 +309,20 @@ private struct CapabilityRow: View {
         }
     }
 
-    /// Text then icon, so the icons sit flush right in one column.
     private var statusLabel: some View {
         HStack(spacing: 6) {
+            if case .ready = status {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 12)
+            }
             Text(status.title)
                 .font(.callout)
                 .foregroundStyle(status.textColor)
             if showsProgress {
                 ProgressView()
                     .controlSize(.small)
-            } else if case .ready = status {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.green)
-            } else {
-                Circle()
-                    .fill(status.color)
-                    .frame(width: 7, height: 7)
             }
         }
         .accessibilityElement(children: .combine)
@@ -451,7 +435,7 @@ private struct AccessibilityHelperView: View {
                         systemImage: permissionState.accessibility == .granted
                             ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
                     )
-                    .foregroundStyle(permissionState.accessibility == .granted ? .green : .orange)
+                    .foregroundStyle(permissionState.accessibility == .granted ? Color.primary : .orange)
                 }
             }
 

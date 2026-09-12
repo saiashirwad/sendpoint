@@ -5,13 +5,9 @@ struct SettingsPermissionsPane: View {
     let onShowAccessibilityHelper: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-            SettingsSection("Permissions") {
-                PermissionCapabilityList(
-                    permissionState: permissionState,
-                    onShowAccessibilityHelper: onShowAccessibilityHelper
-                )
-            }
-        }
+        PermissionCapabilityList(
+            permissionState: permissionState,
+            onShowAccessibilityHelper: onShowAccessibilityHelper
+        )
     }
 }

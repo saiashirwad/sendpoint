@@ -5,7 +5,6 @@ struct SettingsGeneralPane: View {
     @Bindable var voiceSettings: VoiceSettings
     @Bindable var permissionState: PermissionState
     let captureController: CaptureController
-    let onOpenPermissions: () -> Void
     let onSettingsChanged: () -> Void
 
     @State private var inputDevices = AudioInputDeviceList()
@@ -34,46 +33,38 @@ struct SettingsGeneralPane: View {
         SettingsSection("Voice") {
             SettingsRowGroup {
                 SettingsIconRow(
-                    icon: "hand.tap",
                     title: "Recording mode",
                     detail: "How the shortcut starts and stops a recording."
                 ) {
-                    Picker("Recording mode", selection: Binding(
-                        get: { voiceSettings.voiceMode },
-                        set: { captureController.setVoiceMode($0) }
-                    )) {
-                        ForEach(VoiceRecordingMode.allCases, id: \.self) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
+                    TextSegmentPicker(
+                        values: Array(VoiceRecordingMode.allCases),
+                        selection: Binding(
+                            get: { voiceSettings.voiceMode },
+                            set: { captureController.setVoiceMode($0) }
+                        ),
+                        title: { $0.title }
+                    )
                 }
-            }
-            if !permissionState.isVoiceReady {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
-                    Text("Voice needs a permission.")
-                    Button("Open Permissions", action: onOpenPermissions)
-                        .buttonStyle(.link)
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 2)
             }
         }
     }
 
     private var microphoneSection: some View {
         SettingsSection("Microphone") {
-            microphonePicker
-            InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
-            Text(microphoneFootnote)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            SettingsRowGroup {
+                SettingsIconRow(
+                    title: "Microphone",
+                    detail: microphoneFootnote
+                ) {
+                    microphonePicker
+                        .frame(width: 240)
+                }
+                SettingsDivider(pastIcon: false)
+                SettingsRow("Input level") {
+                    InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
+                        .frame(width: 240)
+                }
+            }
         }
     }
 
@@ -152,7 +143,6 @@ struct SettingsGeneralPane: View {
             let name = inputDevices.devices.first { $0.uid == uid }?.name
             captureController.chooseMicrophone(uid: uid, name: name)
         }
-        .frame(maxWidth: .infinity)
         .accessibilityLabel("Microphone")
     }
 

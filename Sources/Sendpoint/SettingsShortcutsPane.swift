@@ -35,14 +35,12 @@ struct SettingsShortcutsPane: View {
             SettingsSection("Making notes") {
                 SettingsRowGroup {
                     shortcutRow(
-                        icon: "mic.fill",
                         title: "Voice note",
                         detail: voiceSettings.voiceMode.detail,
                         slot: .voiceCapture
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "square.and.pencil",
                         title: "Typed note",
                         detail: "A note box for the selected text.",
                         slot: .capture
@@ -52,42 +50,36 @@ struct SettingsShortcutsPane: View {
             SettingsSection("Your stack") {
                 SettingsRowGroup {
                     shortcutRow(
-                        icon: "doc.on.clipboard",
                         title: settings.stackExportMode.shortcutTitle,
                         detail: settings.stackExportMode.shortcutDetail,
                         slot: .copy
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "square.stack.3d.up",
                         title: "Show stack",
                         detail: "Opens the window with all your notes.",
                         slot: .stack
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "arrow.left.arrow.right",
                         title: "Switch stack",
                         detail: "Tap or hold to cycle stacks; ↑/↓ lists all.",
                         slot: .switchStack
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "arrow.right.to.line",
                         title: "Next stack",
                         detail: "Steps through stacks; ⌫ removes while recording.",
                         slot: .nextStack
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "arrow.left.to.line",
                         title: "Previous stack",
                         detail: "The same walk, backwards.",
                         slot: .previousStack
                     )
-                    SettingsDivider()
+                    SettingsDivider(pastIcon: false)
                     shortcutRow(
-                        icon: "trash",
                         title: "Clear stack",
                         detail: "Empties the stack. Undo with ⌘Z.",
                         slot: .clear
@@ -104,12 +96,11 @@ struct SettingsShortcutsPane: View {
     }
 
     private func shortcutRow(
-        icon: String,
         title: String,
         detail: String,
         slot: ShortcutSlot
     ) -> some View {
-        SettingsIconRow(icon: icon, title: title, detail: detail) {
+        SettingsIconRow(title: title, detail: detail) {
             KeyRecorder(combo: binding(for: slot), clearable: slot.isOptional)
                 .fixedSize()
         }

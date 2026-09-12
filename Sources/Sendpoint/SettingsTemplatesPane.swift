@@ -1,4 +1,3 @@
-import AppKit
 import SendpointDomain
 import SwiftUI
 
@@ -6,12 +5,6 @@ struct SettingsTemplatesPane: View {
     @Bindable var settings: AppSettings
     @Bindable var editor: TemplateEditorState
     let onSelectTemplate: (UUID) -> Void
-    @State private var newTemplate: NewTemplateDraft?
-
-    private struct NewTemplateDraft: Equatable {
-        var name: String
-        var problem: String?
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
@@ -40,7 +33,7 @@ struct SettingsTemplatesPane: View {
     private var templateEditor: some View {
         VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
             SettingsSection("Name") {
-                TemplateNameField(text: $editor.draft.name) { titleActions }
+                TemplateNameField(text: $editor.draft.name)
             }
             SettingsSection("Prompt") {
                 ZStack(alignment: .topLeading) {
@@ -61,14 +54,7 @@ struct SettingsTemplatesPane: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: SettingsMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                )
+                .insetSurface(radius: SettingsMetrics.cardRadius)
             }
             SettingsSection("Each note") {
                 SettingsRowGroup {
@@ -86,63 +72,5 @@ struct SettingsTemplatesPane: View {
             }
         }
         .animation(.snappy(duration: 0.22), value: editor.isDirty)
-    }
-
-    private var titleActions: some View {
-        HStack(spacing: 8) {
-            if editor.isDirty {
-                HStack(spacing: 6) {
-                    Button("Revert", action: editor.revert)
-                    Button("Save", action: save)
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut("s", modifiers: .command)
-                }
-                .controlSize(.small)
-                .transition(.opacity)
-                Divider().frame(height: 16).padding(.horizontal, 2).transition(.opacity)
-            }
-            CircleIconButton("plus", help: "New template from this draft…", label: "New template") {
-                newTemplate = NewTemplateDraft(name: "\(editor.draft.name) Copy")
-            }
-            .popover(
-                isPresented: Binding(
-                    get: { newTemplate != nil },
-                    set: { if !$0 { newTemplate = nil } }
-                ),
-                arrowEdge: .bottom
-            ) {
-                NewTemplatePopover(
-                    name: Binding(
-                        get: { newTemplate?.name ?? "" },
-                        set: { newTemplate?.name = $0; newTemplate?.problem = nil }
-                    ),
-                    problem: newTemplate?.problem,
-                    onCommit: create
-                )
-            }
-            CircleIconButton(
-                "trash",
-                help: editor.isDirty ? "Save or revert changes before deleting." : "Delete this template…",
-                label: "Delete template",
-                action: { TemplateDialogs.delete(editor) }
-            )
-            .disabled(!editor.canDelete || editor.isDirty)
-        }
-    }
-
-    private func save() {
-        do { try editor.save() } catch { TemplateDialogs.showError(error) }
-    }
-
-    private func create() {
-        guard let draft = newTemplate else { return }
-        do {
-            let name = try editor.validatedNewTemplateName(draft.name)
-            _ = try editor.saveAsNew(named: name)
-            newTemplate = nil
-        } catch {
-            newTemplate?.problem = error.localizedDescription
-            NSSound.beep()
-        }
     }
 }
