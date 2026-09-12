@@ -1,14 +1,11 @@
 import SwiftUI
 
-/// The press-and-hold voice overlay: a low, wordless capsule. It says where
-/// the note is going, the stack's name and how many notes are already there,
-/// and its only moving part is a single orb of sound that swells with the
-/// voice while listening, breathes while the transcript is made, and turns
-/// amber only when something actually went wrong. When the note is tied to a
-/// selection, a dim word count sits beside the orb, so it is clear the words
-/// will attach to something without echoing it back. The capsule inverts
-/// against the system appearance so it never sinks into a same-coloured
-/// desktop.
+enum VoiceCaptureLayout {
+    static let pillHeight: CGFloat = 32
+    static let shadowPadding: CGFloat = 24
+}
+
+/// A compact recording capsule that stays visible below its destination picker.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
@@ -23,13 +20,11 @@ struct VoiceCaptureView: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            CaptureDestinationButton(model: model, mode: .voice, fontSize: 11.5)
+                .foregroundStyle(palette.ink.opacity(0.9))
+                .frame(maxWidth: 180, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
             if let stack = model.targetStack {
-                Text(stack.name)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(palette.ink.opacity(0.9))
-                    .lineLimit(1)
-                    .frame(maxWidth: 160, alignment: .leading)
-                    .fixedSize(horizontal: true, vertical: false)
                 Text("\(stack.noteCount)")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(palette.ink.opacity(0.45))
@@ -47,6 +42,8 @@ struct VoiceCaptureView: View {
             MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber)
                 .frame(width: 22, height: 22)
                 .padding(.leading, 2)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityLabel)
             if let failureMessage {
                 Text(failureMessage)
                     .font(.system(size: 11.5, weight: .medium))
@@ -58,7 +55,7 @@ struct VoiceCaptureView: View {
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)
-        .frame(height: 32)
+        .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
         .overlay(
             Capsule().strokeBorder(
@@ -77,12 +74,12 @@ struct VoiceCaptureView: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
         .animation(.easeOut(duration: 0.18), value: failureMessage)
         .environment(\.colorScheme, palette.contentScheme)
-        .padding(24)
+        .padding(VoiceCaptureLayout.shadowPadding)
         // The hosting panel is wider than the capsule so the tether and a
         // failure message can appear later without the window resizing.
         .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Voice capture")
     }
 
     private var divider: some View {

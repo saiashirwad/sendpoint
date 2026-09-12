@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 @testable import Sendpoint
 
@@ -34,8 +35,29 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertTrue(voice.styleMask.contains([.borderless, .nonactivatingPanel]))
         XCTAssertEqual(voice.level, .floating)
         XCTAssertTrue(voice.canBecomeKey)
-        XCTAssertTrue(voice.ignoresMouseEvents)
+        XCTAssertFalse(voice.ignoresMouseEvents)
+        XCTAssertTrue(voice.becomesKeyOnlyIfNeeded)
         XCTAssertTrue(voice.collectionBehavior.contains([.canJoinAllSpaces, .fullScreenAuxiliary]))
+    }
+
+    func testCaptureControlsAcceptTheFirstMouseClick() {
+        let hosting = CaptureHostingView(rootView: EmptyView())
+        XCTAssertTrue(hosting.acceptsFirstMouse(for: nil))
+    }
+
+    func testVoiceDestinationPanelLeavesEightPointsAbovePill() {
+        let anchor = NSRect(x: 400, y: 90, width: 80, height: VoiceCaptureLayout.pillHeight)
+        let visible = NSRect(x: 0, y: 0, width: 1_200, height: 800)
+        let size = CaptureDestinationPanelLayout.panelSize(rowCount: 4)
+        let origin = CaptureDestinationPanelLayout.panelOrigin(
+            anchor: anchor, rowCount: 4, visibleFrame: visible
+        )
+
+        XCTAssertEqual(origin.x + size.width / 2, anchor.midX)
+        XCTAssertEqual(
+            origin.y + CaptureDestinationPanelLayout.shadowPadding,
+            anchor.maxY + 8
+        )
     }
 
     func testPaletteAndSwitcherFactoriesKeepWindowInvariants() {

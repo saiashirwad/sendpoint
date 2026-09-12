@@ -18,8 +18,9 @@ nonisolated struct NoteCaptureContext: Equatable {
     }
 }
 
-/// Immutable values captured when a panel starts. Delayed saves must use this
-/// target instead of whichever stack is current later.
+/// Immutable source, note identity, and time captured when a panel starts.
+/// The session carries its chosen destination separately; delayed work keeps
+/// matching this original context even when the user changes that destination.
 nonisolated struct NoteCaptureTarget: Equatable {
     let context: NoteCaptureContext
     let captured: CapturedSelection

@@ -35,14 +35,28 @@ nonisolated enum CapturePhase: Equatable {
     case failed(String)
 }
 
+nonisolated enum CaptureDestinationPicker: Equatable { case closed, open }
+
 nonisolated struct CaptureSession: Equatable {
     let context: NoteCaptureContext
     let mode: CaptureMode
     var target: NoteCaptureTarget?
     var phase: CapturePhase
+    /// User choice for this capture, independent of the identity of external work.
+    var destinationStackID: UUID
+    var destinationPicker: CaptureDestinationPicker = .closed
     /// ⌘↩ arrived while the selection was still being read; the save runs
     /// the moment the target exists.
     var saveAwaitsSelection = false
+
+    var canChooseDestination: Bool {
+        guard !saveAwaitsSelection else { return false }
+        switch phase {
+        case .selectingText, .startingVoice, .recording, .editing,
+             .selectingVoice(_, finishRequested: false): return true
+        default: return false
+        }
+    }
 }
 
 /// The physical state of the voice key, kept across captures so a key
@@ -72,6 +86,9 @@ nonisolated enum CaptureAction {
     case failed(NoteCaptureContext, String)
     case transcript(NoteCaptureContext, String)
     case changeNote(String)
+    case toggleDestinations(NoteCaptureContext)
+    case dismissDestinations(NoteCaptureContext)
+    case chooseDestination(NoteCaptureContext, UUID)
     case save
     case finishVoice
     case cancelVoice
@@ -92,6 +109,7 @@ nonisolated enum CaptureEffect: Equatable {
     case startRecording(NoteCaptureContext)
     case transcribe(NoteCaptureContext)
     case commit(CaptureSaveRequest)
+    case switchStack(UUID)
     case retry
     case show(CaptureSurface)
     case focusEditor
@@ -151,7 +169,10 @@ nonisolated struct CaptureState: Equatable {
             guard let session else { return [.beginVoice] }
             return session.mode == .voice ? finishOrBeep(session) : busy(session)
         case .voiceEscape:
-            guard session?.mode == .voice else { return [] }
+            guard let session, session.mode == .voice else { return [] }
+            if session.destinationPicker == .open {
+                return update(.dismissDestinations(session.context))
+            }
             if voice.keyHeld {
                 voice.keyHeld = false
                 voice.releasePending = true
@@ -184,7 +205,7 @@ nonisolated struct CaptureState: Equatable {
                     session.saveAwaitsSelection = false
                     if let note = target.note(body: note) {
                         let request = CaptureSaveRequest(target: target,
-                            destinationStackID: target.stackID, note: note)
+                            destinationStackID: session.destinationStackID, note: note)
                         session.phase = .saving(request)
                         effects.append(.commit(request))
                     } else {
@@ -223,6 +244,18 @@ nonisolated struct CaptureState: Equatable {
         case let .changeNote(note):
             guard case .editing = session.phase, !session.saveAwaitsSelection else { return [] }
             session.phase = .editing(note)
+        case let .toggleDestinations(context):
+            guard context == session.context, session.canChooseDestination else { return [] }
+            session.destinationPicker = session.destinationPicker == .open ? .closed : .open
+        case let .dismissDestinations(context):
+            guard context == session.context else { return [] }
+            session.destinationPicker = .closed
+        case let .chooseDestination(context, destination):
+            guard context == session.context, session.canChooseDestination,
+                  session.destinationPicker == .open else { return [] }
+            session.destinationStackID = destination
+            session.destinationPicker = .closed
+            effects = [.switchStack(destination)]
         case .save, .transcript:
             let note: String
             switch action {
@@ -244,13 +277,14 @@ nonisolated struct CaptureState: Equatable {
                 if session.target == nil, note.nonblank != nil {
                     // The passage is still on its way; save as soon as it lands.
                     session.saveAwaitsSelection = true
+                    session.destinationPicker = .closed
                     lifecycle = .active(session)
                     return []
                 }
                 return [.beep]
             }
             let request = CaptureSaveRequest(target: target,
-                destinationStackID: target.stackID, note: note)
+                destinationStackID: session.destinationStackID, note: note)
             session.phase = .saving(request)
             effects = [.commit(request)]
         case let .failed(context, message):
@@ -295,6 +329,7 @@ nonisolated struct CaptureState: Equatable {
             guard case let .saveFailed(old, _, false, true) = session.phase else { return [] }
             let request = CaptureSaveRequest(target: old.target, destinationStackID: destination,
                 note: old.note)
+            session.destinationStackID = destination
             session.phase = .saving(request)
             effects = [.commit(request)]
         case .dismiss:
@@ -306,14 +341,16 @@ nonisolated struct CaptureState: Equatable {
              .voiceEscape, .voiceModeChanged:
             return []
         }
+        if !session.canChooseDestination { session.destinationPicker = .closed }
         lifecycle = .active(session)
         return effects
     }
 
     private mutating func begin(_ mode: CaptureMode, _ context: NoteCaptureContext) -> [CaptureEffect] {
         guard let session else {
-            lifecycle = .active(CaptureSession(context: context, mode: mode, phase: mode == .text
-                ? .selectingText : .selectingVoice(recording: false, finishRequested: false)))
+            lifecycle = .active(CaptureSession(context: context, mode: mode,
+                phase: mode == .text ? .selectingText : .selectingVoice(recording: false, finishRequested: false),
+                destinationStackID: context.stackID))
             return mode == .text ? [.readSelection(context, mode)]
                 : [.show(.voice), .startRecording(context), .readSelection(context, mode)]
         }

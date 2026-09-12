@@ -20,9 +20,10 @@ struct CaptureView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let stack = model.targetStack {
+            if model.state.session != nil {
                 HStack {
-                    StackBadge(stack: stack)
+                    CaptureDestinationButton(model: model, mode: .text, showsIcon: true)
+                        .foregroundStyle(.secondary)
                     Spacer()
                 }
                 .padding(.horizontal, 16)
@@ -65,6 +66,11 @@ struct CaptureView: View {
         .onChange(of: model.state.session?.context) { _, context in
             guard context != nil else { return }
             DispatchQueue.main.async { noteFocused = true }
+        }
+        .onChange(of: model.state.session?.destinationPicker) { previous, current in
+            if previous == .open, current == .closed, !model.isNoteFrozen {
+                noteFocused = true
+            }
         }
     }
 
@@ -172,25 +178,6 @@ struct CaptureView: View {
                 .fixedSize(horizontal: false, vertical: true)
             actions()
         }
-    }
-}
-
-/// Where the note is going, said once and quietly.
-struct StackBadge: View {
-    let stack: StackItemFacts
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "square.stack.3d.up.fill")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.tertiary)
-            Text(stack.name)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Saving to \(stack.name)")
     }
 }
 

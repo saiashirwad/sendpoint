@@ -22,6 +22,11 @@ final class CapturePanel: NSPanel {
     }
 }
 
+/// The destination button must accept a click while another app remains active.
+final class CaptureHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Native windows are resources, never a second source of workflow state.
 final class CaptureWindows {
     private unowned let model: CaptureController
@@ -145,7 +150,7 @@ final class CaptureWindows {
     }
 
     private func makeEditorPanel() -> CapturePanel {
-        let hosting = NSHostingView(rootView: CaptureView(model: model))
+        let hosting = CaptureHostingView(rootView: CaptureView(model: model))
         return Self.makeEditorPanel(contentView: hosting)
     }
 
@@ -198,7 +203,7 @@ final class CaptureWindows {
     }
 
     private func makeVoicePanel() -> CapturePanel {
-        let hosting = NSHostingView(rootView: VoiceCaptureView(
+        let hosting = CaptureHostingView(rootView: VoiceCaptureView(
             model: model,
             meter: model.levelMeter
         ))
@@ -218,7 +223,8 @@ final class CaptureWindows {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.isMovableByWindowBackground = false
-        panel.ignoresMouseEvents = true
+        panel.ignoresMouseEvents = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
@@ -256,8 +262,8 @@ final class CaptureWindows {
         panel.setFrameOrigin(origin)
     }
 
-    /// Wide enough for the capsule plus a one-line failure message. The panel
-    /// is transparent and ignores the mouse, so the extra width is invisible.
+    /// Wide enough for the capsule plus a one-line failure message; the
+    /// transparent margin gives the anchored destination popover room.
     private static let voiceOverlayWidth: CGFloat = 680
 
     private func positionVoiceOverlay(_ panel: NSPanel) {

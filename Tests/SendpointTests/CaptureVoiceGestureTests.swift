@@ -1,4 +1,5 @@
 import Foundation
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
@@ -7,6 +8,43 @@ import XCTest
 final class CaptureVoiceGestureTests: XCTestCase {
     private let context = NoteCaptureContext(stackID: UUID())
     private let selection = CapturedSelection(text: "")
+
+    func testHoldReleaseClosesThePickerAndTranscribesToTheLastExplicitDestination() {
+        let destination = UUID()
+        var state = recording(mode: .hold)
+        _ = state.update(.toggleDestinations(context))
+        _ = state.update(.chooseDestination(context, destination))
+        _ = state.update(.toggleDestinations(context))
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+
+        XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])
+        XCTAssertEqual(state.session?.phase, .transcribing)
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+        XCTAssertEqual(state.session?.destinationStackID, destination)
+
+        let effects = state.update(.transcript(context, "Spoken draft"))
+        guard case let .commit(request)? = effects.first else {
+            return XCTFail("expected a commit, got \(effects)")
+        }
+        XCTAssertEqual(request.destinationStackID, destination)
+        XCTAssertEqual(request.target.context.stackID, context.stackID)
+        XCTAssertEqual(request.note.body, "Spoken draft")
+    }
+
+    func testTapStopShortcutStillWorksWithTheDestinationPickerOpen() {
+        let destination = UUID()
+        var state = recording(mode: .tap)
+        XCTAssertEqual(state.update(.voiceReleased), [], "the first release keeps tap mode recording")
+        _ = state.update(.toggleDestinations(context))
+        _ = state.update(.chooseDestination(context, destination))
+        _ = state.update(.toggleDestinations(context))
+
+        XCTAssertEqual(state.update(.voicePressed), [.transcribe(context)])
+        XCTAssertEqual(state.session?.phase, .transcribing)
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+        XCTAssertEqual(state.session?.destinationStackID, destination)
+        XCTAssertEqual(state.update(.voiceReleased), [], "the stop press release is consumed")
+    }
 
     func testHoldFinishesOnReleaseAndIgnoresRepeatsWhileDown() {
         var state = CaptureState()
@@ -134,5 +172,15 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.update(.voiceReleased), [])
         XCTAssertEqual(state.voice, VoiceGesture())
         XCTAssertEqual(state.session?.phase, .editing(""))
+    }
+
+    private func recording(mode: VoiceRecordingMode) -> CaptureState {
+        var state = CaptureState()
+        _ = state.update(.voiceModeChanged(mode))
+        _ = state.update(.voicePressed)
+        _ = state.update(.begin(.voice, context))
+        _ = state.update(.recordingStarted(context))
+        _ = state.update(.selection(context, selection))
+        return state
     }
 }

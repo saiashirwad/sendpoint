@@ -131,6 +131,91 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(f.surfaces.events.last, "close")
     }
 
+    func testTypedNoteSavesToTheChosenDestinationAndSwitchesTheCurrentStack() async throws {
+        let f = try await makeFixture()
+        let sourceID = f.store.currentStackID
+        let destination = Stack(name: "Research")
+        f.store.mutate(.createStack(destination))
+        f.store.mutate(.switchStack(stackID: sourceID))
+        await f.store.waitForIdle()
+        XCTAssertEqual(f.store.currentStackID, sourceID)
+
+        f.controller.beginCapture()
+        await waitUntil { f.surfaces.events == ["show editor"] }
+        await f.selectionGate.open(selection)
+        await waitUntil { f.controller.captured == self.selection }
+        let context = try XCTUnwrap(f.controller.state.session?.context)
+        f.controller.note = "Filed elsewhere"
+        f.controller.send(.toggleDestinations(context))
+        f.controller.chooseDestination(destination.id, context: context)
+
+        XCTAssertEqual(f.controller.targetStack?.id, destination.id)
+        XCTAssertEqual(f.controller.note, "Filed elsewhere")
+        XCTAssertEqual(f.controller.captured, selection)
+        f.controller.send(.save)
+        await f.store.waitForIdle()
+        await waitUntil { !f.controller.isOpen }
+
+        XCTAssertEqual(f.store.currentStackID, destination.id)
+        XCTAssertTrue(f.store.stack(id: sourceID)?.notes.isEmpty == true)
+        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.map(\.body), ["Filed elsewhere"])
+        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.first?.subject,
+            .selection(quote: "A passage"))
+    }
+
+    func testDestinationChoiceFromEitherModeBecomesCurrentForBothSubsequentModes() async throws {
+        for mode in [CaptureMode.text, .voice] {
+            let f = try await makeFixture()
+            let sourceID = f.store.currentStackID
+            let destination = Stack(name: "Research")
+            f.store.mutate(.createStack(destination))
+            f.store.mutate(.switchStack(stackID: sourceID))
+            await f.store.waitForIdle()
+            await f.selectionGate.open(selection)
+            await f.recorder.started.open(true)
+
+            if mode == .text { f.controller.beginCapture() }
+            else { f.controller.send(.voiceToggled) }
+            await waitUntil { f.controller.state.session?.canChooseDestination == true }
+            let context = try XCTUnwrap(f.controller.state.session?.context)
+            f.controller.send(.toggleDestinations(context))
+            f.controller.chooseDestination(destination.id, context: context)
+            await f.store.waitForIdle()
+            XCTAssertEqual(f.store.currentStackID, destination.id)
+            XCTAssertEqual(StackUIFacts(store: f.store).currentStackID, destination.id)
+
+            // Choosing a stack takes effect even if this note is discarded.
+            f.controller.send(mode == .text ? .dismiss : .cancelVoice)
+            f.controller.beginCapture()
+            XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
+            f.controller.send(.dismiss)
+            f.controller.send(.voiceToggled)
+            XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
+            f.controller.teardown()
+        }
+    }
+
+    func testRejectedDestinationChoicesDoNotChangeTheCurrentStack() async throws {
+        let f = try await makeFixture()
+        let sourceID = f.store.currentStackID
+        let destination = Stack(name: "Research")
+        f.store.mutate(.createStack(destination))
+        f.store.mutate(.switchStack(stackID: sourceID))
+        await f.store.waitForIdle()
+        await f.selectionGate.open(selection)
+        f.controller.beginCapture()
+        let context = try XCTUnwrap(f.controller.state.session?.context)
+        f.controller.chooseDestination(destination.id, context: context)
+        f.controller.send(.toggleDestinations(context))
+        f.controller.chooseDestination(destination.id, context: NoteCaptureContext(stackID: sourceID))
+        f.controller.chooseDestination(UUID(), context: context)
+        f.controller.send(.dismiss)
+        f.controller.chooseDestination(destination.id, context: context)
+        await f.store.waitForIdle()
+        XCTAssertEqual(f.store.currentStackID, sourceID)
+        f.controller.teardown()
+    }
+
     func testVoiceHoldRecordsTranscribesAndSavesTheTranscript() async throws {
         let f = try await makeFixture()
         f.controller.send(.voicePressed)

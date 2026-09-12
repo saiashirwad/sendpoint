@@ -13,6 +13,57 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         text: "Selection", screenRect: nil
     )
 
+    func testTypedCaptureCommitsToTheExplicitDestinationWithoutChangingItsSourceOrDraft() throws {
+        let destination = UUID()
+        var state = try editing(body: "Keep this draft")
+        let target = try XCTUnwrap(state.session?.target)
+
+        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
+        XCTAssertEqual(state.update(.chooseDestination(context, destination)), [],
+            "a destination changes only after the picker is opened")
+        XCTAssertEqual(state.update(.toggleDestinations(context)), [])
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+        XCTAssertEqual(state.update(.chooseDestination(context, destination)), [.switchStack(destination)])
+
+        XCTAssertEqual(state.session?.destinationStackID, destination)
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+        XCTAssertEqual(state.session?.target, target, "the source passage stays attached")
+        XCTAssertEqual(state.session?.phase, .editing("Keep this draft"), "the typed draft stays intact")
+
+        let effects = state.update(.save)
+        guard case let .commit(request)? = effects.first else {
+            return XCTFail("expected a commit, got \(effects)")
+        }
+        XCTAssertEqual(request.destinationStackID, destination)
+        XCTAssertEqual(request.target, target)
+        XCTAssertEqual(request.target.context.stackID, context.stackID)
+        XCTAssertEqual(request.note.body, "Keep this draft")
+    }
+
+    func testQueuedTypedSaveKeepsTheLastExplicitDestinationUntilThePassageArrives() throws {
+        let destination = UUID()
+        var state = CaptureState()
+        _ = state.update(.begin(.text, context))
+        _ = state.update(.selectionPending(context))
+        _ = state.update(.changeNote("Quick thought"))
+        _ = state.update(.toggleDestinations(context))
+        _ = state.update(.chooseDestination(context, destination))
+
+        XCTAssertEqual(state.update(.toggleDestinations(context)), [])
+        XCTAssertEqual(state.update(.save), [])
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+        XCTAssertEqual(state.session?.destinationStackID, destination)
+        XCTAssertEqual(state.session?.saveAwaitsSelection, true)
+
+        let effects = state.update(.selection(context, selection))
+        guard case let .commit(request)? = effects.first else {
+            return XCTFail("expected a commit, got \(effects)")
+        }
+        XCTAssertEqual(request.destinationStackID, destination)
+        XCTAssertEqual(request.target.context.stackID, context.stackID)
+        XCTAssertEqual(request.note.body, "Quick thought")
+    }
+
     func testSaveFreezesTheNoteAndRetryReusesTheExactRequest() throws {
         var state = try editing(body: "Keep this draft")
         let target = try XCTUnwrap(state.session?.target)

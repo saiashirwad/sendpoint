@@ -80,13 +80,23 @@ final class CaptureController {
     var onStatusChange: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
-    /// The stack this note lands in: the one fixed when the capture began,
-    /// so switching stacks mid-note does not change what the pill says.
+    /// The capture's explicit destination, unaffected by global stack switching.
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
-        let id = state.session?.context.stackID ?? store.currentStackID
+        let id = state.session?.destinationStackID ?? store.currentStackID
         return StackUIFacts(store: store).stack(id: id)
     }
+    var destinationStacks: [StackItemFacts] {
+        guard let store else { return [] }
+        return StackUIFacts(store: store).stacks
+    }
+
+    func chooseDestination(_ id: UUID, context: NoteCaptureContext) {
+        guard state.session?.context == context,
+              destinationStacks.contains(where: { $0.id == id }) else { return }
+        send(.chooseDestination(context, id))
+    }
+
     var isOpen: Bool { state.session != nil }
     var captured: CapturedSelection? { state.session?.target?.captured }
     var note: String {
@@ -203,6 +213,7 @@ final class CaptureController {
                     $0.id == request.destinationStackID
                 } ?? false))
             }
+        case let .switchStack(id): store?.mutate(.switchStack(stackID: id))
         case .retry: store?.retryPendingMutations()
         case let .show(surface): surfaces.show(surface)
         case .focusEditor: surfaces.focus()
