@@ -52,6 +52,7 @@ extension AppDelegate {
         case let .clearStack(stackID): clearStack(stackID)
         case .undoClear: undoClear()
         case .retryPendingMutations: retryPendingMutations()
+        case .checkForUpdates: updateController.checkForUpdates()
         case .settings: showSettings()
         case .quit: NSApp.terminate(nil)
         }

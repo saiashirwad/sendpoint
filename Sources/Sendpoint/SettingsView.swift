@@ -380,7 +380,7 @@ struct SettingsPopUp<ID: Hashable>: NSViewRepresentable {
     }
 
     func updateNSView(_ button: NSPopUpButton, context: Context) {
-        context.coordinator.onSelect = onSelect
+        context.coordinator.onSelect = { onSelect($0 as? ID) }
         if menuDiffers(from: button) {
             button.removeAllItems()
             for item in items {
@@ -414,15 +414,20 @@ struct SettingsPopUp<ID: Hashable>: NSViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onSelect: onSelect) }
-    final class Coordinator: NSObject {
-        var onSelect: (ID?) -> Void
+    func makeCoordinator() -> SettingsPopUpCoordinator {
+        SettingsPopUpCoordinator { onSelect($0 as? ID) }
+    }
+}
 
-        init(onSelect: @escaping (ID?) -> Void) { self.onSelect = onSelect }
+/// Type-erased so the coordinator itself does not need to inherit a generic
+/// parameter just to pass an NSMenuItem's represented object back to SwiftUI.
+final class SettingsPopUpCoordinator: NSObject {
+    var onSelect: (Any?) -> Void
 
-        @objc func changed(_ sender: NSPopUpButton) {
-            onSelect(sender.selectedItem?.representedObject as? ID)
-        }
+    init(onSelect: @escaping (Any?) -> Void) { self.onSelect = onSelect }
+
+    @objc func changed(_ sender: NSPopUpButton) {
+        onSelect(sender.selectedItem?.representedObject)
     }
 }
 

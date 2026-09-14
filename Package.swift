@@ -17,6 +17,7 @@ let package = Package(
     dependencies: [
         // Hex uses FluidAudio for its fast, local Parakeet transcription.
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6"),
     ],
     targets: [
         .target(
@@ -29,12 +30,22 @@ let package = Package(
         ),
         .executableTarget(
             name: "Sendpoint",
-            dependencies: ["SendpointDomain", "FluidAudio"],
+            dependencies: [
+                "SendpointDomain",
+                "FluidAudio",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: "Sources/Sendpoint",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
                 .enableUpcomingFeature("MemberImportVisibility"),
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "@executable_path/../Frameworks",
+                ]),
             ]
         ),
         .testTarget(

@@ -61,7 +61,7 @@ A template is the preamble plus the note formatting options. Three are built in:
 
 ## Privacy
 
-Everything stays on this Mac. The microphone is open only while recording. Transcription is local (Parakeet v3, Core ML). No analytics. The only network request is the one-time model download.
+Everything stays on this Mac. The microphone is open only while recording. Transcription is local (Parakeet v3, Core ML). No analytics. Network access is limited to the one-time voice-model download and Sparkle's signed update checks.
 
 ```
 ~/Library/Application Support/Sendpoint/store.json                       notes
@@ -89,7 +89,14 @@ defaults delete app.sendpoint
 swift test                  # tests
 ./build.sh                  # debug app bundle
 ./install.sh                # replace the installed app and launch it
-./release.sh 1.4 --publish  # notarize, zip, publish on GitHub
+./release.sh 1.6 --ad-hoc --publish  # Sparkle-sign, zip, publish; no paid Apple account
+./release.sh 1.6 --publish           # also Developer ID-sign and notarize
+```
+
+Sparkle's private update-signing key lives in this Mac's login Keychain. Back it up once to secure storage; never commit the exported file or generate a replacement:
+
+```sh
+.build/artifacts/sparkle/Sparkle/bin/generate_keys -x /secure/path/sendpoint-sparkle-private-key
 ```
 
 See [AGENTS.md](AGENTS.md) for engineering guidelines. Speech to text is [FluidAudio](https://github.com/FluidInference/FluidAudio).

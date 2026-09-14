@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var permissionState: PermissionState { environment.permissionState }
     var hotKeyRegistrar: HotKeyRegistrar { environment.hotKeyRegistrar }
     var exportController: ExportController { environment.exportController }
+    var updateController: UpdateController { environment.updateController }
     var settingsWindowController: SettingsWindowController?
     var setupWindowController: SetupWindowController?
     var accessibilityHelperWindowController: AccessibilityHelperWindowController?

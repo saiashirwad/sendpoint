@@ -150,6 +150,13 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
+    func testUpdateCheckIsAvailableFromTheStatusMenu() {
+        withSettings { settings in
+            let menu = items(facts: nil, status: .loading, settings: settings)
+            XCTAssertEqual(entry(titled: "Check for Updates…", in: menu)?.action, .checkForUpdates)
+        }
+    }
+
     private func items(
         facts: StackUIFacts?,
         status: StatusMenuStoreStatus,

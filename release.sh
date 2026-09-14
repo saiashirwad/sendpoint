@@ -15,9 +15,13 @@
 # commits that with the version bump, and deploys the site with wrangler.
 #
 # One-time setup:
-#   1. Install a "Developer ID Application" certificate in your keychain
+#   1. Sparkle's update-signing key is generated independently of Apple:
+#        .build/artifacts/sparkle/Sparkle/bin/generate_keys
+#      Keep the private key in Keychain and back it up securely. The matching
+#      public key lives in Resources/Info.plist.
+#   2. For a notarized release, install a "Developer ID Application" certificate
 #      (Xcode → Settings → Accounts → Manage Certificates).
-#   2. Store notarization credentials, using an app-specific password from
+#   3. Store notarization credentials, using an app-specific password from
 #      appleid.apple.com:
 #        xcrun notarytool store-credentials sendpoint \
 #            --apple-id you@example.com --team-id TEAMID
@@ -59,6 +63,8 @@ APP="dist/${APP_NAME}.app"
 ARCHIVE="dist/Sendpoint-${VERSION}.zip"
 CHECKSUM="${ARCHIVE}.sha256"
 NOTARY_PROFILE="${NOTARY_PROFILE:-sendpoint}"
+APPCAST="web/public/appcast.xml"
+SPARKLE_TOOLS=".build/artifacts/sparkle/Sparkle/bin"
 
 if [ "$AD_HOC" = false ]; then
     if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
@@ -136,6 +142,26 @@ ditto -c -k --keepParent "$APP" "$ARCHIVE"
 )
 
 if [ "$PUBLISH" = true ]; then
+    if [ ! -x "${SPARKLE_TOOLS}/generate_appcast" ]; then
+        echo "Sparkle's generate_appcast tool is missing. Run: swift package resolve" >&2
+        exit 1
+    fi
+
+    echo "==> Signing update and generating appcast"
+    APPCAST_WORK=$(mktemp -d)
+    trap 'rm -rf "$APPCAST_WORK"' EXIT
+    cp "$ARCHIVE" "$APPCAST_WORK/"
+    if [ -f "$APPCAST" ]; then
+        cp "$APPCAST" "$APPCAST_WORK/appcast.xml"
+    fi
+    "${SPARKLE_TOOLS}/generate_appcast" \
+        --download-url-prefix "https://github.com/saiashirwad/sendpoint/releases/download/v${VERSION}/" \
+        --link "https://sendpoint.app" \
+        --maximum-deltas 0 \
+        -o "$APPCAST_WORK/appcast.xml" \
+        "$APPCAST_WORK"
+    cp "$APPCAST_WORK/appcast.xml" "$APPCAST"
+
     echo "==> Pointing the website at ${DOWNLOAD_URL}"
     sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.zip#${DOWNLOAD_URL}#" "$SITE_PAGE"
     if ! grep -q "$DOWNLOAD_URL" "$SITE_PAGE"; then
@@ -144,7 +170,7 @@ if [ "$PUBLISH" = true ]; then
     fi
 
     echo "==> Publishing v${VERSION}"
-    git add Resources/Info.plist "$SITE_PAGE"
+    git add Resources/Info.plist "$SITE_PAGE" "$APPCAST"
     git commit -m "Release ${VERSION}"
     git tag -a "v${VERSION}" -m "${APP_NAME} ${VERSION}"
     git push --atomic origin HEAD "refs/tags/v${VERSION}"

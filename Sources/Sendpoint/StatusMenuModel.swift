@@ -16,6 +16,7 @@ enum StatusMenuAction: Hashable {
     case clearStack(UUID)
     case undoClear
     case retryPendingMutations
+    case checkForUpdates
     case settings
     case quit
 }
@@ -153,6 +154,9 @@ enum StatusMenuModel {
         }
 
         menu.append(.separator)
+        menu.append(.entry(StatusMenuEntry(
+            title: "Check for Updates…",
+            action: .checkForUpdates)))
         menu.append(.entry(StatusMenuEntry(
             title: "Settings…",
             action: .settings,

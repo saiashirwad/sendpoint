@@ -32,5 +32,19 @@
 	<string>Sendpoint records your voice to make a voice note.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://sendpoint.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>gejHwycYByGvk5zVcHPlTLDJyD2HbisMErDzgn8qv5U=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUSignedFeedFailureExpirationInterval</key>
+	<integer>0</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

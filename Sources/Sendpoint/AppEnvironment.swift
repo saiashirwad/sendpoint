@@ -14,6 +14,7 @@ struct AppEnvironment {
     let exportController: ExportController
     let captureController: CaptureController
     let statusItemController: StatusItemController
+    let updateController: UpdateController
 
     init(defaults: UserDefaults = .standard) {
         let appSettings = AppSettings(defaults: defaults)
@@ -53,5 +54,6 @@ struct AppEnvironment {
             }
         )
         statusItemController = StatusItemController()
+        updateController = UpdateController()
     }
 }

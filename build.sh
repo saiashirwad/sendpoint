@@ -25,8 +25,15 @@ swift build -c "$CONFIGURATION" --product "$APP_NAME"
 
 echo "==> Assembling ${DIST}"
 rm -rf "$DIST"
-mkdir -p "${DIST}/Contents/MacOS" "${DIST}/Contents/Resources"
+mkdir -p "${DIST}/Contents/MacOS" "${DIST}/Contents/Resources" "${DIST}/Contents/Frameworks"
 cp "${BIN_DIR}/${APP_NAME}" "${DIST}/Contents/MacOS/${APP_NAME}"
+SPARKLE_FRAMEWORK=$(find .build/artifacts/sparkle -path '*/macos-arm64_x86_64/Sparkle.framework' -print -quit)
+if [ -z "$SPARKLE_FRAMEWORK" ]; then
+    echo "Sparkle.framework was not found after building." >&2
+    exit 1
+fi
+# ditto preserves the framework's symlinks and executable permissions.
+ditto "$SPARKLE_FRAMEWORK" "${DIST}/Contents/Frameworks/Sparkle.framework"
 cp "Resources/Info.plist" "${PLIST}"
 /usr/libexec/PlistBuddy \
     -c "Set :CFBundleShortVersionString ${APP_VERSION}" \
@@ -51,6 +58,7 @@ fi
 # builds need the network timestamp required for notarization.
 IDENTITY="${IDENTITY:--}"
 SIGN_FLAGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
+NESTED_SIGN_FLAGS=(--force --options runtime)
 if [ "$IDENTITY" = "-" ]; then
     echo "==> Signing ad-hoc"
     echo "    (macOS may ask for approval and Accessibility again)"
@@ -59,12 +67,26 @@ else
 fi
 if [ "$CONFIGURATION" = release ] && [ "$IDENTITY" != "-" ]; then
     SIGN_FLAGS+=(--timestamp)
+    NESTED_SIGN_FLAGS+=(--timestamp)
 else
     SIGN_FLAGS+=(--timestamp=none)
+    NESTED_SIGN_FLAGS+=(--timestamp=none)
 fi
+
+# Sparkle contains executable helpers. Sign them inside-out with the same
+# identity as Sendpoint so hardened-runtime library validation accepts them.
+SPARKLE_DEST="${DIST}/Contents/Frameworks/Sparkle.framework/Versions/B"
+codesign "${NESTED_SIGN_FLAGS[@]}" --preserve-metadata=entitlements \
+    --sign "$IDENTITY" "${SPARKLE_DEST}/XPCServices/Downloader.xpc"
+codesign "${NESTED_SIGN_FLAGS[@]}" \
+    --sign "$IDENTITY" "${SPARKLE_DEST}/XPCServices/Installer.xpc"
+codesign "${NESTED_SIGN_FLAGS[@]}" --sign "$IDENTITY" "${SPARKLE_DEST}/Autoupdate"
+codesign "${NESTED_SIGN_FLAGS[@]}" --sign "$IDENTITY" "${SPARKLE_DEST}/Updater.app"
+codesign "${NESTED_SIGN_FLAGS[@]}" \
+    --sign "$IDENTITY" "${DIST}/Contents/Frameworks/Sparkle.framework"
 codesign "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$DIST"
 
-codesign --verify --verbose=1 "${DIST}"
+codesign --verify --strict --verbose=1 "${DIST}"
 echo
 echo "Built: ${DIST}"
 echo "Install with: ./install.sh"
