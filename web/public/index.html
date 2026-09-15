@@ -585,6 +585,9 @@
     .scene [hidden] { display: none !important; }
     .win.opening, .term.opening { animation: app-open 0.34s cubic-bezier(.2,.9,.3,1); }
     @keyframes app-open { from { opacity: 0; transform: translateY(0.6em) scale(0.97); } }
+    /* the palette is a utility panel: it springs up from the Dock */
+    .stacks.opening { animation: panel-open 0.42s cubic-bezier(.2,1.1,.3,1); }
+    @keyframes panel-open { from { opacity: 0; transform: translateY(1.6em) scale(0.94); } }
 
     /* Ghostty with its default theme, running Claude Code; colours and
        metrics sampled from a live window, type in the browser's monospace */
@@ -644,7 +647,171 @@
     .term i { font-style: normal; }
     .term i.on { background: #fff; color: #24272d; }
 
-    /* the Dock: the two places the demo can run */
+    /* Sendpoint's stack palette, drawn in the page's ink: stacks down the
+       side, the lit stack's notes beside them, the way ⌘U opens it. Every
+       measure is in the app's points, at the app's size, centred on the desk. */
+    .stacks {
+      --pt: calc(1em / 20);
+      --p-ink: 0, 0, 0;
+      --p-fg: rgba(var(--p-ink), 0.85); --p-fg2: rgba(var(--p-ink), 0.5); --p-fg3: rgba(var(--p-ink), 0.26);
+      --p-line: rgba(var(--p-ink), 0.075); --p-sel: rgba(var(--p-ink), 0.067); --p-dim: rgba(var(--p-ink), 0.04);
+      --p-raised: #ffffff; --p-paper: linear-gradient(#ffffff 60%, #fcfcfc);
+      position: absolute; inset: 1.6em 1.6em 5.4em; margin: auto;
+      width: min(calc(920 * var(--pt)), 100% - 3.2em); height: min(calc(520 * var(--pt)), 100% - 7em);
+      display: flex; flex-direction: column;
+      border-radius: calc(16 * var(--pt));
+      overflow: hidden;
+      background: var(--p-paper); color: var(--p-fg);
+      box-shadow: var(--win-shadow);
+      font-family: var(--sans); line-height: 1.25;
+    }
+    @media (prefers-color-scheme: dark) {
+      .stacks {
+        --p-ink: 255, 255, 255;
+        --p-fg2: rgba(var(--p-ink), 0.55); --p-fg3: rgba(var(--p-ink), 0.25);
+        --p-line: rgba(var(--p-ink), 0.1); --p-sel: rgba(var(--p-ink), 0.08); --p-dim: rgba(var(--p-ink), 0.045);
+        --p-raised: #262626;
+        --p-paper: radial-gradient(90% 60% at 20% 0%, rgba(255, 255, 255, 0.03), transparent), linear-gradient(#181818, #151515 45%, #0e0e0e);
+      }
+    }
+    .stacks > * { font-size: calc(13 * var(--pt)); }
+    .stacks::after {
+      content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      border-radius: inherit;
+      box-shadow: inset 0 0 0 calc(0.75 * var(--pt)) var(--safari-rim);
+    }
+    .st-head {
+      flex: none; display: flex; align-items: center; gap: calc(10 * var(--pt));
+      height: calc(48 * var(--pt)); padding: 0 calc(18 * var(--pt));
+      border-bottom: 0.5px solid var(--p-line);
+      font-size: calc(15 * var(--pt));
+    }
+    .st-head svg { flex: none; width: calc(16.5 * var(--pt)); height: calc(16.5 * var(--pt)); fill: none; stroke: var(--p-fg3); stroke-width: 1.6; stroke-linecap: round; }
+    .st-head .ph { color: var(--p-fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-head .title { display: none; font-weight: 500; }
+    .stacks.cycling .st-head .ph { display: none; }
+    .stacks.cycling .st-head .title { display: block; }
+    .st-body { flex: 1; min-height: 0; display: flex; }
+    /* the sidebar: one highlight pill and one current-stack dot, each a
+       single shape that slides between rows instead of popping */
+    .st-side {
+      flex: none; width: clamp(calc(220 * var(--pt)), 26%, calc(260 * var(--pt)));
+      display: flex; flex-direction: column;
+      border-right: 0.5px solid var(--p-line);
+    }
+    .st-list { flex: 1; position: relative; padding: calc(6 * var(--pt)) 0; }
+    .st-pill, .st-dot { position: absolute; transition: top 0.2s cubic-bezier(.2,.9,.3,1.05), background 0.15s ease; }
+    .st-pill {
+      left: calc(8 * var(--pt)); right: calc(8 * var(--pt)); top: calc(6 * var(--pt));
+      height: calc(36 * var(--pt)); border-radius: calc(7 * var(--pt));
+      background: var(--p-dim);
+    }
+    .stacks.side-focus .st-pill { background: var(--p-sel); }
+    .st-dot {
+      left: calc(18 * var(--pt)); top: calc(21.5 * var(--pt));
+      width: calc(5 * var(--pt)); height: calc(5 * var(--pt)); border-radius: 50%;
+      background: var(--accent);
+    }
+    .st-row {
+      position: relative; display: flex; align-items: center; gap: calc(8 * var(--pt));
+      height: calc(36 * var(--pt)); padding: 0 calc(18 * var(--pt));
+      font-size: calc(14 * var(--pt)); font-weight: 500;
+      transition: font-weight 0.15s ease;
+    }
+    .st-row.cur { font-weight: 600; }
+    .st-row, .st-note .b { color: var(--p-fg); }
+    .st-row .g { flex: none; width: calc(5 * var(--pt)); }
+    .st-row .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-row .c { flex: none; font-family: var(--mono); font-size: calc(11 * var(--pt)); color: var(--p-fg3); min-width: calc(16 * var(--pt)); text-align: right; }
+    .st-new {
+      flex: none; display: flex; align-items: center; gap: calc(9 * var(--pt));
+      height: calc(40 * var(--pt)); padding: 0 calc(18 * var(--pt));
+      border-top: 0.5px solid var(--p-line);
+      font-weight: 500; color: var(--p-fg2);
+    }
+    .st-new svg { flex: none; width: calc(10 * var(--pt)); height: calc(10 * var(--pt)); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+    .st-new .k { margin-left: auto; font-family: var(--mono); font-size: calc(10.5 * var(--pt)); color: var(--p-fg3); }
+    /* notes sit on one continuous surface; the highlighted one lifts on a
+       rounded pill, deeper when the keyboard is here */
+    .st-notes { flex: 1; min-width: 0; overflow: hidden; position: relative; padding: calc(6 * var(--pt)) 0; }
+    .st-npill {
+      position: absolute; left: calc(8 * var(--pt)); right: calc(8 * var(--pt)); top: 0; height: 0;
+      border-radius: calc(10 * var(--pt));
+      background: var(--p-sel);
+      transition: top 0.18s cubic-bezier(.2,.9,.3,1.05), height 0.18s cubic-bezier(.2,.9,.3,1.05), background 0.15s ease;
+    }
+    .st-npill.jump { transition: none; }
+    .stacks.side-focus .st-npill { background: var(--p-dim); }
+    .st-day {
+      padding: calc(14 * var(--pt)) calc(22 * var(--pt)) calc(6 * var(--pt));
+      font-family: var(--mono); font-weight: 500; font-size: calc(11 * var(--pt));
+      letter-spacing: 0.127em; text-transform: uppercase; color: var(--p-fg3); line-height: calc(13.2 * var(--pt));
+    }
+    .st-note {
+      position: relative;
+      display: flex; align-items: flex-start; gap: calc(16 * var(--pt));
+      padding: calc(14 * var(--pt)) calc(22 * var(--pt));
+      animation: note-in 0.42s cubic-bezier(.2,.9,.3,1) both;
+      animation-delay: calc(var(--i, 0) * 55ms);
+    }
+    @keyframes note-in { from { opacity: 0; transform: translateY(0.5em); } }
+    .st-note + .st-note::before { content: ""; position: absolute; left: calc(22 * var(--pt)); right: calc(22 * var(--pt)); top: 0; height: 0.5px; background: var(--p-line); }
+    .st-note.editing::after {
+      content: ""; position: absolute; inset: 0 calc(8 * var(--pt)); pointer-events: none;
+      border-radius: calc(10 * var(--pt));
+      box-shadow: inset 0 0 0 1px rgba(var(--p-ink), 0.22);
+    }
+    .st-note .caret {
+      display: inline-block; width: 1px; height: 1em; margin-left: 1px; vertical-align: -0.15em;
+      background: var(--p-fg); animation: term-blink 1s steps(1) infinite;
+    }
+    /* SwiftUI puts its line spacing between lines only; CSS splits it above
+       and below each line, so the blocks pull in by half a spacing */
+    .st-note .w { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .st-note .b { font-size: calc(14 * var(--pt)); line-height: calc(21 * var(--pt)); margin: calc(-1.4 * var(--pt)) 0; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+    .st-note .q {
+      margin: calc(8 * var(--pt)) 0 calc(-2 * var(--pt)); padding-left: calc(10.5 * var(--pt));
+      border-left: calc(1.5 * var(--pt)) solid rgba(var(--p-ink), 0.16);
+      font-family: var(--mono); font-size: calc(12 * var(--pt)); line-height: calc(18.4 * var(--pt)); color: var(--p-fg2);
+      white-space: pre-wrap;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .st-note .more { margin-top: calc(5 * var(--pt)); padding-left: calc(12 * var(--pt)); font-size: calc(11 * var(--pt)); line-height: calc(14.3 * var(--pt)); color: var(--p-fg3); }
+    .st-note .t { flex: none; padding-top: calc(3 * var(--pt)); font-family: var(--mono); font-size: calc(11 * var(--pt)); line-height: calc(13.2 * var(--pt)); color: var(--p-fg3); }
+    .st-foot {
+      flex: none; display: flex; align-items: center; gap: calc(16 * var(--pt));
+      height: calc(40 * var(--pt)); padding: 0 calc(18 * var(--pt));
+      border-top: 0.5px solid var(--p-line);
+      font-size: calc(11 * var(--pt)); color: var(--p-fg2);
+      font-variant-numeric: tabular-nums;
+    }
+    .st-foot .ctx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-foot .hint { display: flex; align-items: center; gap: calc(5 * var(--pt)); color: var(--p-fg3); white-space: nowrap; }
+    .st-foot .sp { flex: 1; }
+    .st-foot .left { display: flex; align-items: center; gap: calc(12 * var(--pt)); min-width: 0; }
+    .st-foot .act { display: flex; align-items: center; gap: calc(9 * var(--pt)); font-size: calc(13 * var(--pt)); font-weight: 500; color: var(--p-fg2); white-space: nowrap; }
+    .st-foot .act.tpl { gap: calc(7 * var(--pt)); }
+    .st-foot .act.tpl .name { padding-right: calc(2 * var(--pt)); }
+    .st-foot .act .dim { font-weight: 400; color: var(--p-fg3); }
+    .st-foot .browse, .st-foot .cycle { display: contents; }
+    .stacks.cycling .st-foot .browse, .stacks:not(.cycling) .st-foot .cycle { display: none; }
+    .st-foot .release { color: var(--p-fg3); white-space: nowrap; }
+    /* the app's keycap, at a size in points */
+    .st-key {
+      --s: 10.5; display: inline-flex; align-items: center; justify-content: center;
+      height: calc(var(--s) * 2.2 * var(--pt)); padding: 0 calc(var(--s) * 0.8 * var(--pt));
+      border-radius: calc(var(--s) * 0.5 * var(--pt));
+      font-family: var(--mono); font-weight: 500; font-size: calc(var(--s) * var(--pt)); letter-spacing: 0.06em;
+      color: rgba(var(--p-ink), 0.8);
+      background: var(--p-raised);
+      box-shadow: inset 0 0 0 1px var(--p-line), 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+    .st-key.muted { --s: 10; color: var(--p-fg2); background: none; box-shadow: inset 0 0 0 1px var(--p-line); }
+    @media (prefers-color-scheme: dark) {
+      .st-key { box-shadow: inset 0 0 0 1px var(--p-line); }
+    }
+
+    /* the Dock: the two places the demo can run, and the app itself */
     .dock {
       position: absolute; left: 50%; bottom: 0.55em; z-index: 15;
       transform: translateX(-50%);
@@ -724,9 +891,13 @@
       .msgs { padding: 1em 0.8em 0.6em; }
       .user { max-width: 88%; }
     }
+    @media (max-width: 980px) {
+      .stacks { --pt: calc(1em / 14); }
+    }
     @media (max-width: 520px) {
       .safari-tab:not(.active) { display: none; }
       .safari-tab.active { flex-grow: 1; }
+      .st-side, .st-foot .act:not(:last-child) { display: none; }
     }
   </style>
 </head>
@@ -897,6 +1068,36 @@
           </div>
         </div>
 
+        <div class="stacks" id="stacks" aria-hidden="true" hidden>
+          <div class="st-head">
+            <svg viewBox="0 0 16.5 16.5"><circle cx="7.5" cy="7.5" r="5.2"/><path d="M11.4 11.4l3.6 3.6"/></svg>
+            <span class="ph" id="stph">Search notes in Reading notes</span>
+            <span class="title">Switch stack</span>
+          </div>
+          <div class="st-body">
+            <div class="st-side">
+              <div class="st-list" id="stlist"><i class="st-pill" id="stpill"></i><i class="st-dot" id="stdot"></i></div>
+              <div class="st-new"><svg viewBox="0 0 10 10"><path d="M5 1v8M1 5h8"/></svg>New stack<span class="k">⌘N</span></div>
+            </div>
+            <div class="st-notes" id="stnotes"><i class="st-npill" id="stnpill"></i></div>
+          </div>
+          <div class="st-foot">
+            <span class="browse">
+              <span class="left"><span class="ctx" id="stctx">Reading notes · 7 notes</span><span class="hint"><span class="st-key muted">⇥</span>stacks</span></span>
+              <span class="sp"></span>
+              <span class="act tpl"><span class="dim">Template</span><span class="name">Plain</span><span class="st-key">⌘P</span></span>
+              <span class="act">Edit<span class="st-key">↩</span></span>
+              <span class="act">Actions<span class="st-key">⌘K</span></span>
+            </span>
+            <span class="cycle">
+              <span class="hint"><span class="st-key muted">⌘U</span>cycle</span>
+              <span class="hint"><span class="st-key muted">⇧</span>reverse</span>
+              <span class="sp"></span>
+              <span class="release">Release to switch</span>
+            </span>
+          </div>
+        </div>
+
         <div class="subs" id="subs" aria-hidden="true"><span class="line" id="subline"></span></div>
 
         <div class="capsule" id="capsule" aria-hidden="true">
@@ -906,9 +1107,10 @@
           <span class="tether" id="ct"></span>
           <span class="orb" aria-hidden="true"><i class="halo" id="halo"></i><i class="ring"></i><i class="core" id="core"></i></span>
         </div>
-        <nav class="dock" aria-label="Where the demo runs">
+        <nav class="dock" aria-label="Dock">
           <button type="button" data-app="safari" aria-pressed="true" aria-label="Show the demo in Safari"><img src="/dock-safari.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Safari</span></button>
           <button type="button" data-app="ghostty" aria-pressed="false" aria-label="Show the demo in Claude Code, in Ghostty"><img src="/dock-ghostty.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Ghostty</span></button>
+          <button type="button" data-app="sendpoint" aria-pressed="false" aria-label="Show Sendpoint's settings"><img src="/dock-sendpoint.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Sendpoint</span></button>
         </nav>
       </div>
     </section>
@@ -1240,7 +1442,135 @@
       return app;
     })();
 
-    const apps = { safari, ghostty };
+    /* ---------- Sendpoint: the stack palette, ↑ and ↩ on a note, ⌘U held to switch ---------- */
+    const sendpoint = (() => {
+      const win = $("stacks"), list = $("stlist"), pill = $("stpill"), dot = $("stdot"),
+            notes = $("stnotes"), npill = $("stnpill"), ph = $("stph"), ctx = $("stctx");
+      // what the reader has captured so far: the notes the Safari run makes,
+      // and the ones they took on the Wikipedia tab before it
+      const passage = (id) => $(id).textContent.replace(/\s+/g, " ").trim();
+      const STACKS = [
+        { name: "Reading notes", notes: [
+          { t: "2:09 PM", q: "A CEK machine is an abstract machine for evaluating call-by-value lambda calculus. Its state has three parts: a control string, an environment, and a continuation.", b: "control, environment, continuation. so the name is literally the three registers" },
+          { t: "2:10 PM", q: "The continuation is a stack of frames, each recording what to do once the current expression has been evaluated.", b: "the continuation is just the call stack made explicit. that's the part I kept glossing over" },
+          { t: "2:12 PM", b: "look up how CESK differs, I think the S is a store for mutable cells" },
+          { t: "2:14 PM", q: passage("s1"), b: safari.notes[0].said },
+          { t: "2:15 PM", q: passage("s2"), b: safari.notes[1].said },
+          { t: "2:16 PM", q: passage("s3"), b: safari.notes[2].said },
+          { t: "2:17 PM", b: safari.notes[3].said },
+        ] },
+        { name: "Thesis feedback", notes: [
+          { t: "11:42 AM", q: "We evaluate our approach on three widely used benchmark suites and observe consistent improvements across all of them.", b: "which three? name them here, the reader shouldn't have to wait for section five" },
+          { t: "11:48 AM", q: "Results are summarised in Table 4.", b: "table four is missing the baseline row, so the improvement can't be read off it" },
+          { t: "11:51 AM", b: "suggest moving related work after the method chapter, it reads better once the terms are defined" },
+        ] },
+        { name: "Standup", notes: [
+          { t: "9:31 AM", b: "still blocked on the auth review, ask for a second reviewer today" },
+          { t: "9:34 AM", b: "demo the new capture flow on thursday, keep it under five minutes" },
+        ] },
+      ];
+      const EDIT = { index: 5, typed: ", not the caller's" };
+      const ROW = 36, TOP = 6;
+      for (const stack of STACKS) {
+        const row = document.createElement("div");
+        row.className = "st-row";
+        row.innerHTML = `<span class="g"></span><span class="n">${esc(stack.name)}</span><span class="c">${stack.notes.length}</span>`;
+        list.appendChild(row);
+        stack.row = row;
+      }
+      const pt = (n) => `calc(${n} * var(--pt))`;
+      const ptPx = () => parseFloat(getComputedStyle(win).getPropertyValue("--pt")) || 1;
+      let current = 0, cards = [], lit = -1;
+      const setCurrent = (i) => {
+        current = i;
+        dot.style.top = pt(TOP + i * ROW + 15.5);
+        STACKS.forEach((stack, k) => stack.row.classList.toggle("cur", k === i));
+      };
+      /* the note highlight: one pill that slides between notes; a note cut
+         off at the top is brought to the edge first */
+      const light = (k, jump) => {
+        lit = k;
+        const card = cards[k];
+        npill.classList.toggle("jump", !!jump);
+        npill.style.top = card.offsetTop + "px";
+        npill.style.height = card.offsetHeight + "px";
+        const margin = 6 * ptPx();
+        if (card.offsetTop < notes.scrollTop + margin) notes.scrollTo({ top: card.offsetTop - margin, behavior: jump ? "auto" : "smooth" });
+      };
+      /* light a stack: the sidebar pill slides to it and its notes deal in,
+         the newest one landing highlighted at the bottom edge */
+      const show = (i, animate) => {
+        const stack = STACKS[i];
+        pill.style.top = pt(TOP + i * ROW);
+        ph.textContent = `Search notes in ${stack.name}`;
+        ctx.textContent = `${stack.name} · ${stack.notes.length} note${stack.notes.length === 1 ? "" : "s"}`;
+        for (const c of cards) c.remove();
+        for (const d of notes.querySelectorAll(".st-day")) d.remove();
+        const day = document.createElement("div");
+        day.className = "st-day"; day.textContent = "Today";
+        notes.appendChild(day);
+        cards = stack.notes.map((n, k) => {
+          const card = document.createElement("div");
+          card.className = "st-note";
+          card.style.cssText = `--i:${animate ? k : 0}${animate ? "" : ";animation:none"}`;
+          card.innerHTML = `<div class="w"><div class="b">${esc(n.b)}</div>${n.q ? `<div class="q">${esc(n.q)}</div>` : ""}</div><div class="t">${n.t}</div>`;
+          notes.appendChild(card);
+          return card;
+        });
+        notes.scrollTop = notes.scrollHeight;
+        light(cards.length - 1, true);
+      };
+      const mode = (m) => {
+        win.classList.toggle("cycling", m === "cycling");
+        win.classList.toggle("side-focus", m === "cycling");
+      };
+      /* ↩ on the lit note swaps in the editor; the words arrive at the
+         caret; ↩ again keeps them */
+      const edit = async (signal) => {
+        const card = cards[lit], body = card.querySelector(".b");
+        const caret = document.createElement("i");
+        caret.className = "caret";
+        card.classList.add("editing");
+        body.appendChild(caret);
+        await wait(900, signal);
+        for (const ch of EDIT.typed) {
+          caret.before(document.createTextNode(ch));
+          npill.style.height = card.offsetHeight + "px";
+          await wait(/[,.\s]/.test(ch) ? 140 : 45 + Math.random() * 50, signal);
+        }
+        await wait(1100, signal);
+        caret.remove();
+        card.classList.remove("editing");
+      };
+      const app = {
+        name: "Sendpoint", win,
+        async play(signal) {
+          show(0, true);
+          for (;;) {
+            await wait(3600, signal);
+            // ↑ to an earlier note, ↩ to edit it, ↩ to keep the change
+            while (lit > EDIT.index) { light(lit - 1); await wait(650, signal); }
+            await wait(800, signal);
+            await edit(signal);
+            await wait(3000, signal);
+            // ⌘U goes down: each press lights the next stack and previews
+            // what is in it; letting go switches to the lit one
+            for (const stop of [[1, 2], [0]]) {
+              mode("cycling");
+              for (const i of stop) { show(i, true); await wait(1700, signal); }
+              setCurrent(stop[stop.length - 1]);
+              mode("browse");
+              await wait(4600, signal);
+            }
+          }
+        },
+        reset() { mode("browse"); setCurrent(0); for (const c of cards) c.remove(); cards = []; },
+        still() { mode("browse"); setCurrent(0); show(0, false); },
+      };
+      return app;
+    })();
+
+    const apps = { safari, ghostty, sendpoint };
 
     /* ---------- one run at a time ---------- */
     const capture = async (app, note, count, signal) => {
@@ -1284,6 +1614,7 @@
         app.still();
         return;
       }
+      if (app.play) return app.play(signal);
       for (;;) {
         teardown();
         await wait(1000, signal);
@@ -1311,9 +1642,10 @@
       play(app, ctl.signal).catch((err) => { if (!ctl.signal.aborted) throw err; });
     };
 
-    // the app that isn't showing bounces now and then until the Dock is used
+    // one of the apps that isn't showing bounces now and then until the Dock is used
     let nudge = reduced ? 0 : setInterval(() => {
-      const b = dock.find((b) => b.dataset.app !== current);
+      const others = dock.filter((b) => b.dataset.app !== current);
+      const b = others[Math.floor(Math.random() * others.length)];
       b.classList.remove("nudge"); void b.offsetWidth; b.classList.add("nudge");
     }, 6500);
     for (const b of dock) {
