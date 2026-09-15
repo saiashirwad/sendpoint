@@ -1,0 +1,20 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Sendpoint</title>
+        <item>
+            <title>1.6</title>
+            <pubDate>Tue, 15 Sep 2026 16:56:50 +0530</pubDate>
+            <link>https://sendpoint.app</link>
+            <sparkle:version>179</sparkle:version>
+            <sparkle:shortVersionString>1.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/saiashirwad/sendpoint/releases/download/v1.6/Sendpoint-1.6.zip" length="10875449" type="application/octet-stream" sparkle:edSignature="KVT66rVPHfrVox9ZM51kprrGn+1ThR30AFa2rABdwvvVtcobdH2bxmTivSmGJ2rxogzlShN+wjBZaMLIQHcJCg=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: 09dZRUJCA+Zprd9UcDa9of4+Pqzk8ZDQ4FN2/tJ2Dij5Gqep0280nsHaAFj1BLGwtkrShEVtyNCy9TR3QsXUCg==
+length: 1168
+-->
