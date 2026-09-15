@@ -11,7 +11,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let permissionState: PermissionState
     private let surfaces: SurfaceCoordinator
     private let onSelectTemplate: (UUID) -> Void
-    private let onShowAccessibilityHelper: () -> Void
     private let onSettingsChanged: () -> Void
     private var window: NSWindow?
     private(set) var templateEditor: TemplateEditorState?
@@ -26,7 +25,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         permissionState: PermissionState,
         surfaces: SurfaceCoordinator,
         onSelectTemplate: @escaping (UUID) -> Void,
-        onShowAccessibilityHelper: @escaping () -> Void,
         onSettingsChanged: @escaping () -> Void
     ) {
         self.settings = settings
@@ -38,7 +36,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         self.permissionState = permissionState
         self.surfaces = surfaces
         self.onSelectTemplate = onSelectTemplate
-        self.onShowAccessibilityHelper = onShowAccessibilityHelper
         self.onSettingsChanged = onSettingsChanged
         super.init()
         surfaces.register(.settings, transitions: .init(
@@ -97,7 +94,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             templateEditor: templateEditor,
             permissionState: permissionState,
             onSelectTemplate: onSelectTemplate,
-            onShowAccessibilityHelper: onShowAccessibilityHelper,
             onSettingsChanged: onSettingsChanged
         )
         let hosting = NSHostingView(rootView: settingsView)

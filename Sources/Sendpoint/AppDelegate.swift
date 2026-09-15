@@ -15,7 +15,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var updateController: UpdateController { environment.updateController }
     var settingsWindowController: SettingsWindowController?
     var setupWindowController: SetupWindowController?
-    var accessibilityHelperWindowController: AccessibilityHelperWindowController?
     var palette: StackPaletteWindowController?
     var switcher: StackSwitcherController?
     enum StoreState {
@@ -85,8 +84,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         palette = nil
         setupWindowController?.teardown()
         setupWindowController = nil
-        accessibilityHelperWindowController?.teardown()
-        accessibilityHelperWindowController = nil
         settingsWindowController?.teardown()
         settingsWindowController = nil
         if let userOpenedObserver {

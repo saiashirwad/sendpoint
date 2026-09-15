@@ -27,7 +27,6 @@ struct SettingsView: View {
     @Bindable var templateEditor: TemplateEditorState
     @Bindable var permissionState: PermissionState
     let onSelectTemplate: (UUID) -> Void
-    let onShowAccessibilityHelper: () -> Void
     let hotKeyRegistrar: HotKeyRegistrar
     let captureController: CaptureController
     let onSettingsChanged: () -> Void
@@ -51,7 +50,6 @@ struct SettingsView: View {
         templateEditor: TemplateEditorState,
         permissionState: PermissionState,
         onSelectTemplate: @escaping (UUID) -> Void,
-        onShowAccessibilityHelper: @escaping () -> Void,
         onSettingsChanged: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
@@ -60,7 +58,6 @@ struct SettingsView: View {
         _templateEditor = Bindable(wrappedValue: templateEditor)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.onSelectTemplate = onSelectTemplate
-        self.onShowAccessibilityHelper = onShowAccessibilityHelper
         self.hotKeyRegistrar = hotKeyRegistrar
         self.captureController = captureController
         self.onSettingsChanged = onSettingsChanged
@@ -102,8 +99,7 @@ struct SettingsView: View {
                             )
                         case .permissions:
                             SettingsPermissionsPane(
-                                permissionState: permissionState,
-                                onShowAccessibilityHelper: onShowAccessibilityHelper
+                                permissionState: permissionState
                             )
                         }
                     }
@@ -200,16 +196,8 @@ struct SettingsView: View {
 
     private var permissionsFooterAction: (title: String, run: () -> Void)? {
         if let title = accessibilityFooterTitle {
-            return (title, { [onShowAccessibilityHelper, permissionState] in
-                switch permissionState.accessibilityAction {
-                case .requestAccessibility:
-                    permissionState.requestAccessibility()
-                    onShowAccessibilityHelper()
-                case .showAccessibilityHelper:
-                    onShowAccessibilityHelper()
-                default:
-                    break
-                }
+            return (title, { [permissionState] in
+                permissionState.requestAccessibility()
             })
         }
         switch permissionState.microphoneAction {
@@ -234,7 +222,7 @@ struct SettingsView: View {
 
     private var accessibilityFooterTitle: String? {
         switch permissionState.accessibilityAction {
-        case .requestAccessibility, .showAccessibilityHelper: "Grant"
+        case .requestAccessibility: "Grant"
         default: nil
         }
     }

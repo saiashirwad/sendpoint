@@ -157,10 +157,12 @@ enum StatusMenuModel {
         menu.append(.entry(StatusMenuEntry(
             title: "Check for Updates…",
             action: .checkForUpdates)))
-        menu.append(.entry(StatusMenuEntry(
-            title: "Settings…",
-            action: .settings,
-            keyEquivalent: ",")))
+        if settings.hasCompletedSetup {
+            menu.append(.entry(StatusMenuEntry(
+                title: "Settings…",
+                action: .settings,
+                keyEquivalent: ",")))
+        }
         menu.append(.entry(StatusMenuEntry(
             title: "Quit Sendpoint",
             action: .quit,

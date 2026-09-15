@@ -84,8 +84,8 @@ final class ShortcutSettings {
     }
 
     private static let defaultCombos: [ShortcutSlot: KeyCombo] = [
-        .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_Grave), modifiers: [.command]),
-        .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_A), modifiers: [.control, .command]),
+        .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.command]),
+        .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_G), modifiers: [.command]),
         .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
         .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
         .switchStack: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),

@@ -29,7 +29,6 @@ enum Surface: CaseIterable, Hashable {
     case palette
     case settings
     case setup
-    case accessibilityHelper
     case switcher
     case captureEditor
     case captureVoice
@@ -63,14 +62,14 @@ final class SurfaceCoordinator {
     func present(_ surface: Surface) {
         switch surface {
         case .captureEditor:
-            for hidden in [Surface.palette, .switcher, .settings, .setup, .accessibilityHelper] {
+            for hidden in [Surface.palette, .switcher, .settings, .setup] {
                 dismiss(hidden)
             }
         case .switcher:
             dismiss(.palette)
         case .palette:
             guard !visible.contains(.switcher) else { return }
-        case .settings, .setup, .accessibilityHelper, .captureVoice:
+        case .settings, .setup, .captureVoice:
             break
         }
         guard let transition = transitions[surface] else { return }

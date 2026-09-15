@@ -157,6 +157,23 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
+    func testSettingsHiddenUntilSetupCompletes() {
+        withSettings { settings in
+            XCTAssertNil(entry(
+                titled: "Settings…",
+                in: items(facts: nil, status: .loading, settings: settings)
+            ))
+            settings.app.completeSetup()
+            XCTAssertEqual(
+                entry(
+                    titled: "Settings…",
+                    in: items(facts: nil, status: .loading, settings: settings)
+                )?.action,
+                .settings
+            )
+        }
+    }
+
     private func items(
         facts: StackUIFacts?,
         status: StatusMenuStoreStatus,

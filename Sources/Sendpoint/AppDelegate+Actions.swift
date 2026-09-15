@@ -167,7 +167,7 @@ extension AppDelegate {
     func presentPermissionHelpForCapture() {
         permissionState.refresh()
         if settings.hasCompletedSetup {
-            presentAccessibilityHelper()
+            permissionState.requestAccessibility()
         } else {
             presentSetup()
         }
@@ -180,28 +180,14 @@ extension AppDelegate {
                 settings: settings,
                 permissionState: permissionState,
                 surfaces: surfaces,
-                onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() },
                 onComplete: { [weak self] in
                     guard let self else { return }
                     self.surfaces.dismiss(.setup)
-                    self.statusItemController.flash(
-                        "\(self.shortcuts.voiceCaptureCombo.displayString): "
-                            + "\(self.voiceSettings.voiceMode.detail) · Esc discards"
-                    )
+                    self.refreshStatusItem()
                 }
             )
         }
         setupWindowController?.show()
-    }
-
-    func presentAccessibilityHelper() {
-        if accessibilityHelperWindowController == nil {
-            accessibilityHelperWindowController = AccessibilityHelperWindowController(
-                permissionState: permissionState,
-                surfaces: surfaces
-            )
-        }
-        accessibilityHelperWindowController?.show()
     }
 
     func presentLaunchSurface(kind: LaunchPresentation.Kind) {
@@ -226,6 +212,10 @@ extension AppDelegate {
     }
 
     private func showSettings() {
+        guard settings.hasCompletedSetup else {
+            presentSetup()
+            return
+        }
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 settings: settings,
@@ -237,7 +227,6 @@ extension AppDelegate {
                 permissionState: permissionState,
                 surfaces: surfaces,
                 onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) },
-                onShowAccessibilityHelper: { [weak self] in self?.presentAccessibilityHelper() },
                 onSettingsChanged: { [weak self] in self?.refreshStatusItem() }
             )
         }

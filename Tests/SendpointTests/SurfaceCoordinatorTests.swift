@@ -9,13 +9,12 @@ final class SurfaceCoordinatorTests: XCTestCase {
         coordinator.present(.palette)
         coordinator.present(.settings)
         coordinator.present(.setup)
-        coordinator.present(.accessibilityHelper)
         spy.events.removeAll()
 
         coordinator.present(.captureEditor)
 
         XCTAssertEqual(spy.events, [
-            "hide palette", "hide settings", "hide setup", "hide accessibilityHelper",
+            "hide palette", "hide settings", "hide setup",
             "show captureEditor",
         ])
         XCTAssertEqual(coordinator.visible, [.captureEditor])

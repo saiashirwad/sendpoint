@@ -91,7 +91,8 @@ final class PermissionStateTests: XCTestCase {
         modelFilesExist: (@Sendable () -> Bool)? = nil,
         downloadModel: @escaping @Sendable (
             _ onProgress: @escaping @Sendable (Double) -> Void
-        ) async throws -> Void = { _ in }
+        ) async throws -> Void = { _ in },
+        openAccessibilitySettings: @escaping @MainActor @Sendable () -> Void = {}
     ) -> PermissionServices {
         PermissionServices(
             accessibilityStatus: { accessibility },
@@ -100,7 +101,7 @@ final class PermissionStateTests: XCTestCase {
             requestMicrophone: requestMicrophone,
             voiceModelFilesExist: modelFilesExist ?? { modelReady },
             downloadVoiceModel: downloadModel,
-            openAccessibilitySettings: {},
+            openAccessibilitySettings: openAccessibilitySettings,
             openMicrophoneSettings: {}
         )
     }
@@ -166,6 +167,34 @@ final class PermissionStateTests: XCTestCase {
         await denied.waitForIdle()
         XCTAssertEqual(denied.accessibility, .notGranted)
         XCTAssertEqual(denied.microphone, .denied)
+        denied.teardown()
+    }
+
+    func testAccessibilityRequestOpensSettingsOnlyWhenStillDenied() {
+        final class OpenCount: @unchecked Sendable {
+            var value = 0
+        }
+        let opened = OpenCount()
+        let granted = PermissionState(services: services(
+            accessibility: .notGranted,
+            requestAccessibility: true,
+            openAccessibilitySettings: { opened.value += 1 }
+        ))
+        granted.requestAccessibility()
+        XCTAssertEqual(granted.accessibility, .granted)
+        XCTAssertEqual(opened.value, 0)
+        granted.teardown()
+
+        let denied = PermissionState(services: services(
+            accessibility: .notGranted,
+            requestAccessibility: false,
+            openAccessibilitySettings: { opened.value += 1 }
+        ))
+        denied.requestAccessibility()
+        XCTAssertEqual(denied.accessibility, .notGranted)
+        XCTAssertEqual(opened.value, 0)
+        denied.requestAccessibility()
+        XCTAssertEqual(opened.value, 1)
         denied.teardown()
     }
 
@@ -342,7 +371,7 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(state.localVoiceModelAction, .downloadVoiceModel)
 
         state.requestAccessibility()
-        XCTAssertEqual(state.accessibilityAction, .showAccessibilityHelper)
+        XCTAssertEqual(state.accessibilityAction, .requestAccessibility)
         state.teardown()
 
         let blocked = PermissionState(services: services(

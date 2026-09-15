@@ -43,7 +43,6 @@ enum VoiceModelDownloadFailure: Equatable, Sendable {
 
 enum PermissionAction: Equatable, Sendable {
     case requestAccessibility
-    case showAccessibilityHelper
     case requestMicrophone
     case openMicrophoneSettings
     case downloadVoiceModel
@@ -117,7 +116,7 @@ final class PermissionState {
         case .granted:
             return nil
         case .notGranted:
-            return hasRequestedAccessibility ? .showAccessibilityHelper : .requestAccessibility
+            return .requestAccessibility
         }
     }
 
@@ -180,8 +179,8 @@ final class PermissionState {
         refreshVoiceModel()
     }
 
-    /// Refresh only Accessibility for helper polling. Polls that find no
-    /// change leave the property alone so observers are not woken.
+    /// Refresh only Accessibility. Polls that find no change leave the
+    /// property alone so observers are not woken.
     func refreshAccessibility() {
         guard !isTornDown else { return }
         let status = services.accessibilityStatus()
@@ -213,12 +212,15 @@ final class PermissionState {
     }
 
     func requestAccessibility() {
-        guard !isTornDown,
-              accessibility == .notGranted,
-              !hasRequestedAccessibility
-        else { return }
-        hasRequestedAccessibility = true
-        accessibility = services.requestAccessibility() ? .granted : .notGranted
+        guard !isTornDown, accessibility == .notGranted else { return }
+        if !hasRequestedAccessibility {
+            hasRequestedAccessibility = true
+            accessibility = services.requestAccessibility() ? .granted : .notGranted
+            // The system dialog already offers "Open System Settings".
+            // Opening Settings ourselves would stack both on screen.
+            return
+        }
+        services.openAccessibilitySettings()
     }
 
     func requestMicrophone() {

@@ -74,21 +74,90 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertFalse(settings.ignoresMouseEvents)
 
         let setup = SetupWindowController.makeWindow()
-        XCTAssertTrue(setup.styleMask.contains([.titled, .closable]))
+        XCTAssertTrue(setup.styleMask.contains(.borderless))
+        XCTAssertFalse(setup.styleMask.contains(.titled))
         XCTAssertFalse(setup.styleMask.contains(.resizable))
-        XCTAssertEqual(
-            NSWindow.contentRect(forFrameRect: setup.frame, styleMask: setup.styleMask).size,
-            SetupView.size
-        )
+        XCTAssertEqual(setup.frame.size, SetupView.size)
         XCTAssertTrue(setup.canBecomeKey)
+        XCTAssertFalse(setup.isOpaque)
+        XCTAssertTrue(setup.hasShadow)
+        XCTAssertFalse(setup.hidesOnDeactivate)
+        XCTAssertFalse(setup.isFloatingPanel)
+    }
 
-        let helper = AccessibilityHelperWindowController.makeWindow()
-        XCTAssertTrue(helper.styleMask.contains([.titled, .closable, .fullSizeContentView]))
-        XCTAssertFalse(helper.styleMask.contains(.resizable))
+    func testSetupHeroMotionSpeaksThenRests() {
+        let speaking = SetupHeroMotion.phase(at: 1)
+        XCTAssertEqual(speaking.mode, .live)
+        XCTAssertGreaterThan(speaking.level, 0)
+
+        let rest = SetupHeroMotion.phase(at: 5)
+        XCTAssertEqual(rest.mode, .idle)
+        XCTAssertEqual(rest.level, 0)
+
+        let wrapped = SetupHeroMotion.phase(at: SetupHeroMotion.period + 1)
+        XCTAssertEqual(wrapped.mode, .live)
+    }
+
+    func testSetupHeroStageWalksPermissionsInOrder() {
         XCTAssertEqual(
-            NSWindow.contentRect(forFrameRect: helper.frame, styleMask: helper.styleMask).size,
-            AccessibilityHelperView.size
+            SetupHeroStage.from(
+                accessibility: .notGranted,
+                microphone: .notDetermined,
+                model: .notDownloaded
+            ),
+            .accessibility
         )
-        XCTAssertTrue(helper.canBecomeKey)
+        XCTAssertEqual(
+            SetupHeroStage.from(
+                accessibility: .granted,
+                microphone: .notDetermined,
+                model: .notDownloaded
+            ),
+            .microphone
+        )
+        XCTAssertEqual(
+            SetupHeroStage.from(
+                accessibility: .granted,
+                microphone: .denied,
+                model: .notDownloaded
+            ),
+            .microphoneSettings
+        )
+        XCTAssertEqual(
+            SetupHeroStage.from(
+                accessibility: .granted,
+                microphone: .granted,
+                model: .notDownloaded
+            ),
+            .voiceModel
+        )
+        XCTAssertEqual(
+            SetupHeroStage.from(
+                accessibility: .granted,
+                microphone: .granted,
+                model: .downloading(progress: 0.4)
+            ),
+            .downloading(progress: 0.4)
+        )
+        XCTAssertEqual(
+            SetupHeroStage.from(
+                accessibility: .granted,
+                microphone: .granted,
+                model: .ready
+            ),
+            .ready
+        )
+        XCTAssertEqual(SetupHeroStage.accessibility.title, "Accessibility")
+        XCTAssertEqual(SetupHeroStage.voiceModel.label, "Voice model")
+        XCTAssertTrue(SetupHeroStage.voiceModel.showsDownloadGlyph)
+        XCTAssertNil(SetupHeroStage.voiceModel.accessory)
+        XCTAssertEqual(SetupHeroStage.downloading(progress: 0.4).accessory, "40%")
+        XCTAssertTrue(SetupHeroStage.microphone.isActionable)
+        XCTAssertFalse(SetupHeroStage.ready.isActionable)
+        XCTAssertFalse(SetupHeroStage.downloading(progress: nil).isActionable)
+        XCTAssertEqual(SetupHeroStage.voiceModel.step, SetupHeroStage.downloading(progress: 0.1).step)
+        XCTAssertEqual(SetupHeroStage.accessibility.step, 0)
+        XCTAssertEqual(SetupHeroStage.microphone.step, 1)
+        XCTAssertEqual(SetupHeroStage.ready.step, 3)
     }
 }

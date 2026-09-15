@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsPermissionsPane: View {
     @Bindable var permissionState: PermissionState
-    let onShowAccessibilityHelper: () -> Void
 
     var body: some View {
         SettingsRowGroup {
@@ -23,10 +22,7 @@ struct SettingsPermissionsPane: View {
     }
 
     private var items: [PermissionItem] {
-        PermissionCatalog.items(
-            state: permissionState,
-            onShowAccessibilityHelper: onShowAccessibilityHelper
-        )
+        PermissionCatalog.items(state: permissionState)
     }
 
     @ViewBuilder
