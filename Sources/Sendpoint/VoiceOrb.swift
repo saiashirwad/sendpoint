@@ -16,6 +16,9 @@ struct VoiceOrb: View {
     let level: Double
     let ink: Color
     let amber: Color
+    /// What the orb turns while it listens: the one moment it wears the
+    /// brand colour.
+    let accent: Color
 
     private let restingDiameter: CGFloat = 8
 
@@ -28,13 +31,13 @@ struct VoiceOrb: View {
                     // A soft halo grows faster than the core so loud moments
                     // read as a bloom rather than a bigger dot.
                     Circle()
-                        .fill(ink.opacity(0.18))
+                        .fill(accent.opacity(0.22))
                         .frame(
                             width: restingDiameter + 14 * shaped(level),
                             height: restingDiameter + 14 * shaped(level)
                         )
                     Circle()
-                        .fill(ink.opacity(0.95))
+                        .fill(accent)
                         .frame(
                             width: restingDiameter + 5 * shaped(level),
                             height: restingDiameter + 5 * shaped(level)

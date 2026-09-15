@@ -16,6 +16,11 @@ enum Main {
             exit(0)
         }
 
+        // Overlay scrollers in every window, whatever the system setting:
+        // Sendpoint's lists are short and its surfaces are sheets, and a
+        // permanent scroll bar reads as chrome on them.
+        UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
+
         let app = NSApplication.shared
         app.delegate = delegate
         app.setActivationPolicy(.accessory)

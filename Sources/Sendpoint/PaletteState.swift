@@ -50,15 +50,56 @@ nonisolated enum PaletteAction: Hashable {
     case moveNoteDown(UUID)
 }
 
+/// Which part of the palette a ⌘K entry acts on. The menu groups by this,
+/// so titles can be plain verbs.
+nonisolated enum PaletteActionSection: Hashable {
+    case note
+    case stack(name: String?)
+    case template
+
+    var label: String {
+        switch self {
+        case .note: "Note"
+        case .stack: "Stack"
+        case .template: "Template"
+        }
+    }
+
+    var detail: String? {
+        if case let .stack(name) = self { return name }
+        return nil
+    }
+}
+
 /// One entry of the ⌘K menu: the action, how it reads, and its keys.
 nonisolated struct PaletteActionItem: Equatable, Identifiable {
     let action: PaletteAction
     let title: String
     let keys: String
-    var subtitle: String? = nil
+    let section: PaletteActionSection
     var isDestructive = false
 
     var id: PaletteAction { action }
+
+    /// Whether the palette already shows this action's keys somewhere on
+    /// its own chrome: the footer, the sidebar, the undo banner. Those stay
+    /// out of the ⌘K menu, which lists only what has no other home.
+    var isPinned: Bool {
+        if keys == "↩" { return true }
+        switch action {
+        case .chooseTemplate, .newStack, .undoClear: return true
+        default: return false
+        }
+    }
+
+    /// One word for the footer.
+    var verb: String {
+        switch action {
+        case .switchToStack: title.hasPrefix("Keep") ? "Keep" : "Switch"
+        case .createStack: "Create"
+        default: title
+        }
+    }
 }
 
 /// What the palette is looking at, reduced to what decides the action list.
@@ -85,74 +126,74 @@ nonisolated enum PaletteActionCatalog {
     static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
         func add(_ action: PaletteAction, _ title: String, _ keys: String,
-                 subtitle: String? = nil, destructive: Bool = false) {
+                 in section: PaletteActionSection, destructive: Bool = false) {
             items.append(PaletteActionItem(action: action, title: title, keys: keys,
-                subtitle: subtitle, isDestructive: destructive))
+                section: section, isDestructive: destructive))
         }
-        func template() { add(.chooseTemplate, "Template: \(context.templateName)", "⌘P") }
-        func undo() { if let undo = context.undo { add(.undoClear, undo.title, "⌘Z") } }
+        func template() { add(.chooseTemplate, "Change template", "⌘P", in: .template) }
+        func undo(in section: PaletteActionSection) {
+            if let undo = context.undo { add(.undoClear, undo.title, "⌘Z", in: section) }
+        }
         func copy(_ stack: StackItemFacts, keys: String) {
             guard stack.noteCount > 0 else { return }
-            add(.copyStack(stack.id), "Copy “\(stack.name)” as Markdown", keys,
-                subtitle: "Shaped by the \(context.templateName) template")
+            add(.copyStack(stack.id), "Copy as Markdown", keys, in: .stack(name: stack.name))
         }
         func clear(_ stack: StackItemFacts) {
             guard stack.noteCount > 0 else { return }
-            add(.clearStack(stack.id), "Clear “\(stack.name)”", "⇧⌘⌫",
-                subtitle: "Sets the notes aside; undo with ⌘Z", destructive: true)
+            add(.clearStack(stack.id), "Clear", "⇧⌘⌫", in: .stack(name: stack.name), destructive: true)
         }
         func stackActions(_ stack: StackItemFacts, switchKeys: String, copyKeys: String,
                           showsCurrent: Bool) {
+            let section = PaletteActionSection.stack(name: stack.name)
             if showsCurrent || !stack.isCurrent {
-                add(.switchToStack(stack.id),
-                    stack.isCurrent ? "Keep “\(stack.name)” current" : "Switch to “\(stack.name)”",
-                    switchKeys)
+                add(.switchToStack(stack.id), stack.isCurrent ? "Keep current" : "Switch", switchKeys, in: section)
             }
             copy(stack, keys: copyKeys)
-            add(.renameStack(stack.id), "Rename “\(stack.name)”", "⌘R")
-            add(.newStack, "New Stack", "⌘N")
+            add(.renameStack(stack.id), "Rename", "⌘R", in: section)
+            add(.newStack, "New stack", "⌘N", in: section)
+            undo(in: section)
+            clear(stack)
         }
 
         switch context.focus {
         case let .stack(stack):
             stackActions(stack, switchKeys: "↩", copyKeys: "⌘C", showsCurrent: true)
-            template()
-            undo()
-            clear(stack)
             if context.canDeleteStack {
-                add(.deleteStack(stack.id), "Delete “\(stack.name)”", "⌘⌫", destructive: true)
+                add(.deleteStack(stack.id), "Delete", "⌘⌫", in: .stack(name: stack.name), destructive: true)
             }
+            template()
         case let .createStack(name):
-            add(.createStack(name), "Create “\(name)”", "↩")
+            add(.createStack(name), "Create “\(name)”", "↩", in: .stack(name: nil))
             template()
         case let .note(id, index, count):
-            add(.editNote(id), "Edit Note", "↩")
-            add(.copyNote(id), "Copy Note", "⌘C")
-            if index > 0 { add(.moveNoteUp(id), "Move Note Up", "⌥↑") }
-            if index < count - 1 { add(.moveNoteDown(id), "Move Note Down", "⌥↓") }
-            add(.deleteNote(id), "Delete Note", "⌘⌫", destructive: true)
+            add(.editNote(id), "Edit", "↩", in: .note)
+            add(.copyNote(id), "Copy", "⌘C", in: .note)
+            if index > 0 { add(.moveNoteUp(id), "Move up", "⌥↑", in: .note) }
+            if index < count - 1 { add(.moveNoteDown(id), "Move down", "⌥↓", in: .note) }
+            add(.deleteNote(id), "Delete", "⌘⌫", in: .note, destructive: true)
             if let stack = context.shownStack {
                 stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
+            } else {
+                undo(in: .stack(name: nil))
             }
             template()
-            undo()
-            if let stack = context.shownStack { clear(stack) }
         case .nothing:
             if context.pane == .notes, let stack = context.shownStack {
                 stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
             } else {
-                add(.newStack, "New Stack", "⌘N")
+                add(.newStack, "New stack", "⌘N", in: .stack(name: nil))
+                undo(in: .stack(name: nil))
             }
             template()
-            undo()
-            if context.pane == .notes, let stack = context.shownStack { clear(stack) }
         }
         return items
     }
 
-    /// The ⌘K menu narrowed by what was typed into it.
-    static func filter(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
-        items.matching(query) { [$0.title, $0.subtitle ?? ""].joined(separator: " ") }
+    /// What the ⌘K menu lists: the unpinned actions, narrowed by what was
+    /// typed. A section's name counts, so "note" or "stack" finds a group.
+    static func menu(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
+        items.filter { !$0.isPinned }
+            .matching(query) { [$0.title, $0.section.label, $0.section.detail ?? ""].joined(separator: " ") }
     }
 }
 

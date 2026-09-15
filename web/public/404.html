@@ -1,4 +1,43 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found — Sendpoint</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#141419;background:#fff}@media(prefers-color-scheme:dark){body{color:#ededf2;background:#0f0f13}}a{color:#4b4be0}p{margin:.4em 0}</style></head>
-<body><div><p><strong>Nothing here.</strong></p><p><a href="/">Back to Sendpoint</a></p></div></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not found — Sendpoint</title>
+  <link rel="icon" href="/icon.png" type="image/png">
+  <style>
+    @font-face { font-family: "Geist"; font-weight: 500; font-display: swap; src: url(/fonts/Geist-Medium.ttf) format("truetype"); }
+    @font-face { font-family: "Martian Mono Narrow"; font-weight: 500; font-display: swap; src: url(/fonts/MartianMono-NrMd.ttf) format("truetype"); }
+    :root { --paper: #fff; --fg: #111; --fg-2: #66666a; --fg-3: #9a9a9e; --line: rgba(0,0,0,.09); --accent: #db1a66; color-scheme: light dark; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #121212; --fg: #f2f2f2; --fg-2: #a7a7ab; --fg-3: #6f6f74; --line: rgba(255,255,255,.1); --accent: #fa5c99; }
+    }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: var(--paper); color: var(--fg);
+      font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .card { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px; text-align: center; }
+    .brand { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; font-size: 1.05rem; letter-spacing: -0.015em; color: var(--fg); text-decoration: none; }
+    .brand img { width: 26px; height: 26px; margin: -5px -3px -5px -5px; display: block; }
+    .readout {
+      font-family: "Martian Mono Narrow", ui-monospace, "SF Mono", Menlo, monospace; font-weight: 500;
+      font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--fg-2); margin: 10px 0 0;
+    }
+    .back {
+      display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 999px;
+      font-size: 0.9rem; font-weight: 500; color: var(--fg); text-decoration: none;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 14%, transparent);
+    }
+    .back:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 24%, transparent); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <a class="brand" href="/"><img src="/icon.png" alt="">Sendpoint</a>
+    <p class="readout">Nothing here</p>
+    <a class="back" href="/">Back to Sendpoint</a>
+  </div>
+</body>
+</html>

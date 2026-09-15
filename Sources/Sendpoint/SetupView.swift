@@ -103,6 +103,55 @@ enum SetupHeroStage: Equatable {
         }
     }
 
+    /// The one-line ask, in plain words.
+    var headline: String {
+        switch self {
+        case .accessibility: "Let Sendpoint read what you select"
+        case .microphone: "Let Sendpoint hear you"
+        case .microphoneSettings: "The microphone is switched off"
+        case .voiceModel: "One download, then it all stays on this Mac"
+        case .downloading: "Fetching the voice model"
+        case .failedOffline: "No internet right now"
+        case .failedOther: "That download didn't finish"
+        case .ready: "You're all set"
+        }
+    }
+
+    /// Why, or what happens next. One sentence, two at most.
+    var detail: String {
+        switch self {
+        case .accessibility:
+            "macOS asks once. It's how a typed note quotes the passage under your cursor."
+        case .microphone:
+            "Hold a key, speak, let go. Nothing is heard until you hold it."
+        case .microphoneSettings:
+            "Switch Sendpoint on under Privacy & Security, Microphone, then come back."
+        case .voiceModel:
+            "Speech is transcribed here, by a model on this Mac. Audio never leaves it."
+        case .downloading:
+            "About a minute on a good connection."
+        case .failedOffline:
+            "Reconnect, then try again."
+        case .failedOther:
+            "Try once more. Nothing else needs to change."
+        case .ready:
+            "Your first note is one keypress away."
+        }
+    }
+
+    /// The button. Nil while a download runs; progress stands in for it.
+    var actionTitle: String? {
+        switch self {
+        case .accessibility: "Grant access"
+        case .microphone: "Allow"
+        case .microphoneSettings: "Open Settings"
+        case .voiceModel: "Download"
+        case .downloading: nil
+        case .failedOffline, .failedOther: "Try again"
+        case .ready: "Continue"
+        }
+    }
+
     func perform(on state: PermissionState) {
         switch self {
         case .accessibility:
@@ -127,8 +176,9 @@ struct SetupView: View {
     @State private var didFinish = false
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Hero pill, progress dots, footer. Never scrolls. No title bar.
-    static let size = NSSize(width: 480, height: 320)
+    /// Emblem, one ask, the step rail and its button. Never scrolls.
+    static let size = NSSize(width: 500, height: 352)
+    private static let inset: CGFloat = 32
 
     init(
         settings: AppSettings,
@@ -143,26 +193,25 @@ struct SetupView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 18) {
-                Spacer(minLength: 0)
-                SetupHeroPill(permissionState: permissionState)
-                SetupProgressDots(
-                    accessibility: permissionState.accessibility == .granted,
-                    microphone: permissionState.microphone == .granted,
-                    model: permissionState.localVoiceModel == .ready
-                )
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            footer
+        VStack(alignment: .leading, spacing: 0) {
+            SetupHeroPill(permissionState: permissionState)
+                .padding(.top, 30)
+            Spacer(minLength: 0)
+            SetupSteps(step: stage.step)
+            ask
+                .padding(.top, 12)
+            control
+                .padding(.top, 24)
         }
-        .frame(width: Self.size.width, height: Self.size.height)
-        .background(PaletteTint.surface(colorScheme))
-        .clipShape(RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous))
+        .padding(.horizontal, Self.inset)
+        .padding(.bottom, Self.inset - 4)
+        .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+        .background(Aurora(strength: 0.55))
+        .font(.uiBody)
+        .clipShape(RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous)
-                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+                .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
         }
         .ignoresSafeArea()
         .onExitCommand {
@@ -182,6 +231,55 @@ struct SetupView: View {
         }
     }
 
+    /// Headline and one line of why. Swaps as a block when the stage moves
+    /// on, so each step reads as a new page rather than edited text.
+    private var ask: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(stage.headline)
+                .font(.ui(22, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(stage.detail)
+                .font(.ui(13))
+                .foregroundStyle(.secondary)
+                .lineSpacing(3)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .id(stage.headline)
+        .transition(.blurReplace)
+        .animation(.snappy(duration: 0.35), value: stage.headline)
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        if case let .downloading(progress) = stage {
+            HStack(spacing: 10) {
+                Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
+                    .font(.mono(11))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                CapabilityProgress(fraction: progress)
+                    .frame(width: 72)
+            }
+            .frame(height: 30)
+        } else if let title = stage.actionTitle {
+            InkButton(title, keys: "↩") { activate() }
+                .keyboardShortcut(.defaultAction)
+        }
+    }
+
+    private func activate() {
+        if stage == .ready {
+            finish()
+        } else {
+            stage.perform(on: permissionState)
+        }
+    }
+
     private func finish() {
         guard !didFinish else { return }
         didFinish = true
@@ -196,19 +294,120 @@ struct SetupView: View {
             model: permissionState.localVoiceModel
         )
     }
+}
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Spacer(minLength: 0)
-            SettingsFooterButton("Continue", keys: "↩") {
-                finish()
-            }
-            .keyboardShortcut(.defaultAction)
-            .opacity(stage == .ready ? 1 : 0)
-            .disabled(stage != .ready)
+/// The recording capsule, alive, wearing the wordmark: the emblem at the
+/// top of setup. It listens on a loop once everything is granted, thinks
+/// while the model downloads, and goes flat when a download fails.
+/// Clicking it does the next thing Sendpoint needs, like the button.
+private struct SetupHeroPill: View {
+    @Bindable var permissionState: PermissionState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+    @State private var hovering = false
+
+    private var stage: SetupHeroStage {
+        SetupHeroStage.from(
+            accessibility: permissionState.accessibility,
+            microphone: permissionState.microphone,
+            model: permissionState.localVoiceModel
+        )
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || !usesDemoMotion)) { context in
+            let demo = SetupHeroMotion.phase(
+                at: context.date.timeIntervalSinceReferenceDate
+            )
+            pill(
+                mode: orbMode(demo: demo),
+                level: usesDemoMotion && !reduceMotion ? demo.level : 0
+            )
         }
-        .padding(.horizontal, 16)
-        .frame(height: 36)
+        .scaleEffect((appeared ? 1 : 0.9) * (hovering && stage.isActionable ? 1.04 : 1))
+        .opacity(appeared ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+                appeared = true
+            }
+        }
+        .onHover { hovering = $0 }
+        .onTapGesture(perform: activate)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stage.title)
+        .accessibilityAddTraits(stage.isActionable ? .isButton : [])
+    }
+
+    private var usesDemoMotion: Bool { stage == .ready }
+
+    private func orbMode(demo: (mode: VoiceOrb.Mode, level: Double)) -> VoiceOrb.Mode {
+        if reduceMotion { return .idle }
+        switch stage {
+        case .ready: return demo.mode
+        case .downloading: return .thinking
+        case .failedOffline, .failedOther: return .flat
+        default: return .idle
+        }
+    }
+
+    private func activate() {
+        guard stage.isActionable else { return }
+        stage.perform(on: permissionState)
+    }
+
+    private func pill(mode: VoiceOrb.Mode, level: Double) -> some View {
+        WordmarkPill(mode: mode, level: level)
+    }
+}
+
+/// The three steps as the kicker line: done ones ticked, the current one
+/// marked with the accent, the rest waiting in grey.
+private struct SetupSteps: View {
+    let step: Int
+    @Environment(\.colorScheme) private var colorScheme
+
+    private static let names = ["Accessibility", "Microphone", "Voice model"]
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ForEach(Array(Self.names.enumerated()), id: \.offset) { index, name in
+                HStack(spacing: 7) {
+                    marker(for: index)
+                    Text(name)
+                        .font(.mono(9.5, weight: .medium))
+                        .tracking(1.3)
+                        .textCase(.uppercase)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundStyle(index == step ? Color.primary : Color.secondary.opacity(index < step ? 1 : 0.7))
+                }
+            }
+        }
+        .animation(.snappy(duration: 0.3), value: step)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Setup progress")
+        .accessibilityValue("\(min(step, 3)) of 3 done")
+    }
+
+    @ViewBuilder
+    private func marker(for index: Int) -> some View {
+        if index < step {
+            Image(systemName: "checkmark")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Color.secondary)
+                .frame(width: 8, height: 8)
+                .transition(.scale.combined(with: .opacity))
+        } else if index == step {
+            Circle()
+                .fill(Ink.accent(colorScheme))
+                .frame(width: 6, height: 6)
+                .frame(width: 8, height: 8)
+        } else {
+            Circle()
+                .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                .frame(width: 7, height: 7)
+                .frame(width: 8, height: 8)
+        }
     }
 }
 
@@ -227,7 +426,7 @@ enum PermissionCatalog {
             PermissionItem(
                 id: "accessibility",
                 title: "Accessibility",
-                detail: "Reads the selected text when you take a typed note.",
+                detail: "Reads the selected text",
                 status: accessibilityStatus(state),
                 actionTitle: accessibilityActionTitle(state),
                 run: { performAccessibilityAction(state) }
@@ -235,7 +434,7 @@ enum PermissionCatalog {
             PermissionItem(
                 id: "microphone",
                 title: "Microphone",
-                detail: "Records when you use the voice shortcut.",
+                detail: "For voice notes",
                 status: microphoneStatus(state),
                 actionTitle: microphoneActionTitle(state),
                 run: { performMicrophoneAction(state) }
@@ -243,7 +442,7 @@ enum PermissionCatalog {
             PermissionItem(
                 id: "voice-model",
                 title: "Voice model",
-                detail: "Transcribes on this Mac, without sending audio away.",
+                detail: "Transcribes on this Mac",
                 status: voiceModelStatus(state),
                 actionTitle: voiceModelActionTitle(state),
                 run: { performVoiceModelAction(state) }
@@ -324,34 +523,6 @@ enum PermissionCatalog {
     }
 }
 
-struct PermissionCapabilityList: View {
-    @Bindable var permissionState: PermissionState
-
-    init(permissionState: PermissionState) {
-        _permissionState = Bindable(wrappedValue: permissionState)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(items) { item in
-                CapabilityRow(
-                    title: item.title,
-                    status: item.status,
-                    actionTitle: item.actionTitle,
-                    action: item.run
-                )
-            }
-        }
-        .task {
-            await permissionState.watchVoiceModel()
-        }
-    }
-
-    private var items: [PermissionItem] {
-        PermissionCatalog.items(state: permissionState)
-    }
-}
-
 enum CapabilityStatus {
     case neutral(String)
     case attention(String)
@@ -368,207 +539,29 @@ enum CapabilityStatus {
     }
 }
 
-private struct CapabilityRow: View {
-    let title: String
-    let status: CapabilityStatus
-    let actionTitle: String?
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Group {
-            if actionTitle != nil {
-                Button(action: action) { label }
-                    .buttonStyle(.plain)
-            } else {
-                label
-            }
-        }
-        .background(PaletteTint.wash(highlighted: false, hovering: hovering && actionTitle != nil))
-        .onHover { hovering = $0 }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(title)
-        .accessibilityValue(accessibilityValue)
-        .accessibilityAddTraits(actionTitle == nil ? [] : .isButton)
-    }
-
-    private var label: some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .font(.system(size: 14))
-            Spacer(minLength: 8)
-            trailing
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 40)
-        .contentShape(Rectangle())
-    }
-
-    private var trailing: some View {
-        CapabilityAccessory(status: status, actionTitle: actionTitle)
-    }
-
-    private var accessibilityValue: String {
-        actionTitle ?? status.title
-    }
-}
-
-/// The recording capsule, alive, the way AirPods pairing shows the case.
-/// Until everything is granted it is also the only control: click it to
-/// do the next thing Sendpoint needs.
-private struct SetupHeroPill: View {
-    @Bindable var permissionState: PermissionState
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
-    @State private var hovering = false
-
-    private var stage: SetupHeroStage {
-        SetupHeroStage.from(
-            accessibility: permissionState.accessibility,
-            microphone: permissionState.microphone,
-            model: permissionState.localVoiceModel
-        )
-    }
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || !usesDemoMotion)) { context in
-            let demo = SetupHeroMotion.phase(
-                at: context.date.timeIntervalSinceReferenceDate
-            )
-            pill(
-                mode: orbMode(demo: demo),
-                level: usesDemoMotion && !reduceMotion ? demo.level : 0
-            )
-        }
-        .scaleEffect((appeared ? 1 : 0.92) * (hovering && stage.isActionable ? 1.04 : 1))
-        .opacity(appeared ? 1 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
-                appeared = true
-            }
-        }
-        .onHover { hovering = $0 }
-        .onTapGesture(perform: activate)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(stage.title)
-        .accessibilityAddTraits(stage.isActionable ? .isButton : [])
-    }
-
-    private var usesDemoMotion: Bool { stage == .ready }
-
-    private func orbMode(demo: (mode: VoiceOrb.Mode, level: Double)) -> VoiceOrb.Mode {
-        if reduceMotion { return .idle }
-        switch stage {
-        case .ready: return demo.mode
-        case .downloading: return .thinking
-        case .failedOffline, .failedOther: return .flat
-        default: return .idle
-        }
-    }
-
-    private func activate() {
-        guard stage.isActionable else { return }
-        stage.perform(on: permissionState)
-    }
-
-    private func pill(mode: VoiceOrb.Mode, level: Double) -> some View {
-        let palette = OverlayPalette.against(colorScheme)
-        return HStack(spacing: 10) {
-            Text(stage.label)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(palette.ink.opacity(0.9))
-                .contentTransition(.opacity)
-            if let accessory = stage.accessory {
-                Text(accessory)
-                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                    .foregroundStyle(palette.ink.opacity(0.55))
-                    .contentTransition(.opacity)
-            }
-            if stage.showsDownloadGlyph {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(palette.ink.opacity(0.9))
-                    .frame(width: 22, height: 22)
-            } else {
-                VoiceOrb(mode: mode, level: level, ink: palette.ink, amber: palette.amber)
-                    .frame(width: 22, height: 22)
-            }
-        }
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .frame(height: VoiceCaptureLayout.pillHeight)
-        .background(Capsule().fill(palette.paper))
-        .overlay(
-            Capsule().strokeBorder(
-                LinearGradient(
-                    colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 0.5
-            )
-        )
-        .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
-        .environment(\.colorScheme, palette.contentScheme)
-        .scaleEffect(1.12)
-        .contentShape(Capsule())
-        .animation(.snappy(duration: 0.22), value: stage.label)
-        .animation(.snappy(duration: 0.22), value: stage.accessory)
-    }
-}
-
-private struct SetupProgressDots: View {
-    let accessibility: Bool
-    let microphone: Bool
-    let model: Bool
-
-    var body: some View {
-        HStack(spacing: 7) {
-            dot(accessibility)
-            dot(microphone)
-            dot(model)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Setup progress")
-        .accessibilityValue("\(filled) of 3 ready")
-    }
-
-    private var filled: Int {
-        [accessibility, microphone, model].filter(\.self).count
-    }
-
-    private func dot(_ on: Bool) -> some View {
-        Circle()
-            .fill(Color.primary.opacity(on ? 0.85 : 0.14))
-            .frame(width: 5, height: 5)
-            .animation(.snappy(duration: 0.28), value: on)
-    }
-}
-
-/// Status on the trailing edge of a capability row: progress, a verb, a
-/// ready mark, or a quiet caption.
+/// Status on the trailing edge of a capability row: progress, a verb to
+/// click, a ready mark, or a quiet caption.
 struct CapabilityAccessory: View {
     let status: CapabilityStatus
     var actionTitle: String? = nil
+    var action: () -> Void = {}
 
     var body: some View {
         if case let .working(label, fraction) = status {
             HStack(spacing: 8) {
                 Text(label)
-                    .font(.caption.monospacedDigit())
+                    .font(.mono(11))
                     .foregroundStyle(.secondary)
                 CapabilityProgress(fraction: fraction)
                     .frame(width: 56)
             }
         } else if let actionTitle {
-            Text(actionTitle)
-                .font(.system(size: 12, weight: .medium))
+            PillButton(actionTitle, action: action)
         } else if case .ready = status {
             ReadyMark()
         } else {
             Text(status.title)
-                .font(.caption)
+                .font(.uiCaption)
                 .foregroundStyle(.secondary)
         }
     }

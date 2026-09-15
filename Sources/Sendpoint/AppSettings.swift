@@ -8,24 +8,25 @@ enum StackExportMode: Equatable, Sendable {
 
     init(pasteDirectly: Bool) { self = pasteDirectly ? .paste : .copy }
 
+    /// The shortcut row in Settings.
     var shortcutTitle: String {
         switch self {
-        case .paste: "Paste stack as Markdown"
-        case .copy: "Copy stack as Markdown"
+        case .paste: "Paste the stack"
+        case .copy: "Copy the stack"
         }
     }
 
-    var shortcutDetail: String {
+    var shortcutHint: String {
         switch self {
-        case .paste: "Fills the template and pastes it at your cursor."
-        case .copy: "Fills the template and copies it to the clipboard."
+        case .paste: "At the cursor, as Markdown"
+        case .copy: "To the clipboard, as Markdown"
         }
     }
 
     var exportMomentCaption: String {
         switch self {
-        case .paste: "When you paste"
-        case .copy: "When you copy"
+        case .paste: "When pasting"
+        case .copy: "When copying"
         }
     }
 }

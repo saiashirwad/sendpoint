@@ -42,6 +42,23 @@ if [ -f "Resources/AppIcon.icns" ]; then
     cp "Resources/AppIcon.icns" "${DIST}/Contents/Resources/AppIcon.icns"
     /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST}" 2>/dev/null || true
 fi
+if [ -d "Resources/Fonts" ]; then
+    mkdir -p "${DIST}/Contents/Resources/Fonts"
+    cp Resources/Fonts/* "${DIST}/Contents/Resources/Fonts/"
+fi
+
+# SwiftUI loads shaders from default.metallib in the app bundle. SwiftPM
+# ignores .metal files, so compile them here.
+if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+    echo "The Metal toolchain is missing. Run: xcodebuild -downloadComponent MetalToolchain" >&2
+    exit 1
+fi
+AIR_DIR=$(mktemp -d)
+for SHADER in Resources/Shaders/*.metal; do
+    xcrun -sdk macosx metal -c "$SHADER" -o "${AIR_DIR}/$(basename "${SHADER%.metal}").air"
+done
+xcrun -sdk macosx metallib "${AIR_DIR}"/*.air -o "${DIST}/Contents/Resources/default.metallib"
+rm -rf "$AIR_DIR"
 
 # A stable signing identity keeps the Accessibility grant across rebuilds.
 IDENTITY="${CODESIGN_IDENTITY:-}"

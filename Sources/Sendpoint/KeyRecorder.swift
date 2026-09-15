@@ -26,18 +26,19 @@ struct KeyRecorder: NSViewRepresentable {
     }
 }
 
-/// Drawn to look like a keycap: a light face over a slightly darker rim.
-/// While recording it takes the palette editing ring and asks for the keys.
+/// Drawn as a keycap: raised off the paper with a hairline edge. An unset
+/// slot is a flat outline. While recording the edge turns accent and the
+/// cap asks for the keys.
 final class KeyRecorderView: NSView {
     var onChange: ((KeyCombo?) -> Void)?
     var clearable = false
 
     var combo: KeyCombo? {
-        didSet { needsDisplay = true }
+        didSet { redraw() }
     }
 
     private var recording = false {
-        didSet { needsDisplay = true }
+        didSet { redraw() }
     }
 
     private var hovering = false {
@@ -46,8 +47,21 @@ final class KeyRecorderView: NSView {
 
     private var trackingArea: NSTrackingArea?
 
+    private static let height: CGFloat = 28
+    private static let minimumWidth: CGFloat = 64
+    private static let sidePadding: CGFloat = 11
+
     override var acceptsFirstResponder: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: 124, height: 26) }
+
+    override var intrinsicContentSize: NSSize {
+        let width = ceil(textSize.width) + Self.sidePadding * 2
+        return NSSize(width: max(Self.minimumWidth, width), height: Self.height)
+    }
+
+    private func redraw() {
+        invalidateIntrinsicContentSize()
+        needsDisplay = true
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -109,65 +123,82 @@ final class KeyRecorderView: NSView {
         return true
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        let radius: CGFloat = 6
-        let rimRect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let rim = NSBezierPath(roundedRect: rimRect, xRadius: radius, yRadius: radius)
+    // MARK: - Drawing
 
-        let faceRect = NSRect(
-            x: rimRect.minX + 1,
-            y: rimRect.minY + 2,
-            width: rimRect.width - 2,
-            height: rimRect.height - 3
-        )
-        let face = NSBezierPath(roundedRect: faceRect, xRadius: radius - 1, yRadius: radius - 1)
+    private enum Look {
+        case set, unset, recording
+    }
 
-        if recording {
-            NSColor.labelColor.withAlphaComponent(0.16).setFill()
-            rim.fill()
-            NSColor.controlBackgroundColor.setFill()
-            face.fill()
-            NSColor.labelColor.withAlphaComponent(0.35).setStroke()
-            rim.lineWidth = 1
-            rim.stroke()
-        } else {
-            NSColor.labelColor.withAlphaComponent(hovering ? 0.22 : 0.16).setFill()
-            rim.fill()
-            NSColor.controlBackgroundColor.blended(
-                withFraction: hovering ? 0.02 : 0.05,
-                of: .labelColor
-            )?.setFill()
-            face.fill()
+    private var look: Look {
+        if recording { return .recording }
+        return combo == nil ? .unset : .set
+    }
+
+    private var text: String {
+        switch look {
+        case .recording: "Press keys…"
+        case .set: combo?.displayString ?? ""
+        case .unset: "Not set"
         }
+    }
 
-        let text: String
-        let color: NSColor
-        let font: NSFont
-        if recording {
-            text = "Press keys…"
-            color = .labelColor
-            font = .systemFont(ofSize: 12, weight: .medium)
-        } else if let combo {
-            text = combo.displayString
-            color = .labelColor
-            font = .monospacedSystemFont(ofSize: 12.5, weight: .medium)
-        } else {
-            text = "Not set"
-            color = .tertiaryLabelColor
-            font = .systemFont(ofSize: 12)
+    private var attributes: [NSAttributedString.Key: Any] {
+        let color: NSColor = switch look {
+        case .recording: .secondaryLabelColor
+        case .set: NSColor.labelColor.withAlphaComponent(0.85)
+        case .unset: .tertiaryLabelColor
         }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
+        return [
+            .font: NSFont.ui(13, weight: look == .unset ? .regular : .medium),
             .foregroundColor: color,
-            .kern: recording ? 0 : 1.2,
+            .kern: look == .set ? 0.6 : 0,
         ]
-        let size = (text as NSString).size(withAttributes: attrs)
+    }
+
+    private var textSize: NSSize {
+        (text as NSString).size(withAttributes: attributes)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius: CGFloat = 7
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let cap = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+
+        switch look {
+        case .set:
+            if !effectiveAppearance.isDark {
+                NSGraphicsContext.saveGraphicsState()
+                let shadow = NSShadow()
+                shadow.shadowColor = NSColor.black.withAlphaComponent(0.05)
+                shadow.shadowOffset = NSSize(width: 0, height: -1)
+                shadow.shadowBlurRadius = 1.5
+                shadow.set()
+                Ink.nsRaised.setFill()
+                cap.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            } else {
+                Ink.nsRaised.setFill()
+                cap.fill()
+            }
+            (hovering ? NSColor.labelColor.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
+            cap.lineWidth = 1
+            cap.stroke()
+        case .unset:
+            (hovering ? NSColor.labelColor.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
+            cap.lineWidth = 1
+            cap.stroke()
+        case .recording:
+            Ink.nsAccent.withAlphaComponent(0.10).setFill()
+            cap.fill()
+            Ink.nsAccent.setStroke()
+            cap.lineWidth = 1.5
+            cap.stroke()
+        }
+
+        let size = textSize
         (text as NSString).draw(
-            at: NSPoint(
-                x: (bounds.width - size.width) / 2,
-                y: faceRect.midY - size.height / 2
-            ),
-            withAttributes: attrs
+            at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
+            withAttributes: attributes
         )
     }
 }

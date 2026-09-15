@@ -20,6 +20,7 @@ extension AppDelegate {
                 }
                 bootstrapTask = nil
                 storeState = .available(store)
+                settingsWindowController?.storeDidBecomeAvailable(store)
                 captureController.configure(store: store)
                 buildPalette(store: store)
                 switcher = StackSwitcherController(

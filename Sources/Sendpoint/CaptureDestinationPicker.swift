@@ -59,7 +59,7 @@ struct CaptureDestinationButton: View {
         } label: {
             HStack(spacing: 6) {
                 if showsIcon {
-                    Image(systemName: "square.stack.3d.up.fill")
+                    Image(systemName: "square.stack.3d.up")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
@@ -70,7 +70,7 @@ struct CaptureDestinationButton: View {
                     .font(.system(size: 8, weight: .semibold))
                     .opacity(0.6)
             }
-            .font(.system(size: fontSize, weight: .medium))
+            .font(.ui(fontSize, weight: .medium))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -295,7 +295,7 @@ struct CaptureDestinationPanelSurface: View {
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 0.5)
+                    .strokeBorder(Ink.rim(colorScheme), lineWidth: 0.5)
             }
         .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
         .padding(CaptureDestinationPanelLayout.shadowPadding)
@@ -338,7 +338,8 @@ struct CaptureDestinationList: View {
         }
         .padding(.vertical, CaptureDestinationPanelLayout.bodyVerticalPadding)
         .frame(width: CaptureDestinationPanelLayout.bodyWidth)
-        .background(PaletteTint.surface(colorScheme))
+        .background(Ink.paper(colorScheme))
+        .font(.uiBody)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Destination stacks")
     }
@@ -359,16 +360,16 @@ private struct CaptureDestinationRow: View {
                     .opacity(selected ? 1 : 0)
                     .accessibilityHidden(true)
                 Text(row.name)
-                    .font(.system(size: 13, weight: selected ? .medium : .regular))
+                    .font(.ui(13, weight: selected ? .medium : .regular))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text("\(row.noteCount)")
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.mono(11))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(hovering ? PaletteTint.hover : .clear)
+            .background(hovering ? Ink.hover : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

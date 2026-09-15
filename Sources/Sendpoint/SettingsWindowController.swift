@@ -1,5 +1,12 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
+
+/// The stack store arrives after launch; Settings may already be open.
+@Observable
+final class SettingsStoreHandle {
+    var store: StackStore?
+}
 
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let settings: AppSettings
@@ -10,8 +17,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let captureController: CaptureController
     private let permissionState: PermissionState
     private let surfaces: SurfaceCoordinator
+    private let storeHandle = SettingsStoreHandle()
     private let onSelectTemplate: (UUID) -> Void
     private let onSettingsChanged: () -> Void
+    private let onCheckForUpdates: () -> Void
+    private let onShowStack: () -> Void
     private var window: NSWindow?
     private(set) var templateEditor: TemplateEditorState?
 
@@ -24,8 +34,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         captureController: CaptureController,
         permissionState: PermissionState,
         surfaces: SurfaceCoordinator,
+        stackStore: StackStore?,
         onSelectTemplate: @escaping (UUID) -> Void,
-        onSettingsChanged: @escaping () -> Void
+        onSettingsChanged: @escaping () -> Void,
+        onCheckForUpdates: @escaping () -> Void,
+        onShowStack: @escaping () -> Void
     ) {
         self.settings = settings
         self.shortcuts = shortcuts
@@ -35,8 +48,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         self.captureController = captureController
         self.permissionState = permissionState
         self.surfaces = surfaces
+        storeHandle.store = stackStore
         self.onSelectTemplate = onSelectTemplate
         self.onSettingsChanged = onSettingsChanged
+        self.onCheckForUpdates = onCheckForUpdates
+        self.onShowStack = onShowStack
         super.init()
         surfaces.register(.settings, transitions: .init(
             show: { [weak self] in self?.present() },
@@ -47,6 +63,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func show() {
         permissionState.refresh()
         surfaces.present(.settings)
+    }
+
+    func storeDidBecomeAvailable(_ store: StackStore) {
+        storeHandle.store = store
     }
 
     func requestTemplateSelection(_ templateID: UUID) -> Bool {
@@ -93,8 +113,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             captureController: captureController,
             templateEditor: templateEditor,
             permissionState: permissionState,
+            storeHandle: storeHandle,
             onSelectTemplate: onSelectTemplate,
-            onSettingsChanged: onSettingsChanged
+            onSettingsChanged: onSettingsChanged,
+            onCheckForUpdates: onCheckForUpdates,
+            onShowStack: onShowStack
         )
         let hosting = NSHostingView(rootView: settingsView)
         hosting.safeAreaRegions = []

@@ -4,18 +4,30 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case capture
-    case shortcuts
+    case stacks
     case templates
-    case permissions
+    case pasting
+    case system
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .shortcuts: "Shortcuts"
+        case .capture: "Capture"
+        case .stacks: "Stacks"
         case .templates: "Templates"
-        case .capture: "General"
-        case .permissions: "Permissions"
+        case .pasting: "Pasting"
+        case .system: "System"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .capture: "waveform"
+        case .stacks: "rectangle.stack"
+        case .templates: "doc.text"
+        case .pasting: "clipboard"
+        case .system: "gearshape"
         }
     }
 }
@@ -26,20 +38,19 @@ struct SettingsView: View {
     @Bindable var voiceSettings: VoiceSettings
     @Bindable var templateEditor: TemplateEditorState
     @Bindable var permissionState: PermissionState
+    let storeHandle: SettingsStoreHandle
     let onSelectTemplate: (UUID) -> Void
     let hotKeyRegistrar: HotKeyRegistrar
     let captureController: CaptureController
     let onSettingsChanged: () -> Void
+    let onCheckForUpdates: () -> Void
+    let onShowStack: () -> Void
 
     @State private var tab: SettingsTab = .capture
-    @Environment(\.colorScheme) private var colorScheme
 
     /// The smallest the window goes; it can be dragged larger.
-    static let size = CGSize(width: 780, height: 620)
-    private static let sidebarWidth: CGFloat = 220
-    private static let titleBarHeight: CGFloat = 52
-    /// Cards stop stretching past this so a wide window stays readable.
-    private static let contentMaxWidth: CGFloat = 760
+    static let size = CGSize(width: 920, height: 600)
+    private static let sidebarWidth: CGFloat = 200
 
     init(
         settings: AppSettings,
@@ -49,483 +60,341 @@ struct SettingsView: View {
         captureController: CaptureController,
         templateEditor: TemplateEditorState,
         permissionState: PermissionState,
+        storeHandle: SettingsStoreHandle,
         onSelectTemplate: @escaping (UUID) -> Void,
-        onSettingsChanged: @escaping () -> Void
+        onSettingsChanged: @escaping () -> Void,
+        onCheckForUpdates: @escaping () -> Void,
+        onShowStack: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
         _shortcuts = Bindable(wrappedValue: shortcuts)
         _voiceSettings = Bindable(wrappedValue: voiceSettings)
         _templateEditor = Bindable(wrappedValue: templateEditor)
         _permissionState = Bindable(wrappedValue: permissionState)
+        self.storeHandle = storeHandle
         self.onSelectTemplate = onSelectTemplate
         self.hotKeyRegistrar = hotKeyRegistrar
         self.captureController = captureController
         self.onSettingsChanged = onSettingsChanged
+        self.onCheckForUpdates = onCheckForUpdates
+        self.onShowStack = onShowStack
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            SettingsSidebar(selection: $tab, topInset: Self.titleBarHeight)
+            SettingsSidebar(
+                selection: $tab, permissionState: permissionState,
+                storeHandle: storeHandle, onShowStack: onShowStack
+            )
                 .frame(width: Self.sidebarWidth)
-            Divider()
-            VStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
-                        if !shortcuts.shortcutRegistrationIssues.isEmpty {
-                            SettingsShortcutIssues(issues: shortcuts.shortcutRegistrationIssues)
-                        }
-                        switch tab {
-                        case .shortcuts:
-                            SettingsShortcutsPane(
-                                settings: settings,
-                                shortcuts: shortcuts,
-                                voiceSettings: voiceSettings,
-                                hotKeyRegistrar: hotKeyRegistrar,
-                                onSettingsChanged: onSettingsChanged
-                            )
-                        case .templates:
-                            SettingsTemplatesPane(
-                                settings: settings,
-                                editor: templateEditor,
-                                onSelectTemplate: onSelectTemplate
-                            )
-                        case .capture:
-                            SettingsGeneralPane(
-                                settings: settings,
-                                voiceSettings: voiceSettings,
-                                permissionState: permissionState,
-                                captureController: captureController,
-                                onSettingsChanged: onSettingsChanged
-                            )
-                        case .permissions:
-                            SettingsPermissionsPane(
-                                permissionState: permissionState
-                            )
-                        }
-                    }
-                    .padding(16)
-                    // The sidebar names the pane, so content starts level
-                    // with the first sidebar row instead of under a title.
-                    .padding(.top, Self.titleBarHeight - 16)
-                    .frame(maxWidth: Self.contentMaxWidth, alignment: .topLeading)
-                    .frame(maxWidth: .infinity)
-                    .id(tab)
-                }
-                .scrollIndicators(.automatic)
-                if showsFooter {
-                    Divider()
-                    footer
-                }
-            }
+            Hairline(axis: .vertical)
+            page
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(tab)
         }
         .frame(
             minWidth: Self.size.width, maxWidth: .infinity,
             minHeight: Self.size.height, maxHeight: .infinity
         )
-        .background(PaletteTint.surface(colorScheme))
+        .background(Backdrop())
+        .font(.uiBody)
         .ignoresSafeArea()
-        .overlayScrollers()
         .tint(Color.primary.opacity(0.85))
     }
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            if !footerContext.isEmpty {
-                Text(footerContext)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            footerActions
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 36)
-    }
-
-    private var showsFooter: Bool {
-        !footerContext.isEmpty || hasFooterActions
-    }
-
-    private var hasFooterActions: Bool {
-        switch tab {
-        case .capture: !permissionState.isVoiceReady
-        case .shortcuts: false
-        case .templates: templateEditor.isDirty
-        case .permissions: permissionsFooterAction != nil
-        }
-    }
-
-    private var footerContext: String {
-        switch tab {
-        case .templates:
-            templateEditor.isDirty ? "Unsaved" : ""
-        default:
-            ""
-        }
-    }
-
     @ViewBuilder
-    private var footerActions: some View {
+    private var page: some View {
         switch tab {
         case .capture:
-            if !permissionState.isVoiceReady {
-                SettingsFooterButton("Permissions") { tab = .permissions }
-            }
-        case .shortcuts:
-            EmptyView()
+            SettingsCapturePane(
+                shortcuts: shortcuts,
+                voiceSettings: voiceSettings,
+                hotKeyRegistrar: hotKeyRegistrar,
+                captureController: captureController,
+                onSettingsChanged: onSettingsChanged
+            )
+        case .stacks:
+            SettingsStacksPane(
+                shortcuts: shortcuts,
+                storeHandle: storeHandle,
+                hotKeyRegistrar: hotKeyRegistrar,
+                onSettingsChanged: onSettingsChanged
+            )
         case .templates:
-            templateFooterActions
-        case .permissions:
-            if let action = permissionsFooterAction {
-                SettingsFooterButton(action.title, action: action.run)
-            }
+            SettingsTemplatesPane(
+                settings: settings,
+                editor: templateEditor,
+                onSelectTemplate: onSelectTemplate
+            )
+        case .pasting:
+            SettingsPastingPane(
+                settings: settings,
+                shortcuts: shortcuts,
+                hotKeyRegistrar: hotKeyRegistrar,
+                onSettingsChanged: onSettingsChanged
+            )
+        case .system:
+            SettingsSystemPane(
+                settings: settings,
+                permissionState: permissionState,
+                onSettingsChanged: onSettingsChanged,
+                onCheckForUpdates: onCheckForUpdates
+            )
         }
-    }
-
-    @ViewBuilder
-    private var templateFooterActions: some View {
-        if templateEditor.isDirty {
-            Button("Revert", action: templateEditor.revert)
-                .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .medium))
-            SettingsFooterButton("Save", keys: "⌘S") { saveTemplate() }
-                .keyboardShortcut("s", modifiers: .command)
-        }
-    }
-
-    private var permissionsFooterAction: (title: String, run: () -> Void)? {
-        if let title = accessibilityFooterTitle {
-            return (title, { [permissionState] in
-                permissionState.requestAccessibility()
-            })
-        }
-        switch permissionState.microphoneAction {
-        case .requestMicrophone:
-            return ("Allow", { permissionState.requestMicrophone() })
-        case .openMicrophoneSettings:
-            return ("Settings", { permissionState.openMicrophoneSettings() })
-        default:
-            break
-        }
-        if permissionState.localVoiceModelAction == .downloadVoiceModel {
-            let title: String
-            if case .failed = permissionState.localVoiceModel {
-                title = "Retry"
-            } else {
-                title = "Download"
-            }
-            return (title, { permissionState.downloadModel() })
-        }
-        return nil
-    }
-
-    private var accessibilityFooterTitle: String? {
-        switch permissionState.accessibilityAction {
-        case .requestAccessibility: "Grant"
-        default: nil
-        }
-    }
-
-    private func saveTemplate() {
-        do { try templateEditor.save() } catch { TemplateDialogs.showError(error) }
     }
 }
 
+// MARK: - Sidebar
+
+private struct SettingsSidebar: View {
+    @Binding var selection: SettingsTab
+    @Bindable var permissionState: PermissionState
+    let storeHandle: SettingsStoreHandle
+    let onShowStack: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    /// Room for the traffic lights.
+    private let topInset: CGFloat = 52
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: topInset)
+            wordmark
+                .padding(.leading, 12)
+                .padding(.top, 22)
+                .padding(.bottom, 22)
+            VStack(spacing: 2) {
+                ForEach(SettingsTab.allCases) { tab in
+                    SettingsSidebarItem(tab: tab, isSelected: tab == selection) {
+                        selection = tab
+                    }
+                }
+            }
+            Spacer(minLength: 16)
+            SettingsStatusCard(
+                permissionState: permissionState, storeHandle: storeHandle, onShowStack: onShowStack
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Ink.well(scheme).opacity(0.85))
+        .task { await permissionState.watchVoiceModel() }
+    }
+
+    private var wordmark: some View {
+        HStack(alignment: .center, spacing: 7) {
+            Text("Sendpoint")
+                .font(.ui(17, weight: .semibold))
+                .tracking(-0.2)
+            Circle()
+                .fill(Ink.accent(scheme))
+                .frame(width: 6, height: 6)
+                .offset(y: 1)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SettingsSidebarItem: View {
+    let tab: SettingsTab
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 11) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 18)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                Text(tab.title)
+                    .font(.ui(14, weight: .medium))
+                    .foregroundStyle(isSelected || hovering ? Color.primary : Color.primary.opacity(0.72))
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isSelected ? Ink.raised(scheme) : (hovering ? Ink.hover : .clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(Ink.hairline.opacity(isSelected ? 1 : 0), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(isSelected && scheme == .light ? 0.05 : 0), radius: 2, y: 1)
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// The corner of the sidebar that says what Sendpoint is doing right now.
+/// Until it can capture, that is the next permission or download, and
+/// clicking does it. Once it can, that is the current stack: where the
+/// next note lands, how full it is, when the last one arrived. Clicking
+/// opens it.
+private struct SettingsStatusCard: View {
+    @Bindable var permissionState: PermissionState
+    let storeHandle: SettingsStoreHandle
+    let onShowStack: () -> Void
+    @State private var hovering = false
+    @Environment(\.colorScheme) private var scheme
+
+    private var stage: SetupHeroStage {
+        SetupHeroStage.from(
+            accessibility: permissionState.accessibility,
+            microphone: permissionState.microphone,
+            model: permissionState.localVoiceModel
+        )
+    }
+
+    private var isActionable: Bool {
+        stage == .ready ? storeHandle.store != nil : stage.isActionable
+    }
+
+    private var showsStack: Bool { stage == .ready && storeHandle.store != nil }
+
+    /// Three lines, top to bottom: what kind of thing this is, the thing,
+    /// and its state.
+    private var copy: (kicker: String, title: String, detail: String) {
+        switch stage {
+        case .ready:
+            if let stack = storeHandle.store?.currentStack {
+                ("Current stack", stack.name, stackStatusDetail(
+                    noteCount: stack.notes.count, latest: stack.notes.map(\.createdAt).max()
+                ))
+            } else {
+                ("Sendpoint", "Ready to capture", "Runs on this Mac")
+            }
+        case .accessibility: ("Setup", "Needs Accessibility", "Click to grant")
+        case .microphone: ("Setup", "Needs the microphone", "Click to allow")
+        case .microphoneSettings: ("Setup", "Microphone is off", "Click to open System Settings")
+        case .voiceModel: ("Setup", "Voice model", "Click to download")
+        case let .downloading(progress):
+            ("Setup", "Downloading voice model", progress.map { "\(Int($0 * 100))%" } ?? "Starting…")
+        case .failedOffline: ("Setup", "No internet", "Click to retry")
+        case .failedOther: ("Setup", "Download failed", "Click to retry")
+        }
+    }
+
+    private var accessibilityLabel: String {
+        showsStack
+            ? "Current stack \(copy.title). \(copy.detail). Opens the stack"
+            : "\(copy.title). \(copy.detail)"
+    }
+
+    var body: some View {
+        Button {
+            guard isActionable else { return }
+            if stage == .ready { onShowStack() } else { stage.perform(on: permissionState) }
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(stage == .ready ? Ink.accent(scheme) : Ink.amber(scheme))
+                        .frame(width: 5, height: 5)
+                    Text(copy.kicker)
+                        .font(.mono(9.5, weight: .medium))
+                        .tracking(1.3)
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    if isActionable {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .opacity(hovering ? 1 : 0)
+                    }
+                }
+                Spacer(minLength: 8)
+                Text(copy.title)
+                    .font(.ui(15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(copy.detail)
+                    .font(.mono(10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.top, 5)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 124)
+            .background(Aurora())
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Ink.hairline, lineWidth: 1)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .scaleEffect(hovering && isActionable ? 1.01 : 1)
+            .animation(.snappy(duration: 0.2), value: hovering)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isActionable ? .isButton : [])
+    }
+}
+
+// MARK: - Naming
+
 /// A small anchored prompt: type a name, press Return.
-struct NewTemplatePopover: View {
+struct NamePopover: View {
+    let prompt: String
+    let placeholder: String
     @Binding var name: String
     let problem: String?
     let onCommit: () -> Void
 
     @FocusState private var focused: Bool
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("New template from the current draft")
-                .font(.caption)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(prompt)
+                .font(.uiCaption)
                 .foregroundStyle(.secondary)
-            TextField("Template name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 13))
+            TextField(placeholder, text: $name)
+                .textFieldStyle(.plain)
+                .font(.ui(13))
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
                 .focused($focused)
                 .onSubmit(onCommit)
-            if let problem {
-                Text(problem)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            } else {
-                ShortcutHint(keys: "↩", label: "Create")
+            HStack(spacing: 6) {
+                if let problem {
+                    Text(problem)
+                        .font(.uiCaption)
+                        .foregroundStyle(Ink.amber(scheme))
+                } else {
+                    Keycap("↩", size: 10)
+                    Text("Create")
+                        .font(.uiCaption)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
-        .padding(12)
-        .frame(width: 240)
+        .padding(14)
+        .frame(width: 250)
+        .font(.uiBody)
         .onAppear {
             DispatchQueue.main.async { focused = true }
         }
     }
 }
 
-// MARK: - Building blocks
-
-/// A row of pills that fill from the left as the microphone gets louder.
-struct InputLevelBar: View {
-    let level: Float
-    let isActive: Bool
-
-    private let segments = 24
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<segments, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(index < litSegments ? Color.primary.opacity(0.85) : Color.primary.opacity(0.12))
-                    .frame(height: 8)
-            }
-        }
-        .opacity(isActive ? 1 : 0.5)
-        .animation(.linear(duration: 0.05), value: litSegments)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Input level")
-        .accessibilityValue(isActive ? "\(Int(level * 100)) percent" : "Not listening")
-    }
-
-    private var litSegments: Int {
-        guard isActive else { return 0 }
-        return Int((level * Float(segments)).rounded())
-    }
-}
-
-/// Tells SwiftUI whether the window it lives in is actually on screen, so
-/// live work like the level meter stops when the window is hidden.
-struct WindowVisibilityReporter: NSViewRepresentable {
-    @Binding var isVisible: Bool
-
-    func makeNSView(context: Context) -> ReporterView {
-        let view = ReporterView()
-        view.onChange = { isVisible = $0 }
-        return view
-    }
-
-    func updateNSView(_ nsView: ReporterView, context: Context) {
-        nsView.onChange = { isVisible = $0 }
-    }
-
-    final class ReporterView: NSView {
-        var onChange: ((Bool) -> Void)?
-        private var observers: [NSObjectProtocol] = []
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers = []
-            guard let window else { report(false); return }
-            observers.append(NotificationCenter.default.addObserver(
-                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-            ) { [weak self] _ in MainActor.assumeIsolated { self?.reportCurrent() } })
-            observers.append(NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification, object: window, queue: .main
-            ) { [weak self] _ in MainActor.assumeIsolated { self?.report(false) } })
-            reportCurrent()
-        }
-
-        private func reportCurrent() {
-            guard let window else { report(false); return }
-            report(window.isVisible && window.occlusionState.contains(.visible))
-        }
-
-        private func report(_ visible: Bool) {
-            DispatchQueue.main.async { [onChange] in onChange?(visible) }
-        }
-    }
-}
-
-/// A native pop-up so it fills the width it is given; SwiftUI's menu picker
-/// sizes itself to its title instead. The menu shows every title in full
-/// with a checkmark on the current item.
-struct SettingsPopUp<ID: Hashable>: NSViewRepresentable {
-    struct Item {
-        var id: ID?
-        var title: String
-        var isSeparator = false
-
-        static var separator: Item { Item(id: nil, title: "", isSeparator: true) }
-    }
-
-    let items: [Item]
-    let selectedID: ID?
-    let onSelect: (ID?) -> Void
-
-    func makeNSView(context: Context) -> NSPopUpButton {
-        let button = SettingsPopUpButton(frame: .zero, pullsDown: false)
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.changed(_:))
-        button.autoenablesItems = false
-        button.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        (button.cell as? NSPopUpButtonCell)?.lineBreakMode = .byTruncatingTail
-        return button
-    }
-
-    func updateNSView(_ button: NSPopUpButton, context: Context) {
-        context.coordinator.onSelect = { onSelect($0 as? ID) }
-        if menuDiffers(from: button) {
-            button.removeAllItems()
-            for item in items {
-                if item.isSeparator {
-                    button.menu?.addItem(.separator())
-                } else {
-                    let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
-                    if let id = item.id {
-                        menuItem.representedObject = id
-                    }
-                    button.menu?.addItem(menuItem)
-                }
-            }
-        }
-        let index = button.itemArray.firstIndex {
-            !$0.isSeparatorItem && ($0.representedObject as? ID) == selectedID
-        } ?? 0
-        if button.indexOfSelectedItem != index {
-            button.selectItem(at: index)
-        }
-    }
-
-    private func menuDiffers(from button: NSPopUpButton) -> Bool {
-        let current = button.itemArray
-        guard current.count == items.count else { return true }
-        return zip(current, items).contains { menuItem, item in
-            if item.isSeparator { return !menuItem.isSeparatorItem }
-            return menuItem.isSeparatorItem
-                || menuItem.title != item.title
-                || (menuItem.representedObject as? ID) != item.id
-        }
-    }
-
-    func makeCoordinator() -> SettingsPopUpCoordinator {
-        SettingsPopUpCoordinator { onSelect($0 as? ID) }
-    }
-}
-
-/// Type-erased so the coordinator itself does not need to inherit a generic
-/// parameter just to pass an NSMenuItem's represented object back to SwiftUI.
-final class SettingsPopUpCoordinator: NSObject {
-    var onSelect: (Any?) -> Void
-
-    init(onSelect: @escaping (Any?) -> Void) { self.onSelect = onSelect }
-
-    @objc func changed(_ sender: NSPopUpButton) {
-        onSelect(sender.selectedItem?.representedObject)
-    }
-}
-
-/// Intrinsic width would shrink to the title; SwiftUI needs a flexible width.
-private final class SettingsPopUpButton: NSPopUpButton {
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
-    }
-}
-
-/// The source list on the left. Selected pane uses the same wash and 3px
-/// rail as a stack row.
-private struct SettingsSidebar: View {
-    @Binding var selection: SettingsTab
-    let topInset: CGFloat
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: topInset)
-            ForEach(SettingsTab.allCases) { tab in
-                SettingsSidebarRow(tab: tab, isSelected: tab == selection) {
-                    selection = tab
-                }
-            }
-            Spacer()
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-}
-
-private struct SettingsSidebarRow: View {
-    let tab: SettingsTab
-    let isSelected: Bool
-    let action: () -> Void
-
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(tab.title)
-                .font(.system(size: 14, weight: isSelected ? .medium : .regular))
-                .padding(.horizontal, 16)
-                .frame(height: 40)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Color.primary)
-        .background(PaletteTint.wash(highlighted: isSelected, hovering: hovering))
-        .overlay(alignment: .leading) {
-            if isSelected {
-                PaletteTint.FocusRail()
-            }
-        }
-        .onHover { hovering = $0 }
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-}
-
-/// The template's name as a form field. Trailing sits on the name line and
-/// shares the rule's right edge.
-struct TemplateNameField<Trailing: View>: View {
-    @Binding var text: String
-    @ViewBuilder var trailing: () -> Trailing
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 12) {
-                TextField("Name", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .focused($focused)
-                    .accessibilityLabel("Template name")
-                    .layoutPriority(1)
-                trailing()
-            }
-            Rectangle()
-                .fill(Color.primary.opacity(focused ? 0.5 : 0.1))
-                .frame(height: 1)
-        }
-        .animation(.easeOut(duration: 0.15), value: focused)
-    }
-}
-
-/// Footer-weight icon: secondary until the pointer is on it.
-struct QuietIconButton: View {
-    let systemName: String
-    var hoverColor: Color = .primary
-    let action: () -> Void
-    @State private var hovering = false
-
-    init(_ systemName: String, hoverColor: Color = .primary, action: @escaping () -> Void) {
-        self.systemName = systemName
-        self.hoverColor = hoverColor
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(hovering ? hoverColor : Color.secondary)
-        .onHover { hovering = $0 }
-    }
-}
+// MARK: - Template dialogs
 
 enum TemplateDialogs {
     static func resolvePendingSelection(_ editor: TemplateEditorState) -> Bool {

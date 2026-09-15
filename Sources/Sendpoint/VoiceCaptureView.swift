@@ -26,27 +26,27 @@ struct VoiceCaptureView: View {
                 .fixedSize(horizontal: true, vertical: false)
             if let stack = model.targetStack {
                 Text("\(stack.noteCount)")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(palette.ink.opacity(0.45))
+                    .font(.mono(11))
+                    .foregroundStyle(palette.ink.opacity(0.5))
                     .padding(.leading, -4)
             }
             if let tether {
                 divider
                 Text(tether)
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(palette.ink.opacity(0.5))
+                    .font(.mono(11))
+                    .foregroundStyle(palette.ink.opacity(0.55))
                     .lineLimit(1)
                     .fixedSize()
                     .transition(.opacity.combined(with: .offset(x: 6)))
             }
-            MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber)
+            MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent)
                 .frame(width: 22, height: 22)
                 .padding(.leading, 2)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilityLabel)
             if let failureMessage {
                 Text(failureMessage)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.ui(11.5, weight: .medium))
                     .foregroundStyle(palette.amber)
                     .lineLimit(1)
                     .fixedSize()
@@ -55,6 +55,7 @@ struct VoiceCaptureView: View {
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)
+        .font(.uiBody)
         .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
         .overlay(
@@ -131,9 +132,10 @@ private struct MeteredOrb: View {
     let meter: VoiceLevelMeter
     let ink: Color
     let amber: Color
+    let accent: Color
 
     var body: some View {
-        VoiceOrb(mode: mode, level: Double(meter.current), ink: ink, amber: amber)
+        VoiceOrb(mode: mode, level: Double(meter.current), ink: ink, amber: amber, accent: accent)
     }
 }
 

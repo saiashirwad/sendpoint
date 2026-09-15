@@ -1,10 +1,97 @@
 import AppKit
 import SendpointDomain
 import Foundation
+import SwiftUI
 
 /// "1 note", "2 notes": the one spelling of a note count shown to the user.
 nonisolated func noteCountLabel(_ count: Int) -> String {
     "\(count) note\(count == 1 ? "" : "s")"
+}
+
+/// When a note was captured, as short as the distance allows: the time
+/// today, the day this year, the date otherwise.
+nonisolated func noteTimestampLabel(
+    _ date: Date, now: Date = Date(), calendar: Calendar = .current
+) -> String {
+    let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+    if calendar.isDate(date, inSameDayAs: now) {
+        return date.formatted(style.hour().minute())
+    }
+    if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+        return date.formatted(style.day().month(.abbreviated))
+    }
+    return date.formatted(style.day().month(.abbreviated).year())
+}
+
+/// The time a note was captured, for lists already grouped by day.
+nonisolated func noteTimeLabel(_ date: Date, calendar: Calendar = .current) -> String {
+    date.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute())
+}
+
+/// A run of notes captured on the same day, under the day's name.
+nonisolated struct NoteDaySection: Equatable {
+    let label: String
+    let notes: [Note]
+}
+
+/// Notes grouped into days, in the order given: "Today", "Yesterday", then
+/// the date, with the year only once it is not this year.
+nonisolated func noteDaySections(
+    _ notes: [Note], now: Date = Date(), calendar: Calendar = .current
+) -> [NoteDaySection] {
+    var sections: [NoteDaySection] = []
+    for note in notes {
+        let label = noteDayLabel(note.createdAt, now: now, calendar: calendar)
+        if let last = sections.last, last.label == label,
+           calendar.isDate(last.notes[0].createdAt, inSameDayAs: note.createdAt) {
+            sections[sections.count - 1] = NoteDaySection(label: label, notes: last.notes + [note])
+        } else {
+            sections.append(NoteDaySection(label: label, notes: [note]))
+        }
+    }
+    return sections
+}
+
+nonisolated func noteDayLabel(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    if calendar.isDate(date, inSameDayAs: now) { return "Today" }
+    if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+       calendar.isDate(date, inSameDayAs: yesterday) { return "Yesterday" }
+    let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+    if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+        return date.formatted(style.day().month(.abbreviated))
+    }
+    return date.formatted(style.day().month(.abbreviated).year())
+}
+
+/// One line on the state of a stack: how many notes it holds and when the
+/// last one landed, or that nothing has landed yet.
+nonisolated func stackStatusDetail(
+    noteCount: Int, latest: Date?, now: Date = Date(), calendar: Calendar = .current
+) -> String {
+    guard noteCount > 0, let latest else { return "Nothing captured yet" }
+    return "\(noteCountLabel(noteCount)) · \(noteTimestampLabel(latest, now: now, calendar: calendar))"
+}
+
+/// Which edge to bring a note to so it is fully in view, or nil when it
+/// already is. `frame` is the note in the viewport's coordinates.
+nonisolated func noteRevealAnchor(frame: CGRect, viewportHeight: CGFloat) -> UnitPoint? {
+    if frame.minY < 0 { return .top }
+    if frame.maxY > viewportHeight { return .bottom }
+    return nil
+}
+
+/// The scroll offset (distance from the top of the content) that brings a
+/// note to the edge named by `anchor`, with a little margin so it does not
+/// touch the edge. `frame` is the note in the viewport's coordinates at
+/// `currentTop`. Clamped to what the content allows.
+nonisolated func revealedScrollOffset(
+    currentTop: CGFloat, frame: CGRect, viewportHeight: CGFloat, contentHeight: CGFloat,
+    anchor: UnitPoint, margin: CGFloat = 6
+) -> CGFloat {
+    let wanted: CGFloat = anchor == .top
+        ? currentTop + frame.minY - margin
+        : currentTop + frame.maxY + margin - viewportHeight
+    return min(max(wanted, 0), max(0, contentHeight - viewportHeight))
 }
 
 /// `index + offset` wrapped into `0..<count`, so stepping past either end of

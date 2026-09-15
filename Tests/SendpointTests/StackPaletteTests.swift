@@ -95,13 +95,15 @@ final class StackPaletteTests: XCTestCase {
         let items = PaletteActionCatalog.items(for: context)
         XCTAssertEqual(items.map(\.action), [
             .switchToStack(stackID), .copyStack(stackID),
-            .renameStack(stackID), .newStack, .chooseTemplate, .undoClear,
-            .clearStack(stackID), .deleteStack(stackID),
+            .renameStack(stackID), .newStack, .undoClear,
+            .clearStack(stackID), .deleteStack(stackID), .chooseTemplate,
         ])
-        XCTAssertEqual(items.first?.title, "Switch to “crdt”")
+        XCTAssertEqual(items.first?.title, "Switch")
+        XCTAssertEqual(items.first?.section, .stack(name: "crdt"))
         XCTAssertEqual(items.first?.keys, "↩")
         XCTAssertEqual(items.first { $0.action == .undoClear }?.title, "Undo Clear (1)")
-        XCTAssertTrue(items.last?.isDestructive ?? false)
+        XCTAssertTrue(items.first { $0.action == .deleteStack(stackID) }?.isDestructive ?? false)
+        XCTAssertEqual(items.last?.section, .template)
 
         let empty = PaletteActionCatalog.items(for: PaletteActionContext(
             pane: .stacks,
@@ -112,7 +114,8 @@ final class StackPaletteTests: XCTestCase {
             .switchToStack(stackID), .renameStack(stackID), .newStack,
             .chooseTemplate,
         ], "an empty, only stack cannot be copied, cleared, or deleted")
-        XCTAssertEqual(empty.first?.title, "Keep “crdt” current")
+        XCTAssertEqual(empty.first?.title, "Keep current")
+        XCTAssertEqual(empty.first?.verb, "Keep")
 
         let create = PaletteActionCatalog.items(for: PaletteActionContext(
             pane: .stacks, focus: .createStack(name: "New"), shownStack: nil,
@@ -135,8 +138,10 @@ final class StackPaletteTests: XCTestCase {
             .editNote(secondNoteID), .copyNote(secondNoteID),
             .moveNoteUp(secondNoteID), .moveNoteDown(secondNoteID), .deleteNote(secondNoteID),
             .switchToStack(stackID), .copyStack(stackID), .renameStack(stackID), .newStack,
-            .chooseTemplate, .clearStack(stackID),
+            .clearStack(stackID), .chooseTemplate,
         ])
+        XCTAssertEqual(items.first?.section, .note)
+        XCTAssertEqual(items.first { $0.action == .clearStack(stackID) }?.section, .stack(name: "crdt"))
         XCTAssertEqual(items.first { $0.action == .switchToStack(stackID) }?.keys, "⌘↩")
         XCTAssertEqual(items.first { $0.action == .copyStack(stackID) }?.keys, "⇧⌘C")
 
@@ -157,17 +162,23 @@ final class StackPaletteTests: XCTestCase {
         XCTAssertEqual(nothing.map(\.action), [.renameStack(stackID), .newStack, .chooseTemplate])
     }
 
-    func testActionFilterMatchesTitleAndSubtitle() {
+    func testMenuLeavesOutPinnedActionsAndMatchesTitleAndSection() {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             pane: .stacks,
             focus: .stack(StackItemFacts(id: stackID, name: "crdt", noteCount: 3, isCurrent: false)),
-            shownStack: nil, canDeleteStack: true, undo: nil, templateName: "Coherent"
+            shownStack: nil, canDeleteStack: true,
+            undo: StackUndoFacts(stackID: stackID, stackName: "crdt", noteCount: 1, isCurrentStack: false),
+            templateName: "Coherent"
         ))
         XCTAssertEqual(
-            PaletteActionCatalog.filter(items, query: "del").map(\.action), [.deleteStack(stackID)])
+            PaletteActionCatalog.menu(items, query: "").map(\.action),
+            [.copyStack(stackID), .renameStack(stackID), .clearStack(stackID), .deleteStack(stackID)],
+            "↩, ⌘N, ⌘Z and ⌘P are already shown on the palette itself")
         XCTAssertEqual(
-            PaletteActionCatalog.filter(items, query: "coherent").map(\.action),
-            [.copyStack(stackID), .chooseTemplate], "the template name appears in a subtitle")
-        XCTAssertEqual(PaletteActionCatalog.filter(items, query: " ").count, items.count)
+            PaletteActionCatalog.menu(items, query: "del").map(\.action), [.deleteStack(stackID)])
+        XCTAssertEqual(
+            PaletteActionCatalog.menu(items, query: "stack").count, 4,
+            "the section name matches every action in its section")
+        XCTAssertTrue(PaletteActionCatalog.menu(items, query: "template").isEmpty)
     }
 }

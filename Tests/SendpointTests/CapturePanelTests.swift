@@ -62,7 +62,10 @@ final class CapturePanelTests: XCTestCase {
 
     func testPaletteFactoryKeepsWindowInvariants() {
         let palette = StackPaletteWindowController.makePanel()
-        XCTAssertTrue(palette.styleMask.contains([.borderless, .resizable, .nonactivatingPanel]))
+        XCTAssertTrue(palette.styleMask.contains([.titled, .fullSizeContentView, .resizable, .nonactivatingPanel]))
+        XCTAssertTrue(palette.isOpaque, "an opaque backing keeps text smoothing on")
+        XCTAssertEqual(palette.titleVisibility, .hidden)
+        XCTAssertTrue(palette.standardWindowButton(.closeButton)?.isHidden ?? false)
         XCTAssertTrue(palette.canBecomeKey)
         XCTAssertFalse(palette.ignoresMouseEvents)
     }

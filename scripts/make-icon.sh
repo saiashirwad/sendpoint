@@ -1,13 +1,13 @@
 #!/bin/bash
-# Turn Resources/AppIcon.svg (or any square 1024px image you pass) into
+# Turn Resources/AppIcon.png (or any square image you pass) into
 # Resources/AppIcon.icns. build.sh picks the .icns up automatically.
 #
-#   ./scripts/make-icon.sh                  # from Resources/AppIcon.svg
+#   ./scripts/make-icon.sh                  # from Resources/AppIcon.png
 #   ./scripts/make-icon.sh path/to/icon.png # from a generated 1024x1024 PNG
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SOURCE="${1:-Resources/AppIcon.svg}"
+SOURCE="${1:-Resources/AppIcon.png}"
 WORK="$(mktemp -d)"
 ICONSET="${WORK}/AppIcon.iconset"
 RENDER="${WORK}/render.swift"

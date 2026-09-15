@@ -1,5 +1,6 @@
 import SendpointDomain
 import Foundation
+import SwiftUI
 import XCTest
 @testable import Sendpoint
 
@@ -194,5 +195,157 @@ extension StackUITests {
         state.highlight(.create("Draft"))
         state.synchronize(with: facts)
         XCTAssertEqual(state.highlight, .create("Draft"), "stack changes keep a create highlight")
+    }
+}
+
+final class NoteRevealAnchorTests: XCTestCase {
+    func testFullyVisibleNoteNeedsNoScroll() {
+        XCTAssertNil(noteRevealAnchor(frame: CGRect(x: 0, y: 40, width: 300, height: 60), viewportHeight: 400))
+        XCTAssertNil(noteRevealAnchor(frame: CGRect(x: 0, y: 0, width: 300, height: 400), viewportHeight: 400))
+    }
+
+    func testNoteCutOffAboveRevealsAtTop() {
+        XCTAssertEqual(noteRevealAnchor(frame: CGRect(x: 0, y: -12, width: 300, height: 60), viewportHeight: 400), .top)
+    }
+
+    func testNoteCutOffBelowRevealsAtBottom() {
+        XCTAssertEqual(noteRevealAnchor(frame: CGRect(x: 0, y: 380, width: 300, height: 60), viewportHeight: 400), .bottom)
+    }
+}
+
+final class RevealedScrollOffsetTests: XCTestCase {
+    func testBottomAnchorPutsTheNoteAtTheBottomEdgeWithMargin() {
+        // Viewport 400, content 1000, currently at the top; note spans 380...500 in the viewport.
+        let top = revealedScrollOffset(
+            currentTop: 0, frame: CGRect(x: 0, y: 380, width: 300, height: 120),
+            viewportHeight: 400, contentHeight: 1000, anchor: .bottom
+        )
+        XCTAssertEqual(top, 106)
+    }
+
+    func testTopAnchorPutsTheNoteAtTheTopEdgeWithMargin() {
+        let top = revealedScrollOffset(
+            currentTop: 300, frame: CGRect(x: 0, y: -50, width: 300, height: 80),
+            viewportHeight: 400, contentHeight: 1000, anchor: .top
+        )
+        XCTAssertEqual(top, 244)
+    }
+
+    func testOffsetIsClampedToTheContent() {
+        XCTAssertEqual(revealedScrollOffset(
+            currentTop: 500, frame: CGRect(x: 0, y: 390, width: 300, height: 200),
+            viewportHeight: 400, contentHeight: 1000, anchor: .bottom
+        ), 600)
+        XCTAssertEqual(revealedScrollOffset(
+            currentTop: 10, frame: CGRect(x: 0, y: -30, width: 300, height: 40),
+            viewportHeight: 400, contentHeight: 1000, anchor: .top
+        ), 0)
+        XCTAssertEqual(revealedScrollOffset(
+            currentTop: 0, frame: CGRect(x: 0, y: 100, width: 300, height: 40),
+            viewportHeight: 400, contentHeight: 300, anchor: .bottom
+        ), 0)
+    }
+}
+
+final class StackStatusDetailTests: XCTestCase {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    func testEmptyStackSaysSo() {
+        XCTAssertEqual(stackStatusDetail(noteCount: 0, latest: nil, calendar: calendar), "Nothing captured yet")
+    }
+
+    func testCountsNotesAndDatesTheLatest() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 21))!
+        let latest = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 20, minute: 48))!
+        XCTAssertEqual(
+            stackStatusDetail(noteCount: 6, latest: latest, now: now, calendar: calendar),
+            "6 notes · \(noteTimestampLabel(latest, now: now, calendar: calendar))"
+        )
+        XCTAssertEqual(
+            stackStatusDetail(noteCount: 1, latest: latest, now: now, calendar: calendar).prefix(7),
+            "1 note "
+        )
+    }
+}
+
+final class NoteDaySectionTests: XCTestCase {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    private func note(_ at: Date) -> Note {
+        Note(subject: .standalone, body: "n", createdAt: at)
+    }
+
+    func testGroupsConsecutiveNotesByDayInOrder() {
+        let now = date(2026, 9, 15, 21)
+        let notes = [
+            note(date(2025, 12, 31)), note(date(2026, 9, 12)), note(date(2026, 9, 12, 18)),
+            note(date(2026, 9, 14)), note(date(2026, 9, 15, 8)), note(date(2026, 9, 15, 20)),
+        ]
+        let sections = noteDaySections(notes, now: now, calendar: calendar)
+        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        XCTAssertEqual(sections.map(\.label), [
+            date(2025, 12, 31).formatted(style.day().month(.abbreviated).year()),
+            date(2026, 9, 12).formatted(style.day().month(.abbreviated)),
+            "Yesterday", "Today",
+        ])
+        XCTAssertEqual(sections.map(\.notes.count), [1, 2, 1, 2])
+        XCTAssertEqual(sections.last?.notes.map(\.id), Array(notes.suffix(2)).map(\.id))
+    }
+
+    func testEmptyListHasNoSections() {
+        XCTAssertTrue(noteDaySections([], calendar: calendar).isEmpty)
+    }
+
+    func testTimeLabelIsJustTheTime() {
+        let at = date(2026, 9, 15, 20)
+        XCTAssertEqual(noteTimeLabel(at, calendar: calendar), at.formatted(
+            Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute()))
+    }
+}
+
+final class NoteTimestampLabelTests: XCTestCase {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9, _ minute: Int = 5) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+    }
+
+    func testSameDayShowsOnlyTheTime() {
+        let now = date(2026, 9, 15, 20, 0)
+        let label = noteTimestampLabel(date(2026, 9, 15, 14, 32), now: now, calendar: calendar)
+        XCTAssertTrue(label.contains("32"), label)
+        XCTAssertFalse(label.contains("Sep"), label)
+        XCTAssertFalse(label.contains("2026"), label)
+    }
+
+    func testSameYearShowsDayAndMonthWithoutYear() {
+        let now = date(2026, 9, 15)
+        let label = noteTimestampLabel(date(2026, 3, 2), now: now, calendar: calendar)
+        XCTAssertTrue(label.contains("2"), label)
+        XCTAssertFalse(label.contains("2026"), label)
+        XCTAssertFalse(label.contains(":"), label)
+    }
+
+    func testOtherYearShowsTheYear() {
+        let now = date(2026, 9, 15)
+        let label = noteTimestampLabel(date(2024, 12, 31), now: now, calendar: calendar)
+        XCTAssertTrue(label.contains("2024"), label)
+        XCTAssertFalse(label.contains(":"), label)
     }
 }

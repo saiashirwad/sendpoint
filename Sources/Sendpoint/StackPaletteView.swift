@@ -8,48 +8,47 @@ import SwiftUI
 struct StackPaletteView: View {
     @Bindable var model: StackPaletteModel
     @FocusState private var focus: PaletteField?
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorScheme) private var scheme
 
     static let minimumSize = CGSize(width: 780, height: 460)
-    private let rowHeight: CGFloat = 40
+    private let rowHeight: CGFloat = 36
+    /// Where each note sits in the list's viewport. A plain class, so the
+    /// frames can update on every scroll without redrawing the palette.
+    @State private var noteFrames = NoteFrames()
+    private static let notesSpace = "notes"
+    /// One highlight pill per pane and one current-stack dot, each a single
+    /// shape that slides between rows instead of popping.
+    @Namespace private var noteHighlight
+    @Namespace private var stackHighlight
+    @Namespace private var currentDot
 
     var body: some View {
         VStack(spacing: 0) {
-            searchBar
-            Divider()
+            header
+            Hairline()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if model.state.presentation != .cycling, let undo = model.projection.facts.undo {
-                Divider()
+                Hairline()
                 undoBanner(undo)
             }
             if let message = model.state.problem {
-                HStack {
-                    Text(message).foregroundStyle(.red)
-                    if case .failed(_, _, true) = model.state.interaction {
-                        Button("Retry") { model.send(.retry) }
-                    } else if case .failed = model.state.interaction {
-                        Button("Dismiss") { model.send(.cancelEdit) }
-                    }
-                }.padding(12)
+                Hairline()
+                problemRow(message)
             } else if let error = model.store.error {
-                Divider()
+                Hairline()
                 errorRow(error)
             }
-            Divider()
+            Hairline()
             footer
         }
         .frame(
             minWidth: Self.minimumSize.width, maxWidth: .infinity,
             minHeight: Self.minimumSize.height, maxHeight: .infinity
         )
-        .background(PaletteTint.surface(colorScheme))
+        .background(Backdrop())
+        .font(.uiBody)
         .overlay { overlayMenu }
-        .clipShape(RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous)
-                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
-        )
         .allowsHitTesting(model.state.presentation != .cycling)
         .ignoresSafeArea()
         .onAppear {
@@ -68,60 +67,62 @@ struct StackPaletteView: View {
                 model.send(.noteFocus(nil))
             }
         }
-
     }
 
-    // MARK: - Search bar
+    // MARK: - Header
 
-    private var searchBar: some View {
+    /// "3 OF 12" while a search narrows the focused pane.
+    private var matchReadout: String? {
+        guard model.query.nonblank != nil, model.state.presentation != .cycling else { return nil }
+        let (matches, total): (Int, Int) = switch model.state.focusedPane {
+        case .stacks: (model.projection.stackListing.stacks.count, model.projection.facts.stacks.count)
+        case .notes: (model.projection.noteListing.notes.count, model.projection.shownStack?.notes.count ?? 0)
+        }
+        return "\(matches) OF \(total)"
+    }
+
+    private var header: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.tertiary)
 
             if model.state.presentation == .cycling {
-                Text("Switch stack").font(.system(size: 17))
+                Text("Switch stack")
+                    .font(.ui(15, weight: .medium))
                 Spacer()
             } else {
                 TextField(model.projection.searchPlaceholder, text: $model.query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 17))
+                    .font(.ui(15))
                     .focused($focus, equals: .search)
                     .disabled(model.state.inlineEdit != nil || model.state.overlay != nil)
+            }
+
+            if let matches = matchReadout {
+                Text(matches)
+                    .font(.mono(10.5, weight: .medium))
+                    .tracking(1.2)
+                    .foregroundStyle(.tertiary)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.25), value: matches)
+                    .accessibilityLabel(matches.lowercased())
             }
 
             if !model.query.isEmpty {
                 Button {
                     model.query = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
             }
-
-            templateButton
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 12)
-        .frame(height: 52)
-    }
-
-    private var templateButton: some View {
-        Button {
-            model.send(.toggleOverlay(.templates))
-        } label: {
-            HStack(spacing: 6) {
-                Text("Copy as \(model.projection.activeTemplate.name)")
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Keycap("⌘P")
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Template used when copying (⌘P)")
+        .padding(.horizontal, 18)
+        .frame(height: 48)
     }
 
     // MARK: - Content
@@ -131,7 +132,7 @@ struct StackPaletteView: View {
             HStack(spacing: 0) {
                 stackColumn
                     .frame(width: sidebarWidth(for: proxy.size.width))
-                Divider()
+                Hairline(axis: .vertical)
                 notePane
                     .contentShape(Rectangle())
                     .onTapGesture { model.send(.focusPane(.notes)) }
@@ -142,7 +143,7 @@ struct StackPaletteView: View {
     /// A sidebar that stays readable at the minimum width and stops growing
     /// once it is wide enough.
     private func sidebarWidth(for totalWidth: CGFloat) -> CGFloat {
-        min(max(totalWidth * 0.25, 220), 260)
+        min(max(totalWidth * 0.26, 220), 260)
     }
 
     private var stackColumn: some View {
@@ -160,20 +161,23 @@ struct StackPaletteView: View {
                                 .id(QuickSwitchRow.create(name))
                         }
                         if listing.isEmpty {
-                            Text("No stacks match “\(model.query.trimmingCharacters(in: .whitespaces))”.")
-                                .font(.callout)
+                            Text("Nothing called “\(model.query.trimmingCharacters(in: .whitespaces))”.")
+                                .font(.uiCallout)
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 16)
-                                .frame(maxWidth: .infinity, minHeight: rowHeight)
+                                .padding(.horizontal, 18)
+                                .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
                         }
                     }
+                    .animation(Self.travel, value: model.state.stackState.highlight)
+                    .animation(Self.travel, value: model.projection.facts.currentStackID)
+                    .padding(.vertical, 6)
                 }
                 .onChange(of: model.state.stackState.highlight) {
                     guard let highlight = model.state.stackState.highlight else { return }
                     proxy.scrollTo(highlight, anchor: nil)
                 }
             }
-            Divider()
+            Hairline()
             newStackRow
         }
         .contentShape(Rectangle())
@@ -190,17 +194,20 @@ struct StackPaletteView: View {
             Button {
                 model.send(.perform(.newStack))
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 9) {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.secondary)
                     Text("New stack")
-                        .font(.system(size: 14))
+                        .font(.ui(13, weight: .medium))
+                        .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
-                    Keycap("⌘N")
+                    Text("⌘N")
+                        .font(.mono(10.5))
+                        .foregroundStyle(.tertiary)
                 }
-                .padding(.horizontal, 16)
-                .frame(height: rowHeight)
+                .padding(.horizontal, 18)
+                .frame(height: 40)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -209,37 +216,31 @@ struct StackPaletteView: View {
     }
 
     private func undoBanner(_ undo: StackUndoFacts) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Text(undo.notification)
-                .font(.caption)
+                .font(.uiCaption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .help(undo.notification)
-            Button {
+            QuietButton("Undo", keys: "⌘Z") {
                 model.send(.perform(.undoClear))
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Undo")
-                        .font(.system(size: 12, weight: .medium))
-                    Keycap("⌘Z")
-                }
             }
-            .buttonStyle(.plain)
             .help("Put the cleared notes back")
             Spacer(minLength: 8)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
         .frame(height: 34)
-        .background(PaletteTint.hover)
     }
 
     private func stackRow(_ stack: StackItemFacts, position: Int) -> some View {
         let isHighlighted = model.state.stackState.highlight == .stack(stack.id)
         var isRenaming = false
         if case let .renameStack(id, _, _) = model.state.inlineEdit, id == stack.id { isRenaming = true }
+        let showsDigit = model.state.focusedPane == .stacks && model.state.presentation != .cycling
         return PaletteRow(
             isHighlighted: isHighlighted,
             isDimmed: model.state.focusedPane != .stacks,
+            namespace: stackHighlight,
             onSelect: { model.send(.chooseStack(stack.id)) },
             onActivate: { model.send(.perform(.switchToStack(stack.id))) }
         ) {
@@ -250,6 +251,7 @@ struct StackPaletteView: View {
                     showsDigit: false
                 ) {
                     inlineNameField(field: .rename(stack.id), placeholder: "Stack name")
+                        .padding(.leading, StackRowName.gutter)
                 }
             } else {
                 StackRow(
@@ -257,7 +259,8 @@ struct StackPaletteView: View {
                     noteCount: stack.noteCount,
                     isCurrent: stack.isCurrent,
                     position: position,
-                    showsDigit: true
+                    showsDigit: showsDigit,
+                    dotNamespace: currentDot
                 )
             }
         }
@@ -269,18 +272,21 @@ struct StackPaletteView: View {
         return PaletteRow(
             isHighlighted: isHighlighted,
             isDimmed: model.state.focusedPane != .stacks,
+            namespace: stackHighlight,
             onSelect: { model.send(.chooseCreate(name)) },
             onActivate: { model.send(.perform(.createStack(name))) }
         ) {
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
                 (Text("Create ") + Text("“\(name)”").fontWeight(.semibold))
-                    .font(.system(size: 14))
+                    .font(.ui(13.5))
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Keycap(isHighlighted ? "↩" : "⌘↩")
+                Text(isHighlighted ? "↩" : "⌘↩")
+                    .font(.mono(10.5))
+                    .foregroundStyle(.quaternary)
             }
         }
         .foregroundStyle(Color.primary)
@@ -288,37 +294,32 @@ struct StackPaletteView: View {
     }
 
     private var inlineCreateRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 9) {
             Image(systemName: "plus")
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
             inlineNameField(field: .create, placeholder: "New stack name")
             Spacer(minLength: 8)
-            Keycap("↩")
+            Keycap("↩", size: 10)
         }
-        .padding(.horizontal, 16)
-        .frame(height: rowHeight)
-        .background(Rectangle().fill(PaletteTint.selection))
+        .padding(.horizontal, 18)
+        .frame(height: 40)
+        .background(Rectangle().fill(Ink.selection))
     }
 
+    /// The name being typed. A problem with it is reported once, in the
+    /// problem row under the panes, where it has room and its buttons.
     private func inlineNameField(field: PaletteField, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            TextField(
-                placeholder,
-                text: Binding(
-                    get: { (model.state.inlineEdit?.text ?? "") },
-                    set: { model.send(.editText($0)) }
-                )
+        TextField(
+            placeholder,
+            text: Binding(
+                get: { (model.state.inlineEdit?.text ?? "") },
+                set: { model.send(.editText($0)) }
             )
-            .textFieldStyle(.plain)
-            .font(.system(size: 14, weight: .medium))
-            .focused($focus, equals: field)
-            if let problem = model.state.problem {
-                Text(problem)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-        }
+        )
+        .textFieldStyle(.plain)
+        .font(.ui(13.5, weight: .medium))
+        .focused($focus, equals: field)
     }
 
     // MARK: - Notes
@@ -326,15 +327,11 @@ struct StackPaletteView: View {
     @ViewBuilder
     private var notePane: some View {
         if case let .create(name) = model.state.stackState.highlight {
-            placeholder(
-                symbol: "plus.rectangle.on.folder",
-                title: "Create “\(name)”",
-                detail: "Press ↩ to make it and switch to it."
-            )
+            placeholder(title: "Create “\(name)”", detail: "Press ↩ to make it and switch to it.")
         } else if let stack = model.projection.shownStack {
             noteCards(stack: stack)
         } else {
-            placeholder(symbol: "square.stack.3d.up", title: "No stack selected", detail: nil)
+            placeholder(title: "No stack selected", detail: nil)
         }
     }
 
@@ -343,20 +340,11 @@ struct StackPaletteView: View {
         let listing = model.projection.noteListing
         let wasCleared = model.projection.facts.undo?.stackID == stack.id
         if stack.notes.isEmpty && wasCleared, let undo = model.projection.facts.undo {
-            VStack(spacing: 14) {
-                placeholder(
-                    symbol: "tray",
-                    title: "Stack cleared",
-                    detail: "\(noteCountLabel(undo.noteCount)) set aside."
-                )
-                .frame(maxHeight: 180)
-                Button {
+            VStack(spacing: 18) {
+                placeholder(title: "Stack cleared", detail: "\(noteCountLabel(undo.noteCount)) set aside.")
+                    .frame(maxHeight: 120)
+                QuietButton("Undo", keys: "⌘Z") {
                     model.send(.perform(.undoClear))
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Undo Clear")
-                        Keycap("⌘Z")
-                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -364,105 +352,115 @@ struct StackPaletteView: View {
             emptyState
         } else if listing.isEmpty {
             placeholder(
-                symbol: "magnifyingglass",
                 title: "No notes match “\(model.query.trimmingCharacters(in: .whitespaces))”",
                 detail: nil
             )
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
+            ScrollView {
                     // A plain stack: stacks hold a handful of notes, and
-                    // scrollTo inside a lazy stack of variable-height text
-                    // can spin the layout engine.
+                    // lazy stacks of variable-height text re-measure on
+                    // every move.
                     VStack(spacing: 0) {
-                        ForEach(listing.notes, id: \.id) { entry in
-                            NoteCard(
-                                entry: entry,
-                                isHighlighted: model.projection.highlightedNoteID == entry.id,
-                                isDimmed: model.state.focusedPane != .notes,
-                                isEditing: model.state.inlineEdit?.noteID == entry.id,
-                                draft: Binding(
-                                    get: {
-                                        model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.body
-                                    },
-                                    set: { model.send(.editText($0)) }
-                                ),
-                                focus: $focus,
-                                onSelect: { model.send(.chooseNote(entry.id)) },
-                                onEdit: { model.send(.perform(.editNote(entry.id))) }
-                            )
-                            .id(entry.id)
+                        ForEach(noteDaySections(listing.notes), id: \.label) { section in
+                            NoteDayLabel(section.label)
+                            ForEach(Array(section.notes.enumerated()), id: \.element.id) { index, entry in
+                                if index > 0 {
+                                    Hairline().padding(.horizontal, NoteCard.inset)
+                                }
+                                noteCard(entry)
+                            }
                         }
                     }
+                    .animation(Self.travel, value: model.projection.highlightedNoteID)
+                    .padding(.vertical, 6)
+                    .background(ScrollProbe(handle: noteFrames.scroll))
+            }
+            .coordinateSpace(name: Self.notesSpace)
+            .onPreferenceChange(NoteFramesKey.self) { frames in
+                noteFrames.frames.merge(frames) { $1 }
+                // A landing stays armed until a fresh frame shows the note
+                // at the bottom edge: text lays out over a few passes, and
+                // a frame measured early is shorter than the note ends up.
+                noteFrames.settle()
+            }
+            .onChange(of: model.projection.highlightedNoteID) {
+                // Keyboard movement brings the highlighted note into view,
+                // and only when it is cut off, so the list never jumps
+                // under a note already on screen.
+                guard model.state.focusedPane == .notes,
+                      let id = model.projection.highlightedNoteID else { return }
+                guard let frame = noteFrames.frames[id] else {
+                    noteFrames.landing = id
+                    return
                 }
-                .onChange(of: model.projection.highlightedNoteID) {
-                    // The newest note is the landing spot whenever the shown
-                    // stack changes; keyboard movement just brings the
-                    // highlighted note into view.
-                    guard model.state.focusedPane == .notes,
-                          let id = model.projection.highlightedNoteID else { return }
-                    proxy.scrollTo(id, anchor: nil)
+                if let anchor = noteRevealAnchor(frame: frame, viewportHeight: noteFrames.scroll.viewportHeight) {
+                    noteFrames.scroll.reveal(frame, anchor: anchor, animated: true)
                 }
-                .onChange(of: stack.id) {
-                    // Arrowing the sidebar lands each stack's preview at its
-                    // newest note.
-                    guard let id = listing.notes.last?.id else { return }
-                    proxy.scrollTo(id, anchor: .bottom)
-                }
-                .onAppear {
-                    guard let id = model.projection.highlightedNoteID else { return }
-                    proxy.scrollTo(id, anchor: .bottom)
-                }
+            }
+            .onChange(of: stack.id) {
+                // Arrowing the sidebar lands each stack's preview at its
+                // newest note.
+                guard let id = listing.notes.last?.id else { return }
+                noteFrames.land(on: id)
+            }
+            .onAppear {
+                // The newest note is the landing spot when nothing is
+                // highlighted yet.
+                guard let id = model.projection.highlightedNoteID ?? listing.notes.last?.id else { return }
+                noteFrames.land(on: id)
             }
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "quote.opening")
-                .font(.system(size: 36, weight: .light))
-                .foregroundStyle(.quaternary)
+    private func noteCard(_ entry: SendpointDomain.Note) -> some View {
+        NoteCard(
+            entry: entry,
+            isHighlighted: model.projection.highlightedNoteID == entry.id,
+            isDimmed: model.state.focusedPane != .notes,
+            isEditing: model.state.inlineEdit?.noteID == entry.id,
+            draft: Binding(
+                get: {
+                    model.state.inlineEdit?.noteID == entry.id ? (model.state.inlineEdit?.text ?? "") : entry.body
+                },
+                set: { model.send(.editText($0)) }
+            ),
+            focus: $focus,
+            namespace: noteHighlight,
+            onSelect: { model.send(.chooseNote(entry.id)) },
+            onEdit: { model.send(.perform(.editNote(entry.id))) }
+        )
+        .id(entry.id)
+        .background(GeometryReader { geometry in
+            Color.clear.preference(
+                key: NoteFramesKey.self,
+                value: [entry.id: geometry.frame(in: .named(Self.notesSpace))]
+            )
+        })
+    }
 
-            VStack(spacing: 5) {
-                Text("Nothing captured yet")
-                    .font(.title3.weight(.semibold))
-                HStack(spacing: 5) {
-                    Text(model.voiceSettings.voiceMode.title)
-                    Keycap(model.shortcuts.voiceCaptureCombo.displayString, size: 12)
-                    Text(model.voiceSettings.voiceMode == .hold
-                        ? "to speak, then release to save"
-                        : "to start, then press again to save")
-                }
-                HStack(spacing: 5) {
-                    Text("Or press")
-                    Keycap(model.shortcuts.captureCombo.displayString, size: 12)
-                    Text("to type a note about selected text")
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            }
-            .multilineTextAlignment(.center)
+    /// How a highlight pill or the current-stack dot slides to its new row.
+    private static let travel = Animation.spring(response: 0.18, dampingFraction: 0.92)
+
+    private var emptyState: some View {
+        VStack(spacing: 22) {
+            EmptyStackGlyph()
+            Readout("Nothing captured yet")
         }
+        .multilineTextAlignment(.center)
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func placeholder(symbol: String, title: String, detail: String?) -> some View {
+    private func placeholder(title: String, detail: String?) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.quaternary)
-            VStack(spacing: 4) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                if let detail {
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+            Readout(title)
+            if let detail {
+                Text(detail)
+                    .font(.uiCallout)
+                    .foregroundStyle(.secondary)
             }
-            .multilineTextAlignment(.center)
         }
+        .multilineTextAlignment(.center)
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -472,102 +470,132 @@ struct StackPaletteView: View {
     @ViewBuilder
     private var footer: some View {
         if model.state.presentation == .cycling {
-            HStack {
-                Text("\(model.shortcuts.switchStackCombo.displayString) cycle · ⇧ reverse")
+            HStack(spacing: 14) {
+                hint(model.shortcuts.switchStackCombo.displayString, "cycle")
+                hint("⇧", "reverse")
                 Spacer()
-                Text("Release modifiers to switch · esc cancel")
+                Text("Release to switch")
+                    .font(.uiCaption)
+                    .foregroundStyle(.tertiary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .frame(height: 36)
+            .padding(.horizontal, 18)
+            .frame(height: 40)
         } else {
             browsingFooter
         }
     }
 
     private var browsingFooter: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
             if let flash = model.state.flash {
-                HStack(spacing: 5) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.primary)
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Ink.accent(scheme))
                     Text(flash.text)
+                        .font(.ui(12, weight: .medium))
                 }
-                .font(.caption.weight(.medium))
                 .transition(.opacity)
             } else {
-                Text(footerContext)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                context
             }
 
             Spacer()
 
-            if let primary = model.projection.primaryAction {
-                Button {
-                    model.send(.perform(primary.action))
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(primary.title)
-                            .font(.system(size: 12, weight: .medium))
-                            .lineLimit(1)
-                        Keycap(primary.keys)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            Divider().frame(height: 14)
-
             Button {
-                model.send(.toggleOverlay(.actions))
+                model.send(.toggleOverlay(.templates))
             } label: {
-                HStack(spacing: 6) {
-                    Text("Actions")
-                        .font(.system(size: 12, weight: .medium))
-                    Keycap("⌘K")
+                HStack(spacing: 7) {
+                    Text("Template")
+                        .font(.ui(12.5))
+                        .foregroundStyle(.tertiary)
+                    Text(model.projection.activeTemplate.name)
+                        .font(.ui(12.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.trailing, 2)
+                    Keycap("⌘P", size: 10.5)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .help("Template used when copying (⌘P)")
+
+            if let primary = model.projection.primaryAction {
+                QuietButton(primary.verb, keys: "↩") {
+                    model.send(.perform(primary.action))
+                }
+            }
+
+            QuietButton("Actions", keys: "⌘K") {
+                model.send(.toggleOverlay(.actions))
+            }
         }
         .animation(.easeOut(duration: 0.15), value: model.state.flash?.generation)
-        .padding(.horizontal, 16)
-        .frame(height: 36)
+        .padding(.horizontal, 18)
+        .frame(height: 40)
     }
 
-    private var footerContext: String {
-        switch model.state.focusedPane {
-        case .stacks:
-            let count = model.projection.facts.stacks.count
-            return "\(count) stack\(count == 1 ? "" : "s") · ↑↓ preview · ⇥ notes"
-        case .notes:
-            let count = model.projection.shownStack?.notes.count ?? 0
-            let name = model.projection.shownStack?.name ?? ""
-            return "\(name) · \(noteCountLabel(count)) · ↑↓ select · ⇥ stacks"
+    /// Where the keyboard is and how to move it.
+    private var context: some View {
+        HStack(spacing: 12) {
+            switch model.state.focusedPane {
+            case .stacks:
+                let count = model.projection.facts.stacks.count
+                Text("\(count) stack\(count == 1 ? "" : "s")")
+                hint("⇥", "notes")
+            case .notes:
+                let count = model.projection.shownStack?.notes.count ?? 0
+                Text("\(model.projection.shownStack?.name ?? "") · \(noteCountLabel(count))")
+                    .lineLimit(1)
+                    .contentTransition(.numericText(value: Double(count)))
+                    .animation(.snappy(duration: 0.3), value: count)
+                hint("⇥", "stacks")
+            }
         }
+        .font(.uiCaption.monospacedDigit())
+        .foregroundStyle(.secondary)
+    }
+
+    private func hint(_ keys: String, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Keycap(keys, size: 10, isMuted: true)
+            Text(label)
+                .font(.uiCaption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private func problemRow(_ message: String) -> some View {
+        HStack(spacing: 12) {
+            Text(message)
+                .font(.uiCaption)
+                .foregroundStyle(Ink.amber(scheme))
+                .lineLimit(2)
+            Spacer()
+            if case .failed(_, _, true) = model.state.interaction {
+                QuietButton("Retry") { model.send(.retry) }
+            } else if case .failed = model.state.interaction {
+                QuietButton("Dismiss") { model.send(.cancelEdit) }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
     }
 
     private func errorRow(_ error: StackStoreError) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+        HStack(spacing: 12) {
             Text(noteStoreErrorMessage(error))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.uiCaption)
+                .foregroundStyle(Ink.amber(scheme))
                 .lineLimit(2)
             Spacer()
             if model.store.hasPendingMutations {
-                Button("Retry") { model.send(.retry) }
-                    .controlSize(.small)
+                QuietButton("Retry") { model.send(.retry) }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
         .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.08))
     }
 
     // MARK: - Overlay menus
@@ -586,7 +614,7 @@ struct StackPaletteView: View {
                     }
                 }
                 .padding(.trailing, 12)
-                .padding(.bottom, 44)
+                .padding(.bottom, 48)
             }
             .transition(.opacity)
         }
@@ -595,34 +623,31 @@ struct StackPaletteView: View {
     private var actionsMenu: some View {
         let items = model.projection.filteredActionItems
         return OverlayPanel(
-            title: "Actions",
-            emptyText: "No matching actions",
+            placeholder: "Search actions",
+            emptyText: "Nothing more to do here",
             isEmpty: items.isEmpty,
             highlight: model.state.overlayHighlight,
             query: $model.overlayQuery,
             focus: $focus
         ) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index == 0 || items[index - 1].section != item.section {
+                    OverlaySectionLabel(section: item.section)
+                }
                 let isHighlighted = index == model.state.overlayHighlight
                 OverlayRow(isHighlighted: isHighlighted, onHover: { model.send(.overlayHighlight(index)) }) {
                     model.send(.perform(item.action))
                 } content: {
                     HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(item.title)
-                                .font(.system(size: 13, weight: .medium))
-                                .lineLimit(1)
-                            if let subtitle = item.subtitle {
-                                Text(subtitle)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
+                        Text(item.title)
+                            .font(.ui(13, weight: .medium))
+                            .foregroundStyle(item.isDestructive ? Ink.accent(scheme) : Color.primary)
+                            .lineLimit(1)
                         Spacer(minLength: 8)
-                        Keycap(item.keys)
+                        Text(item.keys)
+                            .font(.mono(10.5))
+                            .foregroundStyle(.tertiary)
                     }
-                    .foregroundStyle(item.isDestructive ? Color.red : Color.primary)
                 }
                 .id(index)
             }
@@ -632,7 +657,7 @@ struct StackPaletteView: View {
     private var templatesMenu: some View {
         let templates = model.projection.filteredTemplates
         return OverlayPanel(
-            title: "Copy with template",
+            placeholder: "Search templates",
             emptyText: "No matching templates",
             isEmpty: templates.isEmpty,
             highlight: model.state.overlayHighlight,
@@ -645,20 +670,19 @@ struct StackPaletteView: View {
                 OverlayRow(isHighlighted: isHighlighted, onHover: { model.send(.overlayHighlight(index)) }) {
                     model.send(.selectTemplate(template.id))
                 } content: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .frame(width: 12)
-                            .foregroundStyle(.primary)
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(Ink.accent(scheme))
+                            .frame(width: 5, height: 5)
                             .opacity(isActive ? 1 : 0)
                         Text(template.name)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.ui(13, weight: .medium))
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if template.clearStackAfterExport {
                             Text("clears after copy")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                                .font(.ui(10.5))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .foregroundStyle(Color.primary)
@@ -671,61 +695,13 @@ struct StackPaletteView: View {
 
 // MARK: - Pieces
 
-/// The palette's whole color story: a solid sheet, near-black or paper-white,
-/// with every state drawn as a grey wash of the text color so it reads the
-/// same in either appearance.
-enum PaletteTint {
-    static let cornerRadius: CGFloat = 16
-    static let railWidth: CGFloat = 3
-    static let focusRailOpacity = 0.65
-    static let dimmedRailOpacity = 0.45
-
-    static func surface(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(white: 0.09) : .white
-    }
-    /// A hairline edge so the sheet separates from whatever sits behind it.
-    static func rim(_ scheme: ColorScheme) -> Color {
-        Color.primary.opacity(scheme == .dark ? 0.12 : 0.08)
-    }
-    /// Raised surface for the ⌘K and template menus.
-    static func raised(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(white: 0.14) : Color(white: 0.985)
-    }
-    /// Highlighted row or menu item.
-    static let selection = Color.primary.opacity(0.10)
-    /// The other pane retains its selection without the keyboard focus marker.
-    static let inactiveSelection = Color.primary.opacity(0.04)
-    /// Pointer resting on a row.
-    static let hover = Color.primary.opacity(0.04)
-    /// Ring around the note being edited.
-    static let editing = Color.primary.opacity(0.35)
-    /// The rule beside a captured passage.
-    static let quoteRule = Color.primary.opacity(0.22)
-
-    static func wash(highlighted: Bool, dimmed: Bool = false, hovering: Bool = false) -> Color {
-        guard highlighted else { return hovering ? hover : .clear }
-        return dimmed ? inactiveSelection : selection
-    }
-
-    /// 3px leading rule that marks keyboard focus. Dimmed when the other pane
-    /// owns the keys, still dark enough to read at a glance.
-    struct FocusRail: View {
-        var isDimmed = false
-
-        var body: some View {
-            Rectangle()
-                .fill(Color.primary.opacity(isDimmed ? dimmedRailOpacity : focusRailOpacity))
-                .frame(width: railWidth)
-        }
-    }
-}
-
 /// A palette row: flat and full-bleed, washed edge to edge when highlighted.
 /// The unfocused pane keeps a quiet selection. A leading rule identifies
 /// keyboard focus. One click highlights the row; a double click activates it.
 private struct PaletteRow<Content: View>: View {
     let isHighlighted: Bool
     var isDimmed = false
+    let namespace: Namespace.ID
     let onSelect: () -> Void
     let onActivate: () -> Void
     @ViewBuilder let content: () -> Content
@@ -734,13 +710,15 @@ private struct PaletteRow<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
-            .background(PaletteTint.wash(highlighted: isHighlighted, dimmed: isDimmed, hovering: hovering))
-            .overlay(alignment: .leading) {
+            .background {
                 if isHighlighted {
-                    PaletteTint.FocusRail(isDimmed: isDimmed)
+                    Ink.Pill(radius: 7, fill: Ink.wash(highlighted: true, dimmed: isDimmed))
+                        .matchedGeometryEffect(id: "highlight", in: namespace)
+                } else if hovering {
+                    Ink.Pill(radius: 7, fill: Ink.hover)
                 }
             }
             .onHover { hovering = $0 }
@@ -758,17 +736,61 @@ private struct NoteCard: View {
     let isEditing: Bool
     @Binding var draft: String
     var focus: FocusState<PaletteField?>.Binding
+    let namespace: Namespace.ID
     let onSelect: () -> Void
     let onEdit: () -> Void
 
     @State private var hovering = false
 
+    /// Text edge from the pane's edge, so a highlighted note has room
+    /// inside its pill and the hairlines line up with the text.
+    static let inset: CGFloat = 22
+
+    /// The passage without the blank lines a selection often drags along,
+    /// so the rule beside it ends where the words do.
     private var quote: String {
         guard case let .selection(quote) = entry.subject else { return "" }
-        return quote.nonblank ?? ""
+        return quote.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            noteColumn
+            Text(noteTimeLabel(entry.createdAt))
+                .font(.mono(10.5))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 3)
+        }
+        .padding(.horizontal, Self.inset)
+        .padding(.vertical, 14)
+        // Notes sit on one continuous surface; the highlighted one lifts on
+        // a rounded pill, deeper when the keyboard is here. The pill is one
+        // shape shared by the list, so it slides between notes.
+        .background {
+            if isHighlighted {
+                Ink.Pill(radius: 10, fill: Ink.wash(highlighted: true, dimmed: isDimmed))
+                    .matchedGeometryEffect(id: "highlight", in: namespace)
+            } else if hovering {
+                Ink.Pill(radius: 10, fill: Ink.hover)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                .padding(.horizontal, Ink.Pill.inset)
+                .opacity(isEditing ? 1 : 0)
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            TapGesture(count: 2).onEnded { onEdit() }
+                .exclusively(before: TapGesture().onEnded { onSelect() }),
+            including: isEditing ? .subviews : .all
+        )
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+
+    private var noteColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Only the note being edited is a text field. Every other note is
             // plain text, so ↑↓ never re-measures a column of editors; ↩ or
@@ -780,61 +802,36 @@ private struct NoteCard: View {
                     axis: .vertical
                 )
                 .textFieldStyle(.plain)
-                .font(.body)
-                .lineSpacing(2)
+                .font(.ui(13.5))
+                .lineSpacing(3)
                 .lineLimit(1...8)
                 .focused(focus, equals: .note(entry.id))
             } else if let note = entry.body.nonblank {
                 Text(note)
-                    .font(.body)
-                    .lineSpacing(2)
+                    .font(.ui(13.5))
+                    .lineSpacing(3)
                     .lineLimit(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             } else {
                 Text("Add a note…")
-                    .font(.body)
+                    .font(.ui(13.5))
                     .foregroundStyle(.quaternary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             }
             if !quote.isEmpty {
-                QuotedPassage(text: quote, isSubdued: isHighlighted)
+                QuotedPassage(text: quote)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        // Notes sit on one continuous surface; the highlighted one simply
-        // lifts to a soft grey.
-        .background(PaletteTint.wash(highlighted: isHighlighted, dimmed: isDimmed, hovering: hovering))
-        .overlay(alignment: .leading) {
-            if isHighlighted {
-                PaletteTint.FocusRail(isDimmed: isDimmed)
-            }
-        }
-        .overlay(
-            Rectangle()
-                .strokeBorder(PaletteTint.editing, lineWidth: 1)
-                .opacity(isEditing ? 1 : 0)
-        )
-        .contentShape(Rectangle())
-        .gesture(
-            TapGesture(count: 2).onEnded { onEdit() }
-                .exclusively(before: TapGesture().onEnded { onSelect() }),
-            including: isEditing ? .subviews : .all
-        )
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .animation(.easeOut(duration: 0.12), value: isHighlighted)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// A captured passage set as a quiet quotation: a thin rule down the left
-/// and the text a step softer than the note it belongs to.
+/// A captured passage, set in mono like a transcript: it is a record of
+/// someone else's words, and it reads that way.
 struct QuotedPassage: View {
     let text: String
-    /// Soften the quote rule when a selection rail already marks the card.
-    var isSubdued = false
     @State private var isExpanded = false
     @State private var heights = PassageHeights()
 
@@ -863,20 +860,20 @@ struct QuotedPassage: View {
                         })
                         .hidden()
                 }
-                .padding(.leading, isSubdued ? 16 : 12)
+                .padding(.leading, 12)
                 .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(PaletteTint.quoteRule.opacity(isSubdued ? 0.5 : 1))
-                        .frame(width: 2)
+                        .fill(Color.primary.opacity(0.16))
+                        .frame(width: 1.5)
                 }
             if isTruncated {
                 Button(isExpanded ? "Collapse" : "Show passage") {
                     isExpanded.toggle()
                 }
                 .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.leading, isSubdued ? 16 : 12)
+                .font(.uiCaption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 12)
                 .accessibilityLabel(isExpanded ? "Collapse passage" : "Show full passage")
             }
         }
@@ -886,8 +883,8 @@ struct QuotedPassage: View {
 
     private var passage: some View {
         Text(text)
-            .font(.callout)
-            .lineSpacing(2)
+            .font(.mono(12))
+            .lineSpacing(4)
             .foregroundStyle(.secondary)
     }
 }
@@ -906,10 +903,46 @@ private struct PassageHeightsKey: PreferenceKey {
     }
 }
 
-/// The floating menu in the corner: a list of rows and a filter field below
+/// A section heading inside the ⌘K menu: what the rows below act on.
+/// The day a run of notes was captured, in the settings' micro-label voice.
+private struct NoteDayLabel: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        SettingsLabel(title)
+            .padding(.horizontal, NoteCard.inset)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct OverlaySectionLabel: View {
+    let section: PaletteActionSection
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SettingsLabel(section.label)
+            Spacer(minLength: 8)
+            if let detail = section.detail {
+                Text(detail)
+                    .font(.ui(11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+}
+
+/// The floating menu in the corner: grouped rows and a filter field below
 /// them, the way Raycast lays out its action panel.
 private struct OverlayPanel<Rows: View>: View {
-    let title: String
+    let placeholder: String
     let emptyText: String
     let isEmpty: Bool
     /// Index of the highlighted row; the list scrolls to keep it in view.
@@ -917,58 +950,53 @@ private struct OverlayPanel<Rows: View>: View {
     @Binding var query: String
     var focus: FocusState<PaletteField?>.Binding
     @ViewBuilder let rows: () -> Rows
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.top, 12)
-                .padding(.bottom, 4)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 0) {
                         rows()
                         if isEmpty {
                             Text(emptyText)
-                                .font(.callout)
+                                .font(.uiCallout)
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.top, 2)
+                    .padding(.bottom, 8)
                 }
-                .frame(maxHeight: 380)
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: 400)
                 .fixedSize(horizontal: false, vertical: true)
                 .onChange(of: highlight) { proxy.scrollTo(highlight) }
             }
-            Divider()
+            Hairline()
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                TextField("Search…", text: $query)
+                    .foregroundStyle(.tertiary)
+                TextField(placeholder, text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.ui(13))
                     .focused(focus, equals: .overlay)
-                Keycap("esc")
+                Keycap("esc", size: 10, isMuted: true)
             }
             .padding(.horizontal, 14)
             .frame(height: 40)
         }
-        .frame(width: 380)
+        .frame(width: 320)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(PaletteTint.raised(colorScheme))
+                .fill(Ink.raised(scheme))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
+                .strokeBorder(Ink.rim(scheme), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.18), radius: 22, y: 10)
+        .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14), radius: 24, y: 10)
     }
 }
 
@@ -982,17 +1010,53 @@ private struct OverlayRow<Content: View>: View {
         Button(action: action) {
             content()
                 .padding(.horizontal, 18)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, minHeight: 40)
+                .frame(maxWidth: .infinity, minHeight: 32)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(PaletteTint.wash(highlighted: isHighlighted))
-        .overlay(alignment: .leading) {
-            if isHighlighted {
-                PaletteTint.FocusRail()
-            }
-        }
+        .background(Ink.Pill(radius: 7, fill: Ink.wash(highlighted: isHighlighted)))
         .onHover { if $0 { onHover() } }
+    }
+}
+
+/// Note frames in the viewport, written from layout and read on keyboard
+/// movement. Not observed: nothing should redraw because a note moved.
+final class NoteFrames {
+    var frames: [UUID: CGRect] = [:]
+    let scroll = ScrollHandle()
+    /// A note to bring to the bottom edge as soon as it has a frame.
+    var landing: UUID?
+
+    /// Brings a note to the bottom edge, now if its frame is known and again
+    /// as the list settles, so a list still being laid out lands there too.
+    func land(on id: UUID) {
+        landing = id
+        settle()
+    }
+
+    /// One step of a landing: done when the note sits at the bottom edge,
+    /// otherwise scroll there. When the scroll view's content was still too
+    /// short to allow it, try again shortly; the height catches up within a
+    /// few turns of the run loop.
+    func settle(attempt: Int = 0) {
+        guard let id = landing, let frame = frames[id] else { return }
+        if scroll.isAtBottomEdge(frame) {
+            landing = nil
+            return
+        }
+        let reached = scroll.reveal(frame, anchor: .bottom, animated: false)
+        guard !reached, attempt < Self.retryDelays.count else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.retryDelays[attempt]) { [weak self] in
+            self?.settle(attempt: attempt + 1)
+        }
+    }
+
+    private static let retryDelays: [TimeInterval] = [0.02, 0.05, 0.1, 0.2, 0.4]
+}
+
+private struct NoteFramesKey: PreferenceKey {
+    static let defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue()) { $1 }
     }
 }

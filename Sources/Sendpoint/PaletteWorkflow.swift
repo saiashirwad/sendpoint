@@ -192,7 +192,7 @@ struct PaletteProjection {
     }
 
     var filteredActionItems: [PaletteActionItem] {
-        PaletteActionCatalog.filter(actionItems, query: state.overlayQuery)
+        PaletteActionCatalog.menu(actionItems, query: state.overlayQuery)
     }
 
     var filteredTemplates: [Template] {

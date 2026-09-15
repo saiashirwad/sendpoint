@@ -226,8 +226,11 @@ extension AppDelegate {
                 captureController: captureController,
                 permissionState: permissionState,
                 surfaces: surfaces,
+                stackStore: store,
                 onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) },
-                onSettingsChanged: { [weak self] in self?.refreshStatusItem() }
+                onSettingsChanged: { [weak self] in self?.refreshStatusItem() },
+                onCheckForUpdates: { [weak self] in self?.updateController.checkForUpdates() },
+                onShowStack: { [weak self] in self?.showStack() }
             )
         }
         settingsWindowController?.show()

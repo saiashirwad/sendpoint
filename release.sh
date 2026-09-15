@@ -13,8 +13,9 @@
 # either this path or a paid Developer ID build. Ad-hoc signatures are
 # pinned to the binary's hash, so Accessibility is re-prompted each release.
 #
-# Publishing also points the website's download button at the new zip,
-# commits that with the version bump, and deploys the site with wrangler.
+# Publishing also refreshes a hard-coded website download URL when present,
+# commits it with the version bump, and deploys the site with wrangler. The
+# current /download route resolves the latest GitHub release dynamically.
 #
 # One-time setup:
 #   1. Sparkle's update-signing key is generated independently of Apple:
@@ -226,11 +227,15 @@ if [ "$PUBLISH" = true ]; then
         "$APPCAST_WORK"
     cp "$APPCAST_WORK/appcast.xml" "$APPCAST"
 
-    echo "==> Pointing the website at ${DOWNLOAD_URL}"
-    sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.zip#${DOWNLOAD_URL}#" "$SITE_PAGE"
-    if ! grep -q "$DOWNLOAD_URL" "$SITE_PAGE"; then
-        echo "Could not find the download link in ${SITE_PAGE}." >&2
-        exit 1
+    if grep -q 'href="/download"' "$SITE_PAGE"; then
+        echo "==> Website uses the dynamic /download route"
+    else
+        echo "==> Pointing the website at ${DOWNLOAD_URL}"
+        sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.zip#${DOWNLOAD_URL}#" "$SITE_PAGE"
+        if ! grep -q "$DOWNLOAD_URL" "$SITE_PAGE"; then
+            echo "Could not find the download link in ${SITE_PAGE}." >&2
+            exit 1
+        fi
     fi
 
     echo "==> Publishing v${VERSION}"

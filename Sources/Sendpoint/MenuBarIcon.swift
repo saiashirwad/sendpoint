@@ -1,8 +1,8 @@
 import AppKit
 
-/// The status item's glyph: the app icon redrawn as a template image, so the
-/// menu bar shows the same speech bubble as the Dock and the website rather
-/// than a stock symbol. Colour is dropped; the icon's shapes become alpha.
+/// The status item's glyph: the app icon redrawn as a template image so its
+/// line-and-capture mark stays crisp at menu-bar size. Colour is dropped; the
+/// magenta recording dot becomes part of the monochrome template.
 enum MenuBarIcon {
     /// The icon's art is laid out on a 1024-unit canvas like the app icon;
     /// this tile is the part of it that is drawn.
@@ -28,39 +28,46 @@ enum MenuBarIcon {
         context.addPath(CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil))
         context.fillPath()
 
-        context.setFillColor(CGColor(gray: 0, alpha: 1))
-        context.addPath(bubble)
+        // The four quiet text lines stay secondary to the selected passage.
+        context.setFillColor(CGColor(gray: 0, alpha: 0.46))
+        context.addPath(pill(x: 292, y: 278, width: 340, height: 48))
+        context.addPath(pill(x: 292, y: 368, width: 394, height: 48))
+        context.addPath(pill(x: 292, y: 608, width: 394, height: 48))
+        context.addPath(pill(x: 292, y: 698, width: 292, height: 48))
         context.fillPath()
 
-        // Text lines are knocked out of the bubble: the two quiet lines
-        // faintly, the highlighted one fully.
-        context.setBlendMode(.destinationOut)
-        context.setFillColor(CGColor(gray: 0, alpha: 0.22))
-        context.addPath(CGPath(roundedRect: CGRect(x: 292, y: 356, width: 440, height: 42), cornerWidth: 21, cornerHeight: 21, transform: nil))
-        context.addPath(CGPath(roundedRect: CGRect(x: 292, y: 546, width: 380, height: 42), cornerWidth: 21, cornerHeight: 21, transform: nil))
-        context.fillPath()
+        // The selected passage, focus brackets, and recording dot are the
+        // recognizable core of the supplied mark.
         context.setFillColor(CGColor(gray: 0, alpha: 1))
-        context.addPath(CGPath(roundedRect: CGRect(x: 292, y: 451, width: 348, height: 42), cornerWidth: 21, cornerHeight: 21, transform: nil))
+        context.addPath(pill(x: 310, y: 480, width: 360, height: 66))
+        context.addEllipse(in: CGRect(x: 764, y: 487, width: 54, height: 54))
         context.fillPath()
-        context.setBlendMode(.normal)
+
+        context.setStrokeColor(CGColor(gray: 0, alpha: 1))
+        context.setLineWidth(26)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.addPath(bracket(x: 250, opensRight: true))
+        context.addPath(bracket(x: 730, opensRight: false))
+        context.strokePath()
     }
 
-    /// The speech bubble from `Resources/AppIcon.svg`, in the same coordinates.
-    private static var bubble: CGPath {
+    private static func pill(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGPath {
+        CGPath(
+            roundedRect: CGRect(x: x, y: y, width: width, height: height),
+            cornerWidth: height / 2,
+            cornerHeight: height / 2,
+            transform: nil
+        )
+    }
+
+    private static func bracket(x: CGFloat, opensRight: Bool) -> CGPath {
+        let inward: CGFloat = opensRight ? 32 : -32
         let path = CGMutablePath()
-        path.move(to: CGPoint(x: 296, y: 262))
-        path.addLine(to: CGPoint(x: 728, y: 262))
-        path.addArc(tangent1End: CGPoint(x: 812, y: 262), tangent2End: CGPoint(x: 812, y: 346), radius: 84)
-        path.addLine(to: CGPoint(x: 812, y: 598))
-        path.addArc(tangent1End: CGPoint(x: 812, y: 682), tangent2End: CGPoint(x: 728, y: 682), radius: 84)
-        path.addLine(to: CGPoint(x: 420, y: 682))
-        path.addLine(to: CGPoint(x: 318, y: 778))
-        path.addLine(to: CGPoint(x: 336, y: 682))
-        path.addLine(to: CGPoint(x: 296, y: 682))
-        path.addArc(tangent1End: CGPoint(x: 212, y: 682), tangent2End: CGPoint(x: 212, y: 598), radius: 84)
-        path.addLine(to: CGPoint(x: 212, y: 346))
-        path.addArc(tangent1End: CGPoint(x: 212, y: 262), tangent2End: CGPoint(x: 296, y: 262), radius: 84)
-        path.closeSubpath()
+        path.move(to: CGPoint(x: x + inward, y: 458))
+        path.addLine(to: CGPoint(x: x, y: 458))
+        path.addLine(to: CGPoint(x: x, y: 568))
+        path.addLine(to: CGPoint(x: x + inward, y: 568))
         return path
     }
 }

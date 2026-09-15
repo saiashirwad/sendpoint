@@ -51,11 +51,12 @@ struct CaptureView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(PaletteTint.surface(colorScheme))
-        .clipShape(RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous))
+        .background(Ink.paper(colorScheme))
+        .font(.uiBody)
+        .clipShape(RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: PaletteTint.cornerRadius, style: .continuous)
-                .strokeBorder(PaletteTint.rim(colorScheme), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+                .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
         }
         .ignoresSafeArea()
         .onAppear {
@@ -108,7 +109,6 @@ struct CaptureView: View {
                     }
                 }
         }
-        .overlayScrollers()
         .frame(height: min(max(quoteHeight, 16), quoteMaxHeight))
         .onPreferenceChange(HeightKey.self) { quoteHeight = $0 }
     }
@@ -116,19 +116,18 @@ struct CaptureView: View {
     private var noteEditor: some View {
         ZStack(alignment: .topLeading) {
             TextEditor(text: $model.note)
-                .font(.body)
+                .font(.uiBody)
                 .lineSpacing(2)
                 .scrollContentBackground(.hidden)
                 // NSTextView supplies a five-point text-container inset.
                 .padding(.horizontal, -5)
                 .focused($noteFocused)
                 .frame(minHeight: 72, idealHeight: 108, maxHeight: .infinity)
-                .overlayScrollers()
                 .disabled(model.isNoteFrozen)
 
             if model.note.isEmpty {
                 Text("Add a note…")
-                    .font(.body)
+                    .font(.uiBody)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 1)
                     .allowsHitTesting(false)
@@ -144,7 +143,7 @@ struct CaptureView: View {
                 ProgressView()
                     .controlSize(.small)
                 Text("Saving…")
-                    .font(.callout)
+                    .font(.uiCallout)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -172,8 +171,8 @@ struct CaptureView: View {
         @ViewBuilder actions: () -> Actions
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(message, systemImage: "exclamationmark.circle.fill")
-                .font(.callout)
+            Label(message, systemImage: "exclamationmark.circle")
+                .font(.uiCallout)
                 .foregroundStyle(color)
                 .fixedSize(horizontal: false, vertical: true)
             actions()
@@ -188,7 +187,7 @@ private struct ActionLabel: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.ui(12, weight: .medium))
             Keycap(shortcut)
         }
         .contentShape(Rectangle())

@@ -33,8 +33,6 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         onSelectTemplate: @escaping (UUID) -> Void
     ) {
         self.surfaces = surfaces
-        // Borderless: the SwiftUI sheet draws its own rounded edge, and the
-        // window is clear behind it so the shadow follows that shape.
         let panel = Self.makePanel()
         self.panel = panel
 
@@ -48,6 +46,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.onClose = { [weak self] in self?.close() }
         let hosting = NSHostingView(rootView: StackPaletteView(model: model))
         hosting.sizingOptions = []
+        hosting.safeAreaRegions = []
         panel.contentView = hosting
         panel.delegate = self
         installKeyMonitor()
@@ -61,16 +60,24 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         ))
     }
 
+    /// A titled window with the title bar hidden, not a borderless one: an
+    /// opaque backing is what lets macOS smooth text, and the system draws
+    /// the rounded corners and shadow.
     static func makePanel() -> CapturePanel {
         let panel = CapturePanel(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 520),
-            styleMask: [.borderless, .resizable, .nonactivatingPanel],
+            styleMask: [.titled, .fullSizeContentView, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         panel.title = "Stacks"
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            panel.standardWindowButton(button)?.isHidden = true
+        }
+        panel.isOpaque = true
+        panel.backgroundColor = Ink.nsPaper
         panel.hasShadow = true
         panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
