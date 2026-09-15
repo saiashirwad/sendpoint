@@ -57,6 +57,12 @@ fi
 # Keep the same app identity and entitlements during development. Only release
 # builds need the network timestamp required for notarization.
 IDENTITY="${IDENTITY:--}"
+if [ "$IDENTITY" = "-" ]; then
+    # Ad-hoc signatures have no stable Apple Team ID, so hardened-runtime
+    # library validation would reject the separately signed Sparkle binary.
+    # Keep this exception out of certificate-signed distribution builds.
+    ENTITLEMENTS="Resources/SendpointAdHoc.entitlements"
+fi
 SIGN_FLAGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
 NESTED_SIGN_FLAGS=(--force --options runtime)
 if [ "$IDENTITY" = "-" ]; then

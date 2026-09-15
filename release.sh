@@ -5,11 +5,13 @@
 #   ./release.sh 1.2 --publish               ...then publish on GitHub
 #   ./release.sh 1.2 --ad-hoc                build without notarizing
 #   ./release.sh 1.2 --ad-hoc --publish      ...then publish on GitHub
+#   ./release.sh 1.2 --ad-hoc --resume-publish
+#                                             resume upload/deploy after a failure
 #
-# --ad-hoc skips notarization but still signs with whatever certificate
-# build.sh finds (Developer ID, else Apple Development). A stable certificate
-# keeps users' Accessibility grants across updates; a true ad-hoc signature
-# is pinned to the binary's hash and breaks the grant on every release.
+# --ad-hoc skips notarization and forces a true ad-hoc signature (`-`).
+# Apple Development certificates only run on this Mac; other people need
+# either this path or a paid Developer ID build. Ad-hoc signatures are
+# pinned to the binary's hash, so Accessibility is re-prompted each release.
 #
 # Publishing also points the website's download button at the new zip,
 # commits that with the version bump, and deploys the site with wrangler.
@@ -36,6 +38,7 @@ fi
 
 PUBLISH=false
 AD_HOC=false
+RESUME_PUBLISH=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --publish)
@@ -44,9 +47,13 @@ while [ "$#" -gt 0 ]; do
         --ad-hoc|--adhoc)
             AD_HOC=true
             ;;
+        --resume-publish)
+            PUBLISH=true
+            RESUME_PUBLISH=true
+            ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "usage: ./release.sh VERSION [--ad-hoc] [--publish]" >&2
+            echo "usage: ./release.sh VERSION [--ad-hoc] [--publish|--resume-publish]" >&2
             exit 1
             ;;
     esac
@@ -54,8 +61,14 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$VERSION" ]; then
-    echo "usage: ./release.sh VERSION [--ad-hoc] [--publish]" >&2
+    echo "usage: ./release.sh VERSION [--ad-hoc] [--publish|--resume-publish]" >&2
     exit 1
+fi
+
+if [ "$AD_HOC" = true ]; then
+    # Public unnotarized builds must not pick up this Mac's Apple Development
+    # certificate. build.sh still uses that cert for local ./build.sh installs.
+    export CODESIGN_IDENTITY=-
 fi
 
 APP_NAME="Sendpoint"
@@ -90,8 +103,10 @@ if [ -n "$UNTRACKED_BUILD_INPUTS" ]; then
     exit 1
 fi
 if [ "$PUBLISH" = true ]; then
-    if git rev-parse --verify --quiet "refs/tags/v${VERSION}" >/dev/null; then
+    if [ "$RESUME_PUBLISH" = false ] && \
+       git rev-parse --verify --quiet "refs/tags/v${VERSION}" >/dev/null; then
         echo "Tag v${VERSION} already exists." >&2
+        echo "Use --resume-publish only to finish a release this script already committed and tagged." >&2
         exit 1
     fi
     if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
@@ -109,6 +124,55 @@ fi
 
 SITE_PAGE="web/public/index.html"
 DOWNLOAD_URL="https://github.com/saiashirwad/sendpoint/releases/download/v${VERSION}/Sendpoint-${VERSION}.zip"
+
+publish_github_release() {
+    if gh release view "v${VERSION}" >/dev/null 2>&1; then
+        echo "==> Replacing assets on existing GitHub release v${VERSION}"
+        gh release upload "v${VERSION}" "$ARCHIVE" "$CHECKSUM" --clobber
+        return
+    fi
+
+    if [ "$AD_HOC" = true ]; then
+        RELEASE_NOTES=$(printf '%s\n' \
+            '> [!WARNING]' \
+            '> This build is not notarized by Apple.' \
+            '> Only open it if you trust this repository.' \
+            '' \
+            'Move **Sendpoint.app** to `/Applications` and try to open it once.' \
+            'If macOS blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, click **Open Anyway**, then confirm **Open**.')
+        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
+            --title "${APP_NAME} ${VERSION}" \
+            --generate-notes \
+            --notes "$RELEASE_NOTES"
+    else
+        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
+            --title "${APP_NAME} ${VERSION}" \
+            --generate-notes
+    fi
+}
+
+if [ "$RESUME_PUBLISH" = true ]; then
+    if [ "$(git rev-parse HEAD)" != "$(git rev-list -n 1 "v${VERSION}" 2>/dev/null || true)" ]; then
+        echo "Resume requires HEAD to be the commit tagged v${VERSION}." >&2
+        exit 1
+    fi
+    if ! git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
+        echo "==> Pushing release commit and tag"
+        git push --atomic origin HEAD "refs/tags/v${VERSION}"
+    fi
+    for required in "$ARCHIVE" "$CHECKSUM" "$APPCAST"; do
+        if [ ! -f "$required" ]; then
+            echo "Cannot resume: ${required} is missing." >&2
+            echo "Do not rebuild an already-tagged release; publish a new version instead." >&2
+            exit 1
+        fi
+    done
+    publish_github_release
+    echo "==> Deploying the website"
+    (cd web && npx --yes wrangler deploy)
+    echo "Release v${VERSION} is published."
+    exit 0
+fi
 
 echo "==> Stamping version ${VERSION}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" Resources/Info.plist
@@ -175,23 +239,7 @@ if [ "$PUBLISH" = true ]; then
     git tag -a "v${VERSION}" -m "${APP_NAME} ${VERSION}"
     git push --atomic origin HEAD "refs/tags/v${VERSION}"
 
-    if [ "$AD_HOC" = true ]; then
-        RELEASE_NOTES=$(printf '%s\n' \
-            '> [!WARNING]' \
-            '> This build is not notarized by Apple.' \
-            '> Only open it if you trust this repository.' \
-            '' \
-            'Move **Sendpoint.app** to `/Applications` and try to open it once.' \
-            'If macOS blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, click **Open Anyway**, then confirm **Open**.')
-        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
-            --title "${APP_NAME} ${VERSION}" \
-            --generate-notes \
-            --notes "$RELEASE_NOTES"
-    else
-        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
-            --title "${APP_NAME} ${VERSION}" \
-            --generate-notes
-    fi
+    publish_github_release
 
     echo "==> Deploying the website"
     (cd web && npx --yes wrangler deploy)

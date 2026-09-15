@@ -91,7 +91,14 @@ swift test                  # tests
 ./install.sh                # replace the installed app and launch it
 ./release.sh 1.6 --ad-hoc --publish  # Sparkle-sign, zip, publish; no paid Apple account
 ./release.sh 1.6 --publish           # also Developer ID-sign and notarize
+./release.sh 1.6 --ad-hoc --resume-publish  # finish a failed upload/deploy
 ```
+
+`--ad-hoc` is a true ad-hoc signature, not this Mac's Apple Development
+certificate. Other people can open it via Privacy & Security → Open Anyway.
+Those builds disable hardened-runtime library validation so Sparkle can load
+without an Apple Team ID. Published update archives and feeds are still
+verified with Sparkle's signing key.
 
 Sparkle's private update-signing key lives in this Mac's login Keychain. Back it up once to secure storage; never commit the exported file or generate a replacement:
 
