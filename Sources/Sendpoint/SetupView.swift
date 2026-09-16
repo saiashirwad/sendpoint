@@ -687,6 +687,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         return window
     }
 
@@ -764,4 +765,3 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         surfaces.userClosed(.setup)
     }
 }
-

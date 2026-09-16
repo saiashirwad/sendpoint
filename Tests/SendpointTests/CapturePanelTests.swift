@@ -68,13 +68,21 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertTrue(palette.standardWindowButton(.closeButton)?.isHidden ?? false)
         XCTAssertTrue(palette.canBecomeKey)
         XCTAssertFalse(palette.ignoresMouseEvents)
+        XCTAssertTrue(palette.isMovable)
+        XCTAssertFalse(palette.isMovableByWindowBackground)
+        XCTAssertTrue(palette.collectionBehavior.contains(.moveToActiveSpace))
+        XCTAssertFalse(palette.collectionBehavior.contains(.canJoinAllSpaces))
     }
 
     func testSettingsAndSetupFactoriesKeepWindowInvariants() {
         let settings = SettingsWindowController.makeWindowFrame()
         XCTAssertTrue(settings.styleMask.contains([.titled, .closable, .resizable, .fullSizeContentView]))
+        XCTAssertEqual(settings.title, "Sendpoint")
         XCTAssertTrue(settings.canBecomeKey)
         XCTAssertFalse(settings.ignoresMouseEvents)
+        XCTAssertTrue(settings.isMovable)
+        XCTAssertFalse(settings.isMovableByWindowBackground)
+        XCTAssertTrue(settings.collectionBehavior.contains(.moveToActiveSpace))
 
         let setup = SetupWindowController.makeWindow()
         XCTAssertTrue(setup.styleMask.contains(.borderless))
@@ -86,6 +94,7 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertTrue(setup.hasShadow)
         XCTAssertFalse(setup.hidesOnDeactivate)
         XCTAssertFalse(setup.isFloatingPanel)
+        XCTAssertTrue(setup.collectionBehavior.contains(.moveToActiveSpace))
     }
 
     func testSetupHeroMotionSpeaksThenRests() {

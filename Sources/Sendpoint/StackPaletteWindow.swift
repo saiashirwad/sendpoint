@@ -79,9 +79,9 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.isOpaque = true
         panel.backgroundColor = Ink.nsPaper
         panel.hasShadow = true
-        panel.isMovableByWindowBackground = true
         panel.isFloatingPanel = true
         panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         panel.animationBehavior = .utilityWindow
         panel.becomesKeyOnlyIfNeeded = false
         panel.minSize = StackPaletteView.minimumSize
@@ -110,7 +110,6 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         }
         panel.ignoresMouseEvents = true
         panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.makeFirstResponder(nil)
         panel.resignKey()
         panel.orderFrontRegardless()
@@ -129,7 +128,6 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private func present() {
         panel.ignoresMouseEvents = false
         panel.level = .normal
-        panel.collectionBehavior = []
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()

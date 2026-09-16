@@ -135,15 +135,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Settings"
+        window.title = "Sendpoint"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         let toolbar = NSToolbar(identifier: "SettingsWindowToolbar")
         toolbar.showsBaselineSeparator = false
         window.toolbar = toolbar
         window.toolbarStyle = .unified
-        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.contentMinSize = SettingsView.size
         window.setContentSize(SettingsView.size)
         window.center()

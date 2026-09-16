@@ -45,9 +45,17 @@ final class SurfaceCoordinator {
     private var transitions: [Surface: Transitions] = [:]
     private(set) var visible: Set<Surface> = []
     private let hasModalWindow: () -> Bool
+    private let setRegularActivation: (Bool) -> Void
+    private var usesRegularActivation = false
 
-    init(hasModalWindow: @escaping () -> Bool = { NSApp.modalWindow != nil }) {
+    init(
+        hasModalWindow: @escaping () -> Bool = { NSApp.modalWindow != nil },
+        setRegularActivation: @escaping (Bool) -> Void = { regular in
+            NSApplication.shared.setActivationPolicy(regular ? .regular : .accessory)
+        }
+    ) {
         self.hasModalWindow = hasModalWindow
+        self.setRegularActivation = setRegularActivation
     }
 
     func register(_ surface: Surface, transitions: Transitions) {
@@ -73,8 +81,9 @@ final class SurfaceCoordinator {
             break
         }
         guard let transition = transitions[surface] else { return }
-        transition.show()
         visible.insert(surface)
+        synchronizeActivation()
+        transition.show()
     }
 
     func focus(_ surface: Surface) {
@@ -85,10 +94,12 @@ final class SurfaceCoordinator {
     func dismiss(_ surface: Surface) {
         guard visible.remove(surface) != nil else { return }
         transitions[surface]?.hide()
+        synchronizeActivation()
     }
 
     func userClosed(_ surface: Surface) {
         visible.remove(surface)
+        synchronizeActivation()
     }
 
     func resignedKey(_ surface: Surface) {
@@ -101,5 +112,19 @@ final class SurfaceCoordinator {
             dismiss(surface)
         }
         transitions.removeAll()
+    }
+
+    private func synchronizeActivation() {
+        let needsRegularActivation = visible.contains { surface in
+            switch surface {
+            case .settings:
+                true
+            case .palette, .setup, .switcher, .captureEditor, .captureVoice:
+                false
+            }
+        }
+        guard needsRegularActivation != usesRegularActivation else { return }
+        usesRegularActivation = needsRegularActivation
+        setRegularActivation(needsRegularActivation)
     }
 }

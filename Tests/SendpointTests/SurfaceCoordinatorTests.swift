@@ -20,6 +20,41 @@ final class SurfaceCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.visible, [.captureEditor])
     }
 
+    func testOnlySettingsUsesRegularApplicationActivation() {
+        let spy = Spy()
+        let coordinator = makeCoordinator(spy: spy)
+
+        coordinator.present(.palette)
+        coordinator.present(.setup)
+        coordinator.present(.switcher)
+        coordinator.present(.captureEditor)
+        coordinator.present(.captureVoice)
+        XCTAssertTrue(spy.activationChanges.isEmpty)
+
+        coordinator.present(.settings)
+        XCTAssertEqual(spy.activationChanges, [true])
+
+        coordinator.dismiss(.settings)
+        XCTAssertEqual(spy.activationChanges, [true, false])
+    }
+
+    func testRegularActivationIsAppliedBeforeShowingAndRemovedAfterHiding() {
+        var events: [String] = []
+        let coordinator = SurfaceCoordinator(
+            hasModalWindow: { false },
+            setRegularActivation: { events.append($0 ? "regular" : "accessory") }
+        )
+        coordinator.register(.settings, transitions: .init(
+            show: { events.append("show") },
+            hide: { events.append("hide") }
+        ))
+
+        coordinator.present(.settings)
+        coordinator.dismiss(.settings)
+
+        XCTAssertEqual(events, ["regular", "show", "hide", "accessory"])
+    }
+
     func testSwitcherHidesPaletteAndBlocksItsReopen() {
         let spy = Spy()
         let coordinator = makeCoordinator(spy: spy)
@@ -80,7 +115,10 @@ final class SurfaceCoordinatorTests: XCTestCase {
         spy: Spy,
         hasModalWindow: @escaping () -> Bool = { false }
     ) -> SurfaceCoordinator {
-        let coordinator = SurfaceCoordinator(hasModalWindow: hasModalWindow)
+        let coordinator = SurfaceCoordinator(
+            hasModalWindow: hasModalWindow,
+            setRegularActivation: { spy.activationChanges.append($0) }
+        )
         for surface in Surface.allCases {
             coordinator.register(surface, transitions: .init(
                 show: { spy.events.append("show \(surface)") },
@@ -92,5 +130,6 @@ final class SurfaceCoordinatorTests: XCTestCase {
 
     private final class Spy {
         var events: [String] = []
+        var activationChanges: [Bool] = []
     }
 }

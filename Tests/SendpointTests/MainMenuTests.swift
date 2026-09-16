@@ -4,6 +4,13 @@ import XCTest
 
 @MainActor
 final class MainMenuTests: XCTestCase {
+    func testApplicationMenuUsesProductName() throws {
+        let menu = MainMenu.build()
+        let applicationMenu = try XCTUnwrap(menu.items.first?.submenu)
+
+        XCTAssertEqual(applicationMenu.title, "Sendpoint")
+    }
+
     func testEditMenuInstallsStandardResponderActions() throws {
         let menu = MainMenu.build()
         let edit = try XCTUnwrap(menu.items.compactMap(\.submenu).first { $0.title == "Edit" })
