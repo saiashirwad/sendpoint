@@ -10,6 +10,8 @@ struct VoiceRecorder {
     var discard: () -> Void
     var levelMeter: VoiceLevelMeter
     var chooseMicrophone: (String?) -> Void = { _ in }
+    /// Unified streaming reports cumulative hypotheses here; fakes ignore it.
+    var observePartials: (@escaping @Sendable (String) -> Void) -> Void = { _ in }
     var warmUp: () -> Void = {}
 
     static func live(_ service: VoiceNoteService) -> Self {
@@ -25,6 +27,7 @@ struct VoiceRecorder {
             discard: { service.discardRecording() },
             levelMeter: service.levelMeter,
             chooseMicrophone: { service.preferredInputDeviceUID = $0 },
+            observePartials: { service.onPartialTranscript = $0 },
             warmUp: { service.warmUp() }
         )
     }
@@ -123,6 +126,14 @@ final class CaptureController {
         self.selection = selection
         self.recorder = recorder
         self.makeSurfaces = surfaces
+        // Streaming partials arrive off the main thread; each hop re-checks
+        // the current session so stale hypotheses never touch new captures.
+        recorder.observePartials { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self, let context = self.state.session?.context else { return }
+                self.send(.voicePartial(context, text))
+            }
+        }
     }
 
     func configure(store: StackStore) {

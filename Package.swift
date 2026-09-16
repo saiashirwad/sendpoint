@@ -15,7 +15,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // Hex uses FluidAudio for its fast, local Parakeet transcription.
+        // FluidAudio: Parakeet Unified streaming for live captions and the saved note.
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6"),
     ],

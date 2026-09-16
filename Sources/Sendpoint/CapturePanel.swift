@@ -42,6 +42,9 @@ final class CaptureWindows {
     /// and the first sample of audio or the first typed letter. Showing one
     /// again is a reposition.
     private var voicePanel: CapturePanel?
+    /// Own window so the pill never grows a caption stack; later this frame
+    /// can move without the destination picker.
+    private var previewPanel: CapturePanel?
     private var editorPanel: CapturePanel?
     private var keyMonitor: Any?
     private var voiceEscapeMonitor: Any?
@@ -113,6 +116,7 @@ final class CaptureWindows {
         panel?.onClose = nil
         panel?.orderOut(nil)
         panel = nil
+        if hidden == .voice { previewPanel?.orderOut(nil) }
         surface = nil
     }
 
@@ -120,11 +124,12 @@ final class CaptureWindows {
         close()
         surfaces.unregister(.captureEditor)
         surfaces.unregister(.captureVoice)
-        for kept in [voicePanel, editorPanel] {
+        for kept in [voicePanel, previewPanel, editorPanel] {
             kept?.contentView = nil
             kept?.close()
         }
         voicePanel = nil
+        previewPanel = nil
         editorPanel = nil
     }
 
@@ -132,6 +137,7 @@ final class CaptureWindows {
     /// nothing for its window.
     func prepareSurfaces() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
+        if previewPanel == nil { previewPanel = makePreviewPanel() }
         if editorPanel == nil { editorPanel = makeEditorPanel() }
     }
 
@@ -189,6 +195,7 @@ final class CaptureWindows {
     /// app keeps focus while its selection is still being read.
     private func presentVoice() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
+        if previewPanel == nil { previewPanel = makePreviewPanel() }
         guard let panel = voicePanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
         positionVoiceOverlay(panel)
@@ -204,6 +211,10 @@ final class CaptureWindows {
             installVoiceEscapeFallback()
         }
         panel.orderFrontRegardless()
+        if let preview = previewPanel {
+            positionPreview(preview, above: panel)
+            preview.orderFrontRegardless()
+        }
     }
 
     private func makeVoicePanel() -> CapturePanel {
@@ -213,6 +224,17 @@ final class CaptureWindows {
         ))
         let panel = Self.makeVoicePanel(contentView: hosting)
         panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
+        return panel
+    }
+
+    private func makePreviewPanel() -> CapturePanel {
+        let hosting = CaptureHostingView(rootView: VoicePreviewCard(model: model))
+        let panel = Self.makeVoicePanel(contentView: hosting)
+        panel.ignoresMouseEvents = true
+        panel.setContentSize(NSSize(
+            width: VoiceCaptureLayout.previewWidth + VoiceCaptureLayout.shadowPadding * 2,
+            height: VoiceCaptureLayout.previewHeight + VoiceCaptureLayout.shadowPadding * 2
+        ))
         return panel
     }
 
@@ -281,6 +303,16 @@ final class CaptureWindows {
             y: visible.minY + 4
         )
         panel.setFrameOrigin(origin)
+    }
+
+    /// Sits just above the capsule. Own origin so a later drag does not move
+    /// the pill or the destination picker.
+    private func positionPreview(_ preview: NSPanel, above voice: NSPanel) {
+        let pillTop = voice.frame.minY + VoiceCaptureLayout.shadowPadding + VoiceCaptureLayout.pillHeight
+        preview.setFrameOrigin(NSPoint(
+            x: voice.frame.midX - preview.frame.width / 2,
+            y: pillTop + 4 - VoiceCaptureLayout.shadowPadding
+        ))
     }
 
     private func flipY(quartzRect rect: CGRect) -> CGFloat {

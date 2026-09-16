@@ -42,6 +42,9 @@ nonisolated struct CaptureSession: Equatable {
     let mode: CaptureMode
     var target: NoteCaptureTarget?
     var phase: CapturePhase
+    /// Latest cumulative hypothesis while streaming. Preview only: the saved
+    /// note still comes from the completed turn.
+    var liveTranscript: String? = nil
     /// User choice for this capture, independent of the identity of external work.
     var destinationStackID: UUID
     var destinationPicker: CaptureDestinationPicker = .closed
@@ -85,6 +88,8 @@ nonisolated enum CaptureAction {
     case recordingStarted(NoteCaptureContext)
     case failed(NoteCaptureContext, String)
     case transcript(NoteCaptureContext, String)
+    /// A streaming partial for the active turn. Pure preview state, no effects.
+    case voicePartial(NoteCaptureContext, String)
     case changeNote(String)
     case toggleDestinations(NoteCaptureContext)
     case dismissDestinations(NoteCaptureContext)
@@ -287,8 +292,16 @@ nonisolated struct CaptureState: Equatable {
                 destinationStackID: session.destinationStackID, note: note)
             session.phase = .saving(request)
             effects = [.commit(request)]
+        case let .voicePartial(context, text):
+            guard context == session.context else { return [] }
+            switch session.phase {
+            case .recording, .selectingVoice(recording: true, _), .transcribing:
+                session.liveTranscript = text.nonblank
+            default: return []
+            }
         case let .failed(context, message):
             guard context == session.context else { return [] }
+            session.liveTranscript = nil
             switch session.phase {
             case .selectingVoice, .startingVoice, .recording, .transcribing:
                 session.phase = .failed(message)

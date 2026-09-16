@@ -69,25 +69,25 @@ A template is the preamble plus the note formatting options. Three are built in:
 
 ## Privacy
 
-Everything stays on this Mac. The microphone is open only while recording. Transcription is local (Parakeet v3, Core ML). No analytics. Network access is limited to the one-time voice-model download and Sparkle's signed update checks.
+Everything stays on this Mac. The microphone is open only while recording. Transcription is local (Parakeet Unified, Core ML). No analytics. Network access is limited to the one-time voice-model download and Sparkle's signed update checks.
 
 ```
 ~/Library/Application Support/Sendpoint/store.json                       notes
 ~/Library/Application Support/Sendpoint/debug.log                        log
-~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3     voice model
+~/Library/Application Support/FluidAudio/Models/parakeet-unified-en-0.6b     voice model
 ~/Library/Preferences/app.sendpoint.plist                                settings
 ```
 
 ## Install
 
-Apple Silicon, macOS 14 or later. Download from [sendpoint.app/download](https://sendpoint.app/download), move to Applications, and grant Accessibility, Microphone, and the 460 MB voice model when asked.
+Apple Silicon, macOS 14 or later. Download from [sendpoint.app/download](https://sendpoint.app/download), move to Applications, and grant Accessibility, Microphone, and the on-device voice model when asked.
 
 ## Uninstall
 
 ```sh
 rm -rf /Applications/Sendpoint.app
 rm -rf ~/Library/Application\ Support/Sendpoint
-rm -rf ~/Library/Application\ Support/FluidAudio/Models/parakeet-tdt-0.6b-v3
+rm -rf ~/Library/Application\ Support/FluidAudio/Models/parakeet-unified-en-0.6b
 defaults delete app.sendpoint
 ```
 
