@@ -70,7 +70,8 @@ final class SurfaceCoordinator {
     func present(_ surface: Surface) {
         switch surface {
         case .captureEditor:
-            for hidden in [Surface.palette, .switcher, .settings, .setup] {
+            // Setup stays: its tour asks for a typed note and waits for it.
+            for hidden in [Surface.palette, .switcher, .settings] {
                 dismiss(hidden)
             }
         case .switcher:

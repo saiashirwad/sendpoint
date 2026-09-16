@@ -123,7 +123,7 @@ extension AppDelegate {
         }
     }
 
-    private func showStack() {
+    func showStack() {
         guard let store else { NSSound.beep(); return }
         presentPalette(focus: .notes, highlighting: store.currentStackID)
     }
@@ -179,12 +179,16 @@ extension AppDelegate {
             setupWindowController = SetupWindowController(
                 settings: settings,
                 permissionState: permissionState,
+                shortcuts: shortcuts,
+                voiceSettings: voiceSettings,
                 surfaces: surfaces,
+                noteCount: { [weak self] in self?.store.map(SetupTour.noteCount(in:)) },
                 onComplete: { [weak self] in
                     guard let self else { return }
                     self.surfaces.dismiss(.setup)
                     self.refreshStatusItem()
-                }
+                },
+                onOpenStack: { [weak self] in self?.showStack() }
             )
         }
         setupWindowController?.show()

@@ -17,6 +17,7 @@ final class SetupRenderTests: XCTestCase {
             let microphone: MicrophonePermissionState
             let modelExists: Bool
             let download: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)?
+            var tourStep: Int? = nil
         }
         struct Failed: LocalizedError { var errorDescription: String? { "boom" } }
         let fixtures: [Fixture] = [
@@ -31,7 +32,9 @@ final class SetupRenderTests: XCTestCase {
             .init(name: "failed", accessibility: .granted, microphone: .granted, modelExists: false, download: { _ in
                 throw Failed()
             }),
-            .init(name: "ready", accessibility: .granted, microphone: .granted, modelExists: true, download: nil),
+            .init(name: "tour-voice", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 0),
+            .init(name: "tour-text", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 1),
+            .init(name: "tour-stack", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 2),
         ]
         for fixture in fixtures {
             let defaults = UserDefaults(suiteName: "SetupRenderTests.\(UUID().uuidString)")!
@@ -49,11 +52,17 @@ final class SetupRenderTests: XCTestCase {
                 state.downloadModel()
                 try await Task.sleep(for: .milliseconds(150))
             }
+            let tour = SetupTour()
+            for _ in 0..<(fixture.tourStep ?? 0) { tour.send(.skip) }
             let hosting = NSHostingView(rootView: SetupView(
                 settings: AppSettings(defaults: defaults),
                 permissionState: state,
+                tour: tour,
+                shortcuts: ShortcutSettings(defaults: defaults),
+                voiceSettings: VoiceSettings(defaults: defaults),
                 onComplete: {},
-                onDismiss: {}
+                onDismiss: {},
+                onOpenStack: {}
             ))
             hosting.frame = NSRect(origin: .zero, size: SetupView.size)
             let window = NSWindow(

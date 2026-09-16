@@ -92,6 +92,8 @@ enum SetupHeroStage: Equatable {
         }
     }
 
+    static let stepNames = ["Accessibility", "Microphone", "Voice model"]
+
     /// Coarse setup step. Progress within a step (download percent) must not
     /// count as advancing, or we would steal focus on every poll.
     var step: Int {
@@ -113,7 +115,8 @@ enum SetupHeroStage: Equatable {
         case .downloading: "Fetching the voice model"
         case .failedOffline: "No internet right now"
         case .failedOther: "That download didn't finish"
-        case .ready: "You're all set"
+        // Once everything is granted the tour speaks; see SetupTour.
+        case .ready: ""
         }
     }
 
@@ -135,7 +138,7 @@ enum SetupHeroStage: Equatable {
         case .failedOther:
             "Try once more. Nothing else needs to change."
         case .ready:
-            "Your first note is one keypress away."
+            ""
         }
     }
 
@@ -148,7 +151,7 @@ enum SetupHeroStage: Equatable {
         case .voiceModel: "Download"
         case .downloading: nil
         case .failedOffline, .failedOther: "Try again"
-        case .ready: "Continue"
+        case .ready: nil
         }
     }
 
@@ -171,8 +174,12 @@ enum SetupHeroStage: Equatable {
 struct SetupView: View {
     @Bindable var settings: AppSettings
     @Bindable var permissionState: PermissionState
+    @Bindable var tour: SetupTour
+    @Bindable var shortcuts: ShortcutSettings
+    @Bindable var voiceSettings: VoiceSettings
     let onComplete: () -> Void
     let onDismiss: () -> Void
+    let onOpenStack: () -> Void
     @State private var didFinish = false
     @Environment(\.colorScheme) private var colorScheme
 
@@ -183,13 +190,21 @@ struct SetupView: View {
     init(
         settings: AppSettings,
         permissionState: PermissionState,
+        tour: SetupTour,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
         onComplete: @escaping () -> Void,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onOpenStack: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
         _permissionState = Bindable(wrappedValue: permissionState)
+        _tour = Bindable(wrappedValue: tour)
+        _shortcuts = Bindable(wrappedValue: shortcuts)
+        _voiceSettings = Bindable(wrappedValue: voiceSettings)
         self.onComplete = onComplete
         self.onDismiss = onDismiss
+        self.onOpenStack = onOpenStack
     }
 
     var body: some View {
@@ -197,11 +212,15 @@ struct SetupView: View {
             SetupHeroPill(permissionState: permissionState)
                 .padding(.top, 30)
             Spacer(minLength: 0)
-            SetupSteps(step: stage.step)
+            steps
             ask
                 .padding(.top, 12)
+            if inTour, tour.step.showsPassage {
+                SetupPassage(text: SetupTour.passage)
+                    .padding(.top, 16)
+            }
             control
-                .padding(.top, 24)
+                .padding(.top, inTour ? 20 : 24)
         }
         .padding(.horizontal, Self.inset)
         .padding(.bottom, Self.inset - 4)
@@ -219,41 +238,57 @@ struct SetupView: View {
             onDismiss()
         }
         .task { await permissionState.watchVoiceModel() }
-        .task(id: stage) {
-            guard stage == .ready else { return }
-            do {
-                try await Task.sleep(for: SetupHeroMotion.completionPause)
-            } catch {
-                return
+    }
+
+    /// Permissions first; once they are in, the tour takes the same rail.
+    private var inTour: Bool { stage == .ready }
+
+    private var steps: some View {
+        Group {
+            if inTour {
+                SetupSteps(names: SetupTour.Step.allCases.map(\.label), step: tour.step.rawValue)
+            } else {
+                SetupSteps(names: SetupHeroStage.stepNames, step: stage.step)
             }
-            guard !Task.isCancelled else { return }
-            finish()
         }
+        .animation(.snappy(duration: 0.3), value: inTour)
+    }
+
+    private var headline: String {
+        inTour ? tour.step.headline : stage.headline
+    }
+
+    private var detail: String {
+        inTour
+            ? tour.step.detail(keys: SetupTourKeys(shortcuts: shortcuts), voiceMode: voiceSettings.voiceMode)
+            : stage.detail
     }
 
     /// Headline and one line of why. Swaps as a block when the stage moves
     /// on, so each step reads as a new page rather than edited text.
     private var ask: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(stage.headline)
+            Text(headline)
                 .font(.ui(22, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-            Text(stage.detail)
+            Text(detail)
                 .font(.ui(13))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .id(stage.headline)
+        .id(headline)
         .transition(.blurReplace)
-        .animation(.snappy(duration: 0.35), value: stage.headline)
+        .animation(.snappy(duration: 0.35), value: headline)
     }
 
     @ViewBuilder
     private var control: some View {
-        if case let .downloading(progress) = stage {
+        if inTour {
+            tourControl
+        } else if case let .downloading(progress) = stage {
             // The number is the whole status: it climbs from the first byte
             // through the CoreML compile and lands on 100 as the stage flips.
             Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
@@ -268,12 +303,21 @@ struct SetupView: View {
         }
     }
 
-    private func activate() {
-        if stage == .ready {
-            finish()
-        } else {
-            stage.perform(on: permissionState)
+    /// A skip while a note is awaited; the stack opens the app for real.
+    @ViewBuilder
+    private var tourControl: some View {
+        switch tour.step {
+        case .voice, .text:
+            QuietButton("Skip") { tour.send(.skip) }
+                .frame(height: 28)
+        case .stack:
+            InkButton("Open stack", keys: "↩") { finish(); onOpenStack() }
+                .keyboardShortcut(.defaultAction)
         }
+    }
+
+    private func activate() {
+        stage.perform(on: permissionState)
     }
 
     private func finish() {
@@ -356,17 +400,16 @@ private struct SetupHeroPill: View {
     }
 }
 
-/// The three steps as the kicker line: done ones ticked, the current one
-/// marked with the accent, the rest waiting in grey.
+/// The steps as the kicker line: done ones ticked, the current one marked
+/// with the accent, the rest waiting in grey.
 private struct SetupSteps: View {
+    let names: [String]
     let step: Int
     @Environment(\.colorScheme) private var colorScheme
 
-    private static let names = ["Accessibility", "Microphone", "Voice model"]
-
     var body: some View {
         HStack(spacing: 16) {
-            ForEach(Array(Self.names.enumerated()), id: \.offset) { index, name in
+            ForEach(Array(names.enumerated()), id: \.offset) { index, name in
                 HStack(spacing: 7) {
                     marker(for: index)
                     Text(name)
@@ -382,7 +425,7 @@ private struct SetupSteps: View {
         .animation(.snappy(duration: 0.3), value: step)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Setup progress")
-        .accessibilityValue("\(min(step, 3)) of 3 done")
+        .accessibilityValue("\(min(step, names.count)) of \(names.count) done")
     }
 
     @ViewBuilder
@@ -619,6 +662,42 @@ struct CapabilityProgress: View {
     }
 }
 
+/// Two lines the user can select for real. A text view rather than SwiftUI
+/// text so the capture's Accessibility read finds the selection the same
+/// way it does in any other app.
+struct SetupPassage: NSViewRepresentable {
+    let text: String
+
+    static let fontSize: CGFloat = 14
+    static let height: CGFloat = 40
+
+    func makeNSView(context: Context) -> NSTextView {
+        let view = NSTextView()
+        view.isEditable = false
+        view.isSelectable = true
+        view.isRichText = false
+        view.drawsBackground = false
+        view.textContainerInset = .zero
+        view.textContainer?.lineFragmentPadding = 0
+        view.textContainer?.widthTracksTextView = true
+        view.isVerticallyResizable = false
+        view.isHorizontallyResizable = false
+        view.font = .ui(Self.fontSize)
+        view.textColor = .labelColor
+        view.string = text
+        view.setAccessibilityLabel("Text to select")
+        return view
+    }
+
+    func updateNSView(_ view: NSTextView, context: Context) {
+        if view.string != text { view.string = text }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? SetupView.size.width, height: Self.height)
+    }
+}
+
 /// Borderless so setup matches the recording pill, not a document window.
 /// Esc dismisses; there is no close button.
 final class SetupPanel: NSPanel {
@@ -635,6 +714,9 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     private let window: NSPanel
     private let permissionState: PermissionState
     private let surfaces: SurfaceCoordinator
+    private let tour = SetupTour()
+    /// Every note in every stack, or nil until the store has loaded.
+    private let noteCount: () -> Int?
     private var lifecycle: Lifecycle = .active
     private var pollingTask: Task<Void, Never>?
     private var lastStep: Int?
@@ -642,19 +724,28 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     init(
         settings: AppSettings,
         permissionState: PermissionState,
+        shortcuts: ShortcutSettings,
+        voiceSettings: VoiceSettings,
         surfaces: SurfaceCoordinator,
-        onComplete: @escaping () -> Void
+        noteCount: @escaping () -> Int?,
+        onComplete: @escaping () -> Void,
+        onOpenStack: @escaping () -> Void
     ) {
         let window = Self.makeWindow()
         self.permissionState = permissionState
         self.surfaces = surfaces
+        self.noteCount = noteCount
         self.window = window
         super.init()
         let hosting = NSHostingView(rootView: SetupView(
             settings: settings,
             permissionState: permissionState,
+            tour: tour,
+            shortcuts: shortcuts,
+            voiceSettings: voiceSettings,
             onComplete: onComplete,
-            onDismiss: { [weak self] in self?.window.close() }
+            onDismiss: { [weak self] in self?.window.close() },
+            onOpenStack: onOpenStack
         ))
         hosting.sizingOptions = []
         window.contentView = hosting
@@ -706,6 +797,13 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         )
     }
 
+    /// Permission steps, then tour slides. A change means the user acted
+    /// somewhere else, so setup comes forward to show the next thing.
+    private var currentStep: Int {
+        let stage = currentStage
+        return stage == .ready ? stage.step + tour.step.rawValue : stage.step
+    }
+
     private func revealAfterStepChange() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -729,13 +827,14 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     private func startPolling() {
         stopPolling()
-        lastStep = currentStage.step
+        lastStep = currentStep
         let permissionState = permissionState
         pollingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self, self.lifecycle == .active else { return }
                 permissionState.refresh()
-                let step = self.currentStage.step
+                if let count = self.noteCount() { self.tour.send(.noteCount(count)) }
+                let step = self.currentStep
                 if self.lastStep != step {
                     self.lastStep = step
                     self.revealAfterStepChange()

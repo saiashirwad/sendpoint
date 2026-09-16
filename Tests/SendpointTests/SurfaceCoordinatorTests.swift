@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class SurfaceCoordinatorTests: XCTestCase {
-    func testCaptureEditorHidesAuxiliarySurfaces() {
+    func testCaptureEditorHidesAuxiliarySurfacesButKeepsSetup() {
         let spy = Spy()
         let coordinator = makeCoordinator(spy: spy)
         coordinator.present(.palette)
@@ -14,10 +14,11 @@ final class SurfaceCoordinatorTests: XCTestCase {
         coordinator.present(.captureEditor)
 
         XCTAssertEqual(spy.events, [
-            "hide palette", "hide settings", "hide setup",
+            "hide palette", "hide settings",
             "show captureEditor",
         ])
-        XCTAssertEqual(coordinator.visible, [.captureEditor])
+        XCTAssertEqual(coordinator.visible, [.captureEditor, .setup],
+                       "setup's tour asks for a typed note and must survive the editor")
     }
 
     func testOnlySettingsUsesRegularApplicationActivation() {
