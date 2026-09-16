@@ -211,9 +211,17 @@ final class CaptureWindows {
             installVoiceEscapeFallback()
         }
         panel.orderFrontRegardless()
-        if let preview = previewPanel {
+        if model.transcriptionPreview, let preview = previewPanel {
+            preview.setContentSize(
+                VoiceCaptureLayout.previewPanelSize(
+                    lines: model.transcriptionPreviewLines,
+                    fontSize: CGFloat(model.transcriptionPreviewFontSize)
+                )
+            )
             positionPreview(preview, above: panel)
             preview.orderFrontRegardless()
+        } else {
+            previewPanel?.orderOut(nil)
         }
     }
 
@@ -231,10 +239,12 @@ final class CaptureWindows {
         let hosting = CaptureHostingView(rootView: VoicePreviewCard(model: model))
         let panel = Self.makeVoicePanel(contentView: hosting)
         panel.ignoresMouseEvents = true
-        panel.setContentSize(NSSize(
-            width: VoiceCaptureLayout.previewWidth + VoiceCaptureLayout.shadowPadding * 2,
-            height: VoiceCaptureLayout.previewHeight + VoiceCaptureLayout.shadowPadding * 2
-        ))
+        panel.setContentSize(
+            VoiceCaptureLayout.previewPanelSize(
+                lines: VoiceSettings.defaultPreviewLines,
+                fontSize: CGFloat(VoiceSettings.defaultPreviewFontSize)
+            )
+        )
         return panel
     }
 

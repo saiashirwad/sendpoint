@@ -4,6 +4,7 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
     case capture
+    case preview
     case stacks
     case templates
     case pasting
@@ -14,6 +15,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .capture: "Capture"
+        case .preview: "Preview"
         case .stacks: "Stacks"
         case .templates: "Templates"
         case .pasting: "Pasting"
@@ -24,6 +26,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .capture: "waveform"
+        case .preview: "captions.bubble"
         case .stacks: "rectangle.stack"
         case .templates: "doc.text"
         case .pasting: "clipboard"
@@ -112,6 +115,11 @@ struct SettingsView: View {
                 hotKeyRegistrar: hotKeyRegistrar,
                 captureController: captureController,
                 onSettingsChanged: onSettingsChanged
+            )
+        case .preview:
+            SettingsPreviewPane(
+                voiceSettings: voiceSettings,
+                captureController: captureController
             )
         case .stacks:
             SettingsStacksPane(

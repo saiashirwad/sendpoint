@@ -5,15 +5,28 @@ enum VoiceCaptureLayout {
     static let pillHeight: CGFloat = 32
     static let shadowPadding: CGFloat = 24
     static let previewWidth: CGFloat = 420
-    static let previewLines = 4
-    static let previewLineHeight: CGFloat = 17
     static let previewLineSpacing: CGFloat = 2
     static let previewPaddingY: CGFloat = 10
-    static var previewTextHeight: CGFloat {
-        CGFloat(previewLines) * previewLineHeight + CGFloat(previewLines - 1) * previewLineSpacing
+
+    static func previewLineHeight(fontSize: CGFloat) -> CGFloat {
+        fontSize + 4.5
     }
-    static var previewHeight: CGFloat {
-        previewTextHeight + previewPaddingY * 2
+
+    static func previewTextHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
+        let lines = VoiceSettings.clampedPreviewLines(lines)
+        let lineHeight = previewLineHeight(fontSize: fontSize)
+        return CGFloat(lines) * lineHeight + CGFloat(max(lines - 1, 0)) * previewLineSpacing
+    }
+
+    static func previewHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
+        previewTextHeight(lines: lines, fontSize: fontSize) + previewPaddingY * 2
+    }
+
+    static func previewPanelSize(lines: Int, fontSize: CGFloat) -> NSSize {
+        NSSize(
+            width: previewWidth + shadowPadding * 2,
+            height: previewHeight(lines: lines, fontSize: fontSize) + shadowPadding * 2
+        )
     }
 }
 
@@ -143,7 +156,12 @@ struct VoicePreviewCard: View {
     @Environment(\.colorScheme) private var systemScheme
 
     private var palette: OverlayPalette { .against(systemScheme) }
-    private var isVoice: Bool { model.state.session?.mode == .voice }
+    private var isVoice: Bool {
+        model.transcriptionPreview && model.state.session?.mode == .voice
+    }
+    private var lineCount: Int { model.transcriptionPreviewLines }
+    private var fontSize: CGFloat { CGFloat(model.transcriptionPreviewFontSize) }
+    private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
 
     var body: some View {
         Group {
@@ -159,7 +177,8 @@ struct VoicePreviewCard: View {
         .padding(VoiceCaptureLayout.shadowPadding)
         .frame(
             width: VoiceCaptureLayout.previewWidth + VoiceCaptureLayout.shadowPadding * 2,
-            height: VoiceCaptureLayout.previewHeight + VoiceCaptureLayout.shadowPadding * 2,
+            height: VoiceCaptureLayout.previewHeight(lines: lineCount, fontSize: fontSize)
+                + VoiceCaptureLayout.shadowPadding * 2,
             alignment: .bottom
         )
         .accessibilityElement(children: .ignore)
@@ -171,18 +190,26 @@ struct VoicePreviewCard: View {
             if layout.rows.isEmpty {
                 VoicePreviewWaiting(ink: palette.ink)
             } else {
-                VoicePreviewLines(rows: layout.rows, overflow: layout.overflow, ink: palette.ink)
+                VoicePreviewLines(
+                    rows: layout.rows,
+                    overflow: layout.overflow,
+                    ink: palette.ink,
+                    fontSize: fontSize
+                )
             }
         }
         .frame(
             maxWidth: .infinity,
-            minHeight: VoiceCaptureLayout.previewTextHeight,
-            maxHeight: VoiceCaptureLayout.previewTextHeight,
+            minHeight: VoiceCaptureLayout.previewTextHeight(lines: lineCount, fontSize: fontSize),
+            maxHeight: VoiceCaptureLayout.previewTextHeight(lines: lineCount, fontSize: fontSize),
             alignment: .topLeading
         )
         .padding(.horizontal, 14)
         .padding(.vertical, VoiceCaptureLayout.previewPaddingY)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.paper))
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(palette.paper.opacity(paperOpacity))
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
                 LinearGradient(
@@ -193,18 +220,18 @@ struct VoicePreviewCard: View {
                 lineWidth: 0.5
             )
         )
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+        .shadow(color: .black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
     }
 
     private var layout: (rows: [VoicePreviewLine], overflow: Bool) {
         let all = LiveTranscriptPreview.lines(
             for: model.state.session?.liveTranscript ?? "",
             width: VoiceCaptureLayout.previewWidth - 36,
-            font: .ui(LiveTranscriptPreview.fontSize)
+            font: .ui(fontSize)
         )
-        let start = max(0, all.count - VoiceCaptureLayout.previewLines)
+        let start = max(0, all.count - lineCount)
         let rows = (start..<all.count).map { VoicePreviewLine(id: $0, text: all[$0]) }
-        return (rows, all.count > VoiceCaptureLayout.previewLines)
+        return (rows, all.count > lineCount)
     }
 
     private var accessibilityLabel: String {
@@ -225,11 +252,12 @@ private struct VoicePreviewLines: View {
     let rows: [VoicePreviewLine]
     let overflow: Bool
     let ink: Color
+    let fontSize: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: VoiceCaptureLayout.previewLineSpacing) {
             ForEach(rows) { row in
-                VoicePreviewLineText(text: row.text, ink: ink)
+                VoicePreviewLineText(text: row.text, ink: ink, fontSize: fontSize)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -275,14 +303,15 @@ private struct VoicePreviewWaiting: View {
 private struct VoicePreviewLineText: View {
     let text: String
     let ink: Color
+    let fontSize: CGFloat
 
     var body: some View {
         Text(text)
-            .font(.ui(LiveTranscriptPreview.fontSize))
+            .font(.ui(fontSize))
             .foregroundStyle(ink.opacity(0.92))
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: VoiceCaptureLayout.previewLineHeight, alignment: .center)
+            .frame(height: VoiceCaptureLayout.previewLineHeight(fontSize: fontSize), alignment: .center)
             .transition(.asymmetric(
                 insertion: .move(edge: .bottom).combined(with: .opacity),
                 removal: .move(edge: .top).combined(with: .opacity)
@@ -317,8 +346,8 @@ enum VoiceOverlayCopy {
 /// Greedy word-wrap for the live card. Appending text only changes the last
 /// line until it overflows, so completed lines stay put and shift up as a block.
 enum LiveTranscriptPreview {
-    static let fontSize: CGFloat = 12.5
-    static let maxVisibleLines = 4
+    static let fontSize: CGFloat = CGFloat(VoiceSettings.defaultPreviewFontSize)
+    static let maxVisibleLines = VoiceSettings.defaultPreviewLines
 
     static func lines(
         for text: String,

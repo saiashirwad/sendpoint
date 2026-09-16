@@ -690,9 +690,9 @@ nonisolated enum SettingsMetrics {
     /// Height of a plain row.
     static let rowHeight: CGFloat = 44
     /// Gap between one section and the next.
-    static let sectionSpacing: CGFloat = 36
+    static let sectionSpacing: CGFloat = 28
     /// Gap between a section label and its first row.
-    static let labelSpacing: CGFloat = 6
+    static let labelSpacing: CGFloat = 3
     static let contentMaxWidth: CGFloat = 640
     static let pageInset: CGFloat = 40
 }
@@ -750,7 +750,6 @@ struct SettingsSection<Content: View>: View {
             }
             if let footnote {
                 SettingsFootnote(footnote)
-                    .padding(.top, 2)
             }
         }
     }
@@ -771,33 +770,49 @@ struct SettingsFootnote: View {
 }
 
 /// Title, an inline hint in a quieter voice, and the control at the
-/// trailing edge.
+/// trailing edge. `detail` sits under the title, for a short explanation.
 struct SettingsRow<Trailing: View>: View {
     let title: String
     let hint: String?
+    let detail: String?
     @ViewBuilder let trailing: () -> Trailing
 
-    init(_ title: String, hint: String? = nil, @ViewBuilder trailing: @escaping () -> Trailing) {
+    init(
+        _ title: String,
+        hint: String? = nil,
+        detail: String? = nil,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
         self.title = title
         self.hint = hint
+        self.detail = detail
         self.trailing = trailing
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(title)
-                    .font(.ui(14, weight: .medium))
-                if let hint {
-                    Text(hint)
-                        .font(.ui(13))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(title)
+                        .font(.ui(14, weight: .medium))
+                    if let hint {
+                        Text(hint)
+                            .font(.ui(13))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                if let detail {
+                    Text(detail)
+                        .font(.ui(12.5))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 12)
             trailing()
         }
+        .padding(.vertical, detail == nil ? 0 : 6)
         .frame(minHeight: SettingsMetrics.rowHeight)
     }
 }
@@ -830,20 +845,106 @@ struct SettingsStackedRow<Content: View>: View {
 struct SettingsToggleRow: View {
     let title: String
     let hint: String?
+    let detail: String?
     @Binding var isOn: Bool
 
-    init(_ title: String, hint: String? = nil, isOn: Binding<Bool>) {
+    init(_ title: String, hint: String? = nil, detail: String? = nil, isOn: Binding<Bool>) {
         self.title = title
         self.hint = hint
+        self.detail = detail
         _isOn = isOn
     }
 
     var body: some View {
-        SettingsRow(title, hint: hint) {
+        SettingsRow(title, hint: hint, detail: detail) {
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(InkToggleStyle())
+                .accessibilityHint(detail ?? "")
         }
+    }
+}
+
+/// A compact plus/minus control for a small closed range.
+struct SettingsStepperRow: View {
+    let title: String
+    let valueText: String
+    var accessibilityValue: String? = nil
+    let canDecrement: Bool
+    let canIncrement: Bool
+    let decrement: () -> Void
+    let increment: () -> Void
+
+    init(
+        _ title: String,
+        valueText: String,
+        accessibilityValue: String? = nil,
+        canDecrement: Bool,
+        canIncrement: Bool,
+        decrement: @escaping () -> Void,
+        increment: @escaping () -> Void
+    ) {
+        self.title = title
+        self.valueText = valueText
+        self.accessibilityValue = accessibilityValue
+        self.canDecrement = canDecrement
+        self.canIncrement = canIncrement
+        self.decrement = decrement
+        self.increment = increment
+    }
+
+    var body: some View {
+        SettingsRow(title) {
+            HStack(spacing: 8) {
+                StepperGlyphButton("minus", enabled: canDecrement, action: decrement)
+                Text(valueText)
+                    .font(.mono(12, weight: .medium))
+                    .monospacedDigit()
+                    .frame(minWidth: 36)
+                    .multilineTextAlignment(.center)
+                StepperGlyphButton("plus", enabled: canIncrement, action: increment)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue(accessibilityValue ?? valueText)
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    if canIncrement { increment() }
+                case .decrement:
+                    if canDecrement { decrement() }
+                default:
+                    break
+                }
+            }
+        }
+    }
+}
+
+private struct StepperGlyphButton: View {
+    let systemName: String
+    let enabled: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    init(_ systemName: String, enabled: Bool, action: @escaping () -> Void) {
+        self.systemName = systemName
+        self.enabled = enabled
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(enabled ? (hovering ? Color.primary : Color.secondary) : Color.secondary.opacity(0.35))
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.primary.opacity(hovering && enabled ? 0.09 : 0.055)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .onHover { hovering = $0 }
     }
 }
 

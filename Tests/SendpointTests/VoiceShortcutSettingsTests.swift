@@ -16,6 +16,25 @@ final class VoiceShortcutSettingsTests: XCTestCase {
             XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .tap)
             voice.setVoiceMode(.hold)
             XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .hold)
+
+            XCTAssertTrue(voice.transcriptionPreview)
+            XCTAssertEqual(voice.transcriptionPreviewLines, 4)
+            XCTAssertEqual(voice.transcriptionPreviewFontSize, 13)
+            XCTAssertEqual(voice.transcriptionPreviewOpacity, 100)
+            voice.setTranscriptionPreview(false)
+            voice.setTranscriptionPreviewLines(2)
+            voice.setTranscriptionPreviewFontSize(15)
+            voice.setTranscriptionPreviewOpacity(70)
+            XCTAssertFalse(VoiceSettings(defaults: defaults).transcriptionPreview)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewLines, 2)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewFontSize, 15)
+            XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewOpacity, 70)
+            voice.setTranscriptionPreviewLines(9)
+            voice.setTranscriptionPreviewFontSize(3)
+            voice.setTranscriptionPreviewOpacity(54)
+            XCTAssertEqual(voice.transcriptionPreviewLines, 5)
+            XCTAssertEqual(voice.transcriptionPreviewFontSize, 11)
+            XCTAssertEqual(voice.transcriptionPreviewOpacity, 50)
         }
     }
 

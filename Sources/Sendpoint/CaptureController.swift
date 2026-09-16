@@ -155,6 +155,27 @@ final class CaptureController {
         send(.voiceModeChanged(mode))
     }
 
+    var transcriptionPreview: Bool { voiceSettings.transcriptionPreview }
+    var transcriptionPreviewLines: Int { voiceSettings.transcriptionPreviewLines }
+    var transcriptionPreviewFontSize: Int { voiceSettings.transcriptionPreviewFontSize }
+    var transcriptionPreviewOpacity: Int { voiceSettings.transcriptionPreviewOpacity }
+
+    func setTranscriptionPreview(_ on: Bool) {
+        voiceSettings.setTranscriptionPreview(on)
+    }
+
+    func setTranscriptionPreviewLines(_ lines: Int) {
+        voiceSettings.setTranscriptionPreviewLines(lines)
+    }
+
+    func setTranscriptionPreviewFontSize(_ size: Int) {
+        voiceSettings.setTranscriptionPreviewFontSize(size)
+    }
+
+    func setTranscriptionPreviewOpacity(_ percent: Int) {
+        voiceSettings.setTranscriptionPreviewOpacity(percent)
+    }
+
     func chooseMicrophone(uid: String?, name: String?) {
         voiceSettings.setInputDevice(uid: uid, name: name)
         recorder.chooseMicrophone(uid)
