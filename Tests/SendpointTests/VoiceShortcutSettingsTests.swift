@@ -20,7 +20,7 @@ final class VoiceShortcutSettingsTests: XCTestCase {
             XCTAssertTrue(voice.transcriptionPreview)
             XCTAssertEqual(voice.transcriptionPreviewLines, 4)
             XCTAssertEqual(voice.transcriptionPreviewFontSize, 13)
-            XCTAssertEqual(voice.transcriptionPreviewOpacity, 100)
+            XCTAssertEqual(voice.transcriptionPreviewOpacity, 50)
             voice.setTranscriptionPreview(false)
             voice.setTranscriptionPreviewLines(2)
             voice.setTranscriptionPreviewFontSize(15)

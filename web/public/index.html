@@ -467,21 +467,25 @@
     .composer .text b { font-weight: 600; }
     .composer.flash { border-color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 14%, transparent); }
 
-    /* voice capsule, the app's overlay: a low pill that says where the note
-       is going (the stack's name and, in mono, how many notes it holds), and
-       whose only moving part is a single orb of sound. It inverts against
-       the scheme, and the orb turns raspberry while it listens. */
+    /* the voice card, the app's overlay: what's being said streams across the
+       top, and the foot says where the note is going (the stack's name and,
+       in mono, how many notes it holds) with a single orb of sound at the
+       trailing end. Ink at four fifths on the opposite of the scheme, sized
+       in macOS points like the app draws it. The orb turns raspberry while it
+       listens. */
     .capsule {
+      --pt: calc(1em / 15);
       position: absolute; left: 50%; bottom: 6.9em; z-index: 10;
       transform: translate(-50%, 1.2em) scale(0.92);
       opacity: 0;
-      display: flex; align-items: center; gap: 0.7em;
-      height: 2.3em; padding: 0 0.65em 0 1em;
-      border-radius: 3em;
+      box-sizing: border-box;
+      width: calc(420 * var(--pt)); max-width: calc(100% - 3.2em);
+      padding: calc(10 * var(--pt)) calc(14 * var(--pt)) calc(8 * var(--pt));
+      border-radius: calc(14 * var(--pt));
       --ink: 255, 255, 255;
       --live: var(--accent-on-dark);
-      background: rgba(15, 15, 15, 0.94);
-      box-shadow: 0 6px 14px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(var(--ink), 0.1);
+      background: rgba(15, 15, 15, 0.75);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.36), inset 0 0 0 0.5px rgba(var(--ink), 0.1);
       color: rgb(var(--ink));
       font-family: var(--sans);
       transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.2,.9,.3,1.2);
@@ -489,11 +493,49 @@
     }
     .capsule.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
     @media (prefers-color-scheme: dark) {
-      .capsule { --ink: 0, 0, 0; --live: var(--accent-on-dark); background: rgba(250, 250, 250, 0.9); box-shadow: 0 6px 14px rgba(0,0,0,0.45); }
+      .capsule { --ink: 0, 0, 0; --live: var(--accent-on-dark); background: rgba(250, 250, 250, 0.72); }
+    }
+    /* the transcript: four lines of 13pt Geist. Once it overflows the last
+       lines stay in view and the earlier ones fade off the top. */
+    .capsule .said {
+      display: flex; flex-direction: column; justify-content: flex-start;
+      height: calc(78 * var(--pt)); overflow: hidden;
+      font-size: calc(13 * var(--pt)); line-height: calc(19.5 * var(--pt));
+      font-weight: 400; letter-spacing: -0.005em;
+      color: rgba(var(--ink), 0.92);
+      text-align: left; overflow-wrap: anywhere;
+    }
+    .capsule .said.over {
+      justify-content: flex-end;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28%, #000 100%);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 28%, #000 100%);
+    }
+    .capsule .said .w { opacity: 0; transition: opacity 0.07s ease; }
+    .capsule .said .w.on { opacity: 1; }
+    /* before the first word: three dots breathing where the words will land */
+    .capsule .wait { display: none; gap: calc(5 * var(--pt)); padding-top: calc(6 * var(--pt)); }
+    .capsule .wait i {
+      width: calc(6 * var(--pt)); height: calc(6 * var(--pt)); border-radius: 50%;
+      background: rgba(var(--ink), 0.5);
+      animation: wait-breath 1.5s ease-in-out infinite;
+    }
+    .capsule .wait i:nth-child(2) { animation-delay: -0.2s; }
+    .capsule .wait i:nth-child(3) { animation-delay: -0.4s; }
+    .capsule.waiting .wait { display: flex; }
+    @keyframes wait-breath { 0%, 100% { opacity: 0.44; } 50% { opacity: 1; } }
+    .capsule .foot {
+      display: flex; align-items: center; gap: 0.7em;
+      height: calc(24 * var(--pt)); margin-top: calc(6 * var(--pt));
     }
     .capsule .stack {
       font-size: 0.82em; font-weight: 500; letter-spacing: -0.005em;
       color: rgba(var(--ink), 0.9); white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 0.4em;
+    }
+    .capsule .stack::after {
+      content: ""; width: 0.36em; height: 0.36em; margin-top: -0.2em;
+      border: solid rgba(var(--ink), 0.6); border-width: 0 0.11em 0.11em 0;
+      transform: rotate(45deg);
     }
     .capsule .count {
       font-family: var(--mono); font-size: 0.78em; font-weight: 400;
@@ -509,8 +551,9 @@
     .capsule.tethered .tether { display: flex; }
     .capsule.tethered .rule { display: block; }
     @keyframes tether-in { from { opacity: 0; transform: translateX(0.4em); } }
+    .capsule .sp { flex: 1; }
     .capsule .orb {
-      position: relative; width: 1.6em; height: 1.6em; flex: none; margin-left: 0.15em;
+      position: relative; width: 1.6em; height: 1.6em; flex: none;
     }
     .capsule .orb i {
       position: absolute; left: 50%; top: 50%; width: 0.57em; height: 0.57em;
@@ -534,33 +577,6 @@
     @keyframes orb-pulse {
       0%, 100% { opacity: 0.35; transform: scale(1.25); }
       50% { opacity: 0.75; transform: scale(1.62); }
-    }
-
-    /* subtitles, what's being said */
-    .subs {
-      position: absolute; left: 50%; bottom: 11.9em; z-index: 10;
-      transform: translateX(-50%);
-      max-width: 34em; text-align: center;
-      font-size: 1.1em; line-height: 1.4; font-weight: 500;
-      color: #fff;
-      pointer-events: none;
-      opacity: 0; transition: opacity 0.3s ease;
-    }
-    .subs.on { opacity: 1; }
-    .subs .w { color: rgba(255,255,255,0.72); }
-    .subs .line {
-      display: inline; padding: 0.15em 0.5em;
-      background: rgba(20, 20, 26, 0.78);
-      border-radius: 0.35em;
-      -webkit-box-decoration-break: clone; box-decoration-break: clone;
-    }
-    .subs .w { opacity: 0; display: inline; transition: opacity 0.07s ease; }
-    .subs .w.on { opacity: 1; }
-    .subs .w.hot { color: #fff; }
-    @media (prefers-color-scheme: dark) {
-      .subs .line { background: rgba(255, 255, 255, 0.9); }
-      .subs .w { color: rgba(0,0,0,0.62); }
-      .subs .w.hot { color: #111; }
     }
 
     /* note card that flies into the menu bar: a note as the picker shows it */
@@ -1063,14 +1079,16 @@
           </div>
         </div>
 
-        <div class="subs" id="subs" aria-hidden="true"><span class="line" id="subline"></span></div>
-
-        <div class="capsule" id="capsule" aria-hidden="true">
-          <span class="stack">Reading notes</span>
-          <span class="count" id="ccount">0</span>
-          <span class="rule"></span>
-          <span class="tether" id="ct"></span>
-          <span class="orb" aria-hidden="true"><i class="halo" id="halo"></i><i class="ring"></i><i class="core" id="core"></i></span>
+        <div class="capsule waiting" id="capsule" aria-hidden="true">
+          <div class="said" id="said"><span class="wait"><i></i><i></i><i></i></span></div>
+          <div class="foot">
+            <span class="stack">Reading notes</span>
+            <span class="count" id="ccount">0</span>
+            <span class="rule"></span>
+            <span class="tether" id="ct"></span>
+            <span class="sp"></span>
+            <span class="orb" aria-hidden="true"><i class="halo" id="halo"></i><i class="ring"></i><i class="core" id="core"></i></span>
+          </div>
         </div>
         <nav class="dock" aria-label="Dock">
           <button type="button" data-app="safari" aria-pressed="true" aria-label="Show the demo in Safari"><img src="/dock-safari.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Safari</span></button>
@@ -1088,8 +1106,7 @@
     const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
     const scene = $("scene"),
-          subs = $("subs"), subline = $("subline"),
-          capsule = $("capsule"), ct = $("ct"), ccount = $("ccount"),
+          capsule = $("capsule"), said = $("said"), ct = $("ct"), ccount = $("ccount"),
           halo = $("halo"), core = $("core"), loud = $("loud");
 
     const PREAMBLE = "These are my reading notes, captured in order while I read. Each entry is either a response to a quoted passage or a standalone thought. Read the notes as a whole and give me one coherent response that takes all of them into account.";
@@ -1143,26 +1160,37 @@
     const tether = (text) => {
       const n = text ? text.split(/\s+/).filter(Boolean).length : 0;
       capsule.classList.toggle("tethered", n > 0);
-      ct.textContent = n === 1 ? "1 word" : `${n} words`;
+      ct.textContent = n === 1 ? "1 word selected" : `${n} words selected`;
     };
 
+    /* the transcript streams into the card, one word at a time; the dots
+       breathe until the first word lands, and once the text outgrows the
+       card the last lines stay in view */
+    const waiting = () => {
+      said.innerHTML = '<span class="wait"><i></i><i></i><i></i></span>';
+      said.classList.remove("over");
+      capsule.classList.add("waiting");
+    };
     const speak = async (text, signal) => {
-      subline.innerHTML = "";
-      subs.classList.add("on");
-      let prev = null;
+      waiting();
+      let line = null;
       for (const w of text.split(" ")) {
+        if (!line) {
+          capsule.classList.remove("waiting");
+          said.innerHTML = "";
+          line = document.createElement("span");
+          said.appendChild(line);
+        }
         const span = document.createElement("span");
-        span.className = "w hot";
-        span.textContent = (subline.childElementCount ? " " : "") + w;
-        subline.appendChild(span);
+        span.className = "w";
+        span.textContent = (line.childElementCount ? " " : "") + w;
+        line.appendChild(span);
         void span.offsetWidth;
         span.classList.add("on");
-        if (prev) prev.classList.remove("hot");
-        prev = span;
+        said.classList.toggle("over", line.offsetHeight > said.clientHeight);
         energy = 0.55 + Math.random() * 0.45;
         await wait(/[,.?]$/.test(w) ? 170 : 60 + w.length * 11 + Math.random() * 30, signal);
       }
-      if (prev) prev.classList.remove("hot");
     };
 
     const cards = new Set();
@@ -1544,6 +1572,7 @@
 
       ccount.textContent = count - 1;
       tether(sel ? sel.textContent : null);
+      waiting();
       capsuleState("live");
       capsule.classList.add("on");
       await wait(225, signal);
@@ -1552,9 +1581,7 @@
       await wait(125, signal);
 
       capsuleState("busy");
-      await wait(175, signal);
-      subs.classList.remove("on");
-      await wait(325, signal);
+      await wait(500, signal);
 
       capsule.classList.remove("on");
       const fly = flyCard(sel ? sel.textContent : null, note.said, signal);
@@ -1570,8 +1597,7 @@
       for (const app of Object.values(apps)) app.reset();
       for (const card of cards) card.remove();
       cards.clear();
-      capsule.classList.remove("on"); capsuleState("idle"); tether(null);
-      subs.classList.remove("on"); subline.innerHTML = "";
+      capsule.classList.remove("on"); capsuleState("idle"); tether(null); waiting();
     };
 
     const play = async (app, signal) => {
