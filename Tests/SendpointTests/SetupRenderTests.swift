@@ -35,6 +35,7 @@ final class SetupRenderTests: XCTestCase {
             .init(name: "tour-voice", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 0),
             .init(name: "tour-text", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 1),
             .init(name: "tour-stack", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 2),
+            .init(name: "tour-done", accessibility: .granted, microphone: .granted, modelExists: true, download: nil, tourStep: 3),
         ]
         for fixture in fixtures {
             let defaults = UserDefaults(suiteName: "SetupRenderTests.\(UUID().uuidString)")!

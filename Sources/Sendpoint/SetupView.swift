@@ -246,7 +246,7 @@ struct SetupView: View {
     private var steps: some View {
         Group {
             if inTour {
-                SetupSteps(names: SetupTour.Step.allCases.map(\.label), step: tour.step.rawValue)
+                SetupSteps(names: SetupTour.Step.railNames, step: tour.step.rawValue)
             } else {
                 SetupSteps(names: SetupHeroStage.stepNames, step: stage.step)
             }
@@ -303,7 +303,8 @@ struct SetupView: View {
         }
     }
 
-    /// A skip while a note is awaited; the stack opens the app for real.
+    /// A skip while a note is awaited; the stack opens for real with setup
+    /// still behind it; Done is the only way setup completes.
     @ViewBuilder
     private var tourControl: some View {
         switch tour.step {
@@ -311,7 +312,10 @@ struct SetupView: View {
             QuietButton("Skip") { tour.send(.skip) }
                 .frame(height: 28)
         case .stack:
-            InkButton("Open stack", keys: "↩") { finish(); onOpenStack() }
+            InkButton("Open stack", keys: "↩") { onOpenStack(); tour.send(.openedStack) }
+                .keyboardShortcut(.defaultAction)
+        case .done:
+            InkButton("Done", keys: "↩") { finish() }
                 .keyboardShortcut(.defaultAction)
         }
     }
@@ -837,7 +841,9 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
                 let step = self.currentStep
                 if self.lastStep != step {
                     self.lastStep = step
-                    self.revealAfterStepChange()
+                    // The stack palette closes when it loses key status, so
+                    // setup must not come forward over it for the last slide.
+                    if self.tour.step != .done { self.revealAfterStepChange() }
                 }
                 do {
                     try await Task.sleep(for: .milliseconds(700))

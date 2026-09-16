@@ -18,7 +18,20 @@ final class SetupTourTests: XCTestCase {
         tour.send(.noteCount(9))
         XCTAssertEqual(tour.step, .stack)
         tour.send(.noteCount(10))
-        XCTAssertEqual(tour.step, .stack, "the last slide is terminal")
+        XCTAssertEqual(tour.step, .stack, "the stack slide waits for the stack, not a note")
+    }
+
+    func testOpeningTheStackLeadsToTheLastWordOnlyFromTheStackSlide() {
+        let tour = SetupTour()
+        tour.send(.openedStack)
+        XCTAssertEqual(tour.step, .voice)
+        tour.send(.skip)
+        tour.send(.skip)
+        XCTAssertEqual(tour.step, .stack)
+        tour.send(.openedStack)
+        XCTAssertEqual(tour.step, .done)
+        tour.send(.openedStack)
+        XCTAssertEqual(tour.step, .done)
     }
 
     func testClearingNotesRebasesWithoutAdvancing() {
@@ -30,14 +43,16 @@ final class SetupTourTests: XCTestCase {
         XCTAssertEqual(tour.step, .text, "one note after the clear still counts")
     }
 
-    func testSkipMovesOnAndStopsAtTheStack() {
+    func testSkipMovesOnAndStopsAtTheEnd() {
         let tour = SetupTour()
         tour.send(.skip)
         XCTAssertEqual(tour.step, .text)
         tour.send(.skip)
         XCTAssertEqual(tour.step, .stack)
         tour.send(.skip)
-        XCTAssertEqual(tour.step, .stack)
+        XCTAssertEqual(tour.step, .done)
+        tour.send(.skip)
+        XCTAssertEqual(tour.step, .done)
     }
 
     func testCopyNamesTheUsersOwnShortcutsOnOneLine() {
@@ -62,8 +77,14 @@ final class SetupTourTests: XCTestCase {
             XCTAssertLessThan(step.detail(keys: keys, voiceMode: .tap).count, 64)
             XCTAssertLessThan(step.headline.count, 34)
         }
+        XCTAssertEqual(
+            SetupTour.Step.done.detail(keys: keys, voiceMode: .hold),
+            "It lives in the menu bar. Settings are there too."
+        )
         XCTAssertTrue(SetupTour.Step.voice.showsPassage)
         XCTAssertFalse(SetupTour.Step.stack.showsPassage)
+        XCTAssertFalse(SetupTour.Step.done.showsPassage)
+        XCTAssertEqual(SetupTour.Step.railNames, ["Voice note", "Typed note", "Stack"])
     }
 
     func testNoteCountSpansEveryStack() async throws {
