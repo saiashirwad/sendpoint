@@ -1,0 +1,78 @@
+import AppKit
+import SwiftUI
+import XCTest
+@testable import Sendpoint
+
+/// Manual review images of every setup stage, so the one-line copy can be
+/// checked against the real window width.
+@MainActor
+final class SetupRenderTests: XCTestCase {
+    func testRenderEverySetupStage() async throws {
+        guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
+            throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce manual review images.")
+        }
+        struct Fixture {
+            let name: String
+            let accessibility: AccessibilityPermissionState
+            let microphone: MicrophonePermissionState
+            let modelExists: Bool
+            let download: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)?
+        }
+        struct Failed: LocalizedError { var errorDescription: String? { "boom" } }
+        let fixtures: [Fixture] = [
+            .init(name: "accessibility", accessibility: .notGranted, microphone: .notDetermined, modelExists: false, download: nil),
+            .init(name: "microphone", accessibility: .granted, microphone: .notDetermined, modelExists: false, download: nil),
+            .init(name: "microphone-settings", accessibility: .granted, microphone: .denied, modelExists: false, download: nil),
+            .init(name: "voice-model", accessibility: .granted, microphone: .granted, modelExists: false, download: nil),
+            .init(name: "downloading", accessibility: .granted, microphone: .granted, modelExists: false, download: { report in
+                report(0.42)
+                try await Task.sleep(for: .seconds(60))
+            }),
+            .init(name: "failed", accessibility: .granted, microphone: .granted, modelExists: false, download: { _ in
+                throw Failed()
+            }),
+            .init(name: "ready", accessibility: .granted, microphone: .granted, modelExists: true, download: nil),
+        ]
+        for fixture in fixtures {
+            let defaults = UserDefaults(suiteName: "SetupRenderTests.\(UUID().uuidString)")!
+            let state = PermissionState(services: PermissionServices(
+                accessibilityStatus: { fixture.accessibility },
+                requestAccessibility: { true },
+                microphoneStatus: { fixture.microphone },
+                requestMicrophone: { true },
+                voiceModelFilesExist: { fixture.modelExists },
+                downloadVoiceModel: { report in try await fixture.download?(report) },
+                openAccessibilitySettings: {},
+                openMicrophoneSettings: {}
+            ))
+            if fixture.download != nil {
+                state.downloadModel()
+                try await Task.sleep(for: .milliseconds(150))
+            }
+            let hosting = NSHostingView(rootView: SetupView(
+                settings: AppSettings(defaults: defaults),
+                permissionState: state,
+                onComplete: {},
+                onDismiss: {}
+            ))
+            hosting.frame = NSRect(origin: .zero, size: SetupView.size)
+            let window = NSWindow(
+                contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false
+            )
+            window.isReleasedWhenClosed = false
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(250))
+            hosting.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            let url = URL(fileURLWithPath: directory).appendingPathComponent("setup-\(fixture.name).png")
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url)
+            window.contentView = nil
+            window.close()
+            state.teardown()
+        }
+    }
+}

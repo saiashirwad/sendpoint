@@ -103,13 +103,13 @@ enum SetupHeroStage: Equatable {
         }
     }
 
-    /// The one-line ask, in plain words.
+    /// The ask, in plain words. One line at 22pt in the setup window.
     var headline: String {
         switch self {
-        case .accessibility: "Let Sendpoint read what you select"
+        case .accessibility: "Let Sendpoint read your selection"
         case .microphone: "Let Sendpoint hear you"
         case .microphoneSettings: "The microphone is switched off"
-        case .voiceModel: "One download, then it all stays on this Mac"
+        case .voiceModel: "One download, then it stays here"
         case .downloading: "Fetching the voice model"
         case .failedOffline: "No internet right now"
         case .failedOther: "That download didn't finish"
@@ -117,17 +117,17 @@ enum SetupHeroStage: Equatable {
         }
     }
 
-    /// Why, or what happens next. One sentence, two at most.
+    /// Why, or what happens next. One sentence, one line.
     var detail: String {
         switch self {
         case .accessibility:
-            "macOS asks once. It's how a typed note quotes the passage under your cursor."
+            "Asked once. A typed note quotes the passage you selected."
         case .microphone:
-            "Hold a key, speak, let go. Nothing is heard until you hold it."
+            "Hold a key to speak. Nothing is heard until you do."
         case .microphoneSettings:
-            "Switch Sendpoint on under Privacy & Security, Microphone, then come back."
+            "Turn Sendpoint on under Privacy & Security, Microphone."
         case .voiceModel:
-            "Speech is transcribed here, by a model on this Mac. Audio never leaves it."
+            "Transcribed on this Mac. Audio never leaves it."
         case .downloading:
             "About a minute on a good connection."
         case .failedOffline:
@@ -238,14 +238,11 @@ struct SetupView: View {
             Text(stage.headline)
                 .font(.ui(22, weight: .semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
             Text(stage.detail)
                 .font(.ui(13))
                 .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
                 .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -257,15 +254,14 @@ struct SetupView: View {
     @ViewBuilder
     private var control: some View {
         if case let .downloading(progress) = stage {
-            HStack(spacing: 10) {
-                Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
-                    .font(.mono(11))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-                CapabilityProgress(fraction: progress)
-                    .frame(width: 72)
-            }
-            .frame(height: 30)
+            // The number is the whole status: it climbs from the first byte
+            // through the CoreML compile and lands on 100 as the stage flips.
+            Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
+                .font(.mono(13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.25), value: progress)
+                .frame(height: 30)
         } else if let title = stage.actionTitle {
             InkButton(title, keys: "↩") { activate() }
                 .keyboardShortcut(.defaultAction)

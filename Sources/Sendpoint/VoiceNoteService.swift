@@ -241,9 +241,56 @@ private enum VoiceNoteError: LocalizedError {
     }
 }
 
+/// Fan-out for model preparation progress. Preparation is shared, so the
+/// caller that started it is not always the one watching: launch warm-up
+/// begins the download, then Setup asks to see it. Whoever subscribes gets
+/// the latest fraction at once and every one after.
+nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observers: [Int: @Sendable (Double) -> Void] = [:]
+    private var nextID = 0
+    private var latest: Double?
+
+    /// Registers `observer`, replaying the latest fraction if one exists.
+    /// Returns a token for `unsubscribe`.
+    @discardableResult
+    func subscribe(_ observer: @escaping @Sendable (Double) -> Void) -> Int {
+        lock.lock()
+        nextID += 1
+        let id = nextID
+        observers[id] = observer
+        let replay = latest
+        lock.unlock()
+        if let replay { observer(replay) }
+        return id
+    }
+
+    func unsubscribe(_ id: Int) {
+        lock.lock()
+        observers[id] = nil
+        lock.unlock()
+    }
+
+    func report(_ fraction: Double) {
+        lock.lock()
+        latest = fraction
+        let current = Array(observers.values)
+        lock.unlock()
+        for observer in current { observer(fraction) }
+    }
+
+    /// A new attempt starts from nothing; a stale fraction must not replay.
+    func reset() {
+        lock.lock()
+        latest = nil
+        lock.unlock()
+    }
+}
+
 /// Parakeet Unified 0.6B streaming (320ms tier). One decoder for the card and the note.
 actor LocalStreamingPreview {
     private let preparation = SharedAsyncPreparation<StreamingUnifiedAsrManager>()
+    private let progress = VoiceModelProgressRelay()
     private var generation = 0
     private var sessionOpen = false
     private var loggedFirstFeed = false
@@ -257,7 +304,9 @@ actor LocalStreamingPreview {
     }
 
     func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        _ = try await manager(onProgress: onProgress)
+        let token = progress.subscribe(onProgress)
+        defer { progress.unsubscribe(token) }
+        _ = try await manager()
     }
 
     func begin(onPartial: @escaping @Sendable (String) -> Void) async -> Int? {
@@ -351,13 +400,13 @@ actor LocalStreamingPreview {
         return offset > 0 ? buffer : nil
     }
 
-    private func manager(
-        onProgress: @escaping @Sendable (Double) -> Void = { _ in }
-    ) async throws -> StreamingUnifiedAsrManager {
+    private func manager() async throws -> StreamingUnifiedAsrManager {
+        let progress = progress
         let loaded = try await preparation.value {
+            progress.reset()
             let manager = StreamingUnifiedAsrManager(config: LocalVoiceModelFiles.streaming)
             try await manager.loadModels(
-                progressHandler: { @Sendable in onProgress($0.fractionCompleted) }
+                progressHandler: { @Sendable in progress.report($0.fractionCompleted) }
             )
             try await Self.prime(manager)
             Diag.log("voice model loaded")
