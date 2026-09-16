@@ -30,7 +30,7 @@ struct SettingsTemplatesPane: View {
                     .font(.ui(14, weight: .medium))
                     .padding(.horizontal, 12)
                     .frame(height: 34)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Ink.fill))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
                     .padding(.vertical, 10)
                     .accessibilityLabel("Template name")
             }
@@ -45,7 +45,7 @@ struct SettingsTemplatesPane: View {
                 .lineSpacing(4)
                 .lineLimit(4...14)
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Ink.fill))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
                 .padding(.vertical, 10)
                 .accessibilityLabel("Prompt")
             }

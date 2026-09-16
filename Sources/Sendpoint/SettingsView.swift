@@ -346,53 +346,6 @@ private struct SettingsStatusCard: View {
     }
 }
 
-// MARK: - Naming
-
-/// A small anchored prompt: type a name, press Return.
-struct NamePopover: View {
-    let prompt: String
-    let placeholder: String
-    @Binding var name: String
-    let problem: String?
-    let onCommit: () -> Void
-
-    @FocusState private var focused: Bool
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(prompt)
-                .font(.uiCaption)
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: $name)
-                .textFieldStyle(.plain)
-                .font(.ui(13))
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
-                .focused($focused)
-                .onSubmit(onCommit)
-            HStack(spacing: 6) {
-                if let problem {
-                    Text(problem)
-                        .font(.uiCaption)
-                        .foregroundStyle(Ink.amber(scheme))
-                } else {
-                    Keycap("↩", size: 10)
-                    Text("Create")
-                        .font(.uiCaption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .padding(14)
-        .frame(width: 250)
-        .font(.uiBody)
-        .onAppear {
-            DispatchQueue.main.async { focused = true }
-        }
-    }
-}
 
 // MARK: - Template dialogs
 

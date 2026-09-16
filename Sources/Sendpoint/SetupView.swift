@@ -597,9 +597,7 @@ struct ReadyMark: View {
     }
 
     private var ink: Color {
-        colorScheme == .dark
-            ? Color(red: 0.36, green: 0.80, blue: 0.54)
-            : Color(red: 0.17, green: 0.63, blue: 0.41)
+        Ink.green(colorScheme)
     }
 }
 

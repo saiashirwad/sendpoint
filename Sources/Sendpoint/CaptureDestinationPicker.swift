@@ -292,12 +292,12 @@ struct CaptureDestinationPanelSurface: View {
 
     var body: some View {
         CaptureDestinationList(rows: rows, selectedID: selectedID, onSelect: onSelect)
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(Ink.rim(colorScheme), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
             }
-        .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.14), radius: 14, y: 6)
         .padding(CaptureDestinationPanelLayout.shadowPadding)
         .frame(
             width: CaptureDestinationPanelLayout.panelSize(rowCount: rows.count).width,

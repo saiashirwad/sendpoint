@@ -19,7 +19,7 @@ struct OverlayPalette {
             OverlayPalette(
                 ink: .black,
                 paper: Color(white: 0.98).opacity(0.9),
-                amber: Color(red: 0.76, green: 0.42, blue: 0.0),
+                amber: Ink.amber(.light),
                 accent: Ink.accent(.light),
                 contentScheme: .light
             )
@@ -27,7 +27,7 @@ struct OverlayPalette {
             OverlayPalette(
                 ink: .white,
                 paper: Color(white: 0.06).opacity(0.94),
-                amber: Color(red: 1.0, green: 0.72, blue: 0.38),
+                amber: Ink.amber(.dark),
                 accent: Ink.accent(.dark),
                 contentScheme: .dark
             )

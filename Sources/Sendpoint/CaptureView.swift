@@ -28,7 +28,7 @@ struct CaptureView: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 40)
-                Divider()
+                Hairline()
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -41,7 +41,7 @@ struct CaptureView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            Hairline()
             if case .editing = model.state.session?.phase, !model.isNoteFrozen {
                 footer
             } else {
@@ -78,23 +78,18 @@ struct CaptureView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Spacer()
-            Button {
+            QuietButton("Discard", keys: "esc") {
                 model.send(.dismiss)
-            } label: {
-                ActionLabel(title: "Discard", shortcut: "esc")
             }
-            .foregroundStyle(.secondary)
 
-            Divider().frame(height: 14)
+            Hairline(axis: .vertical)
+                .frame(height: 14)
 
-            Button {
+            InkButton("Save", keys: "⌘↩") {
                 model.send(.save)
-            } label: {
-                ActionLabel(title: "Save", shortcut: "⌘↩")
             }
             .disabled(model.note.nonblank == nil)
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .frame(height: 36)
     }
@@ -150,15 +145,16 @@ struct CaptureView: View {
         case .editing, .none:
             EmptyView()
         case let .saveFailed(_, message, retryable, missing):
-            statusRow(message: message, color: .red) {
-                if retryable {
-                    Button("Retry") { model.send(.retry) }.buttonStyle(.borderedProminent)
-                } else {
-                    if missing {
-                        Button("Save to Current Stack") { model.saveToCurrentStack() }
-                            .buttonStyle(.borderedProminent)
+            statusRow(message: message) {
+                HStack(spacing: 8) {
+                    if retryable {
+                        InkButton("Retry") { model.send(.retry) }
+                    } else {
+                        if missing {
+                            InkButton("Save to Current Stack") { model.saveToCurrentStack() }
+                        }
+                        QuietButton("Discard") { model.send(.dismiss) }
                     }
-                    Button("Discard", role: .destructive) { model.send(.dismiss) }
                 }
             }
         default: EmptyView()
@@ -167,29 +163,14 @@ struct CaptureView: View {
 
     private func statusRow<Actions: View>(
         message: String,
-        color: Color,
         @ViewBuilder actions: () -> Actions
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(message, systemImage: "exclamationmark.circle")
+            Text(message)
                 .font(.uiCallout)
-                .foregroundStyle(color)
+                .foregroundStyle(Ink.amber(colorScheme))
                 .fixedSize(horizontal: false, vertical: true)
             actions()
         }
-    }
-}
-
-private struct ActionLabel: View {
-    let title: String
-    let shortcut: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.ui(12, weight: .medium))
-            Keycap(shortcut)
-        }
-        .contentShape(Rectangle())
     }
 }
