@@ -554,7 +554,7 @@
       border-radius: 0.35em;
       -webkit-box-decoration-break: clone; box-decoration-break: clone;
     }
-    .subs .w { opacity: 0; display: inline; transition: opacity 0.14s ease; }
+    .subs .w { opacity: 0; display: inline; transition: opacity 0.07s ease; }
     .subs .w.on { opacity: 1; }
     .subs .w.hot { color: #fff; }
     @media (prefers-color-scheme: dark) {
@@ -941,7 +941,7 @@
               </div>
               <div class="safari-tab">
                 <span class="safari-fav"><svg viewBox="0 0 24 24"><path d="M12.09 13.119c-.936 1.932-2.217 4.548-2.853 5.728-.616 1.074-1.127.931-1.532.029-1.406-3.321-4.293-9.144-5.651-12.409-.251-.601-.441-.987-.619-1.139-.181-.15-.554-.24-1.122-.271C.103 5.033 0 4.982 0 4.898v-.455l.052-.045c.924-.005 5.401 0 5.401 0l.051.045v.434c0 .119-.075.176-.225.176l-.564.031c-.485.029-.727.164-.727.436 0 .135.053.33.166.601 1.082 2.646 4.818 10.521 4.818 10.521l.136.046 2.411-4.81-.482-1.067-1.658-3.264s-.318-.654-.428-.872c-.728-1.443-.712-1.518-1.447-1.617-.207-.023-.313-.05-.313-.149v-.468l.06-.045h4.292l.113.037v.451c0 .105-.076.15-.227.15l-.308.047c-.792.061-.661.381-.136 1.422l1.582 3.252 1.758-3.504c.293-.64.233-.801.111-.947-.07-.084-.305-.22-.812-.24l-.201-.021c-.052 0-.098-.015-.145-.051-.045-.031-.067-.076-.067-.129v-.427l.061-.045c1.247-.008 4.043 0 4.043 0l.059.045v.436c0 .121-.059.178-.193.178-.646.03-.782.095-1.023.439-.12.186-.375.589-.646 1.039l-2.301 4.273-.065.135 2.792 5.712.17.048 4.396-10.438c.154-.422.129-.722-.064-.895-.197-.172-.346-.273-.857-.295l-.42-.016c-.061 0-.105-.014-.152-.045-.043-.029-.072-.075-.072-.119v-.436l.059-.045h4.961l.041.045v.437c0 .119-.074.18-.209.18-.648.03-1.127.18-1.443.421-.314.255-.557.616-.736 1.067 0 0-4.043 9.258-5.426 12.339-.525 1.007-1.053.917-1.503-.031-.571-1.171-1.773-3.786-2.646-5.71l.053-.036z"/></svg></span>
-                <span class="safari-title">CEK Machine - Wikipedia</span>
+                <span class="safari-title">SQLite WAL Mode - SQLite Documentation</span>
               </div>
             </div>
           </div>
@@ -958,52 +958,21 @@
               </div>
               <div class="msgs" id="msgs">
                 <div class="col" id="col">
-              <div class="user">I'm reading about the CEK machine and I'm stuck on closures. When a lambda becomes a value, what exactly gets captured—and which environment is used when that closure is applied? A tiny example would help.</div>
+              <div class="user">I'm reading about SQLite WAL mode and I'm confused about reader-writer concurrency. When a reader starts a long query while a writer commits new pages to the WAL, how does the reader get a consistent snapshot without locks—and what happens during a checkpoint? A concrete explanation would help.</div>
               <div class="assistant">
-                <p>In a CEK machine, a <strong>closure</strong> is essentially:</p>
-                <div class="math">⟨λx.e, ρ⟩</div>
-                <p>where <code>λx.e</code> is the lambda itself, and <code>ρ</code> is the <strong>environment that was current when the lambda was evaluated.</strong></p>
-                <p><span class="sel" id="s1">That saved environment gives meaning to the lambda’s <strong>free variables</strong>. Conceptually, only free variables need to be captured; many presentations simply store the whole current environment because it is simpler.</span></p>
-                <p>For example:</p>
-                <pre><code>let x = 10 in
-  let f = λy. x + y in
-    let x = 100 in
-      f 3</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>When CEK reaches:</p>
-                <pre><code>λy. x + y</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>the current environment contains:</p>
-                <pre><code>ρ = { x ↦ 10 }</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>so the lambda becomes the closure:</p>
-                <pre><code>⟨ λy. x + y, { x ↦ 10 } ⟩</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>Notice that <code>y</code> is <strong>not</strong> captured. It is bound by the lambda. <code>x</code> is free in the lambda body, so its meaning comes from the captured environment.</p>
-                <p>Later, at:</p>
-                <pre><code>f 3</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>the current calling environment might contain:</p>
-                <pre><code>{ x ↦ 100, f ↦ closure }</code><span class="copy" aria-hidden="true"></span></pre>
-                <p><span class="sel" id="s2">but CEK does <strong>not</strong> use that environment to evaluate the body of <code>f</code>.</span></p>
-                <p>Instead, when the closure is applied, CEK takes the closure's saved environment:</p>
-                <pre><code>{ x ↦ 10 }</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>and extends it with the parameter binding:</p>
-                <pre><code>{ x ↦ 10, y ↦ 3 }</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>Then it evaluates:</p>
-                <pre><code>x + y</code><span class="copy" aria-hidden="true"></span></pre>
-                <p>in that environment, producing:</p>
-                <div class="math">10 + 3 = 13</div>
-                <p>So the key rule is:</p>
+                <p>In SQLite's <strong>WAL (Write-Ahead Logging)</strong> mode, changes do not overwrite the main database file directly. Instead, transactions append new committed pages to a separate <code>.wal</code> file.</p>
+                <p><span class="sel" id="s1">When a reader begins a transaction, it records a read-mark in the shared-memory WAL index (.shm file), pointing to the last valid commit frame at that exact moment.</span></p>
+                <p>That read-mark freezes the reader's view to a point-in-time snapshot. When reading a page, SQLite checks the WAL index to see if a newer frame exists up to that read-mark. If not found, it reads the page from the main database file.</p>
+                <p>Writers continue appending newer frames to the end of the log:</p>
+                <pre><code>-- Writer appends frame 42, 43 to .wal
+-- Active reader's read-mark remains fixed at frame 40</code><span class="copy" aria-hidden="true"></span></pre>
+                <p><span class="sel" id="s2">Writers never block readers because writers append to the end of the log file, while readers only scan frames up to their established read-mark.</span></p>
+                <p>Later comes <strong>checkpointing</strong>, which transfers committed WAL pages back into the main database file:</p>
                 <blockquote id="s3" class="sel">
-                  <p><strong>Lambda creation:</strong> save the current environment.</p>
-                  <p><strong>Closure application:</strong> restore that saved environment and extend it with the argument binding.</p>
+                  <p><strong>Checkpoint rule:</strong> SQLite cannot truncate or overwrite WAL frames beyond the oldest active reader's read-mark.</p>
+                  <p>If any reader is still active on an older frame, earlier frames remain pinned in the WAL.</p>
                 </blockquote>
-                <p>Schematically:</p>
-                <div class="math">⟨λx.e, ρ, k⟩ &nbsp;⇒&nbsp; closure (λx.e, ρ)</div>
-                <p>and applying</p>
-                <div class="math">(λx.e, ρ<sub>closure</sub>) v</div>
-                <p>causes evaluation of</p>
-                <div class="math">e</div>
-                <p>under</p>
-                <div class="math">ρ<sub>closure</sub>[x ↦ v]</div>
-                <p>—not under the caller's environment.</p>
-                <p>This is exactly how the CEK machine implements <strong>lexical scoping</strong>.</p>
+                <p>This design gives snapshot isolation without read locks, but a stalled reader prevents WAL truncation, causing the log file to grow on disk.</p>
                 <hr>
               </div>
                 </div>
@@ -1031,31 +1000,27 @@
                   <svg class="term-mark" viewBox="0 0 136 84"><path fill="#d16c4d" d="M16 0h104v34h16v16h-16v18H16V50H0V34h16zM32 68h8v16h-8zM48 68h8v16h-8zM80 68h8v16h-8zM96 68h8v16h-8z"/><path fill="#000" d="M32 17h8v16h-8zM96 17h8v16h-8z"/></svg>
                   <div class="term-row"><b>Claude Code</b> <span class="d">v2.1.273</span></div>
                   <div class="term-row d">Opus 5 (1M context) with medium effort · Claude Max</div>
-                  <div class="term-row d">~/code/cek-machine</div>
+                  <div class="term-row d">~/code/sync-engine</div>
                 </div>
                 <div class="term-row"> </div>
-                <div class="term-row u">❯ explain how apply works in src/cek.ts</div>
+                <div class="term-row u">❯ explain the conflict resolution architecture in src/sync/reconciler.ts</div>
                 <div class="term-row"> </div>
-                <div class="term-row">⏺ <b>Read</b>(src/cek.ts)</div>
-                <div class="term-row d">  ⎿  Read 64 lines</div>
+                <div class="term-row">⏺ <b>Read</b>(src/sync/reconciler.ts)</div>
+                <div class="term-row d">  ⎿  Read 78 lines</div>
                 <div class="term-row"> </div>
-                <div class="term-row">⏺ <span class="ic">apply</span> is where a closure actually runs. The machine never</div>
-                <div class="term-row">  substitutes; it reuses the environment the closure captured.</div>
+                <div class="term-row">⏺ <span class="ic">reconcile</span> resolves offline client mutations against the server log.</div>
+                <div class="term-row">  The client never waits for network confirmation before updating local state.</div>
                 <div class="term-row"> </div>
-                <div class="term-row">  <span class="k">case</span> <span class="s">"apply"</span>: {</div>
-                <div class="term-row">    <span class="k">const</span> { param, body, env } = frame.fn;</div>
-                <div class="term-row">    <span class="tsel" id="t1"><span class="k">const</span> next = env.<span class="f">extend</span>(param, value);</span></div>
-                <div class="term-row">    <span class="k">return</span> { control: body, env: next, kont: frame.kont };</div>
+                <div class="term-row">  <span class="k">async function</span> <span class="f">reconcileBatch</span>(localLog, remoteBatch) {</div>
+                <div class="term-row">    <span class="tsel" id="t1"><span class="k">const</span> uncommitted = <span class="k">await</span> localLog.<span class="f">pendingMutations</span>();</span></div>
+                <div class="term-row">    <span class="tsel" id="t2"><span class="k">await</span> localDb.<span class="f">rollbackToSnapshot</span>(remoteBatch.baseRevision);</span></div>
+                <div class="term-row">    <span class="tsel" id="t3"><span class="k">await</span> localDb.<span class="f">applyRemote</span>(remoteBatch.changes);</span></div>
+                <div class="term-row">    <span class="k">return</span> <span class="k">await</span> localLog.<span class="f">rebaseAndReplay</span>(uncommitted);</div>
                 <div class="term-row">  }</div>
                 <div class="term-row"> </div>
-                <div class="term-row">  That <span class="ic">extend</span> call is the whole trick. <span class="tsel" id="t2">The caller's environment is dropped,</span></div>
-                <div class="term-row">  and the body continues in the closure's own, plus one binding.</div>
-                <div class="term-row"> </div>
-                <div class="term-row">  Environments are linked frames, so <span class="ic">extend</span> is O(1).</div>
-                <div class="term-row">  <span class="tsel" id="t3">Old environments stay valid, and closures can share them.</span></div>
-                <div class="term-row"> </div>
-                <div class="term-row">  That is what makes scope lexical: a name resolves where the</div>
-                <div class="term-row">  function was written, not where it is called.</div>
+                <div class="term-row">  Optimistic UI mutations apply immediately to the local SQLite store.</div>
+                <div class="term-row">  When server changes arrive, the local store rewinds to the common base,</div>
+                <div class="term-row">  applies upstream changes, and replays pending mutations on top.</div>
               </div>
             </div>
             <div class="term-foot">
@@ -1195,7 +1160,7 @@
         if (prev) prev.classList.remove("hot");
         prev = span;
         energy = 0.55 + Math.random() * 0.45;
-        await wait(/[,.?]$/.test(w) ? 340 : 120 + w.length * 22 + Math.random() * 60, signal);
+        await wait(/[,.?]$/.test(w) ? 170 : 60 + w.length * 11 + Math.random() * 30, signal);
       }
       if (prev) prev.classList.remove("hot");
     };
@@ -1249,12 +1214,12 @@
       const msgs = $("msgs"), col = $("col"), composer = $("composer"), ctext = $("ctext");
       const PH = '<span class="ph">Ask ChatGPT</span>';
       const replyBlocks = [
-        { cls: "", text: "Yes—those notes fit together into the right model. At lambda creation, the CEK machine pairs the lambda with the current lexical environment. Only the free variables are semantically relevant, although a simple interpreter can retain the whole environment because persistent environment frames are cheap to share." },
-        { cls: "h", text: "Walking through the example" },
-        { cls: "", text: "When λy. x + y is evaluated, x is free and resolves to 10, while y is bound by the lambda itself. The resulting closure therefore carries the environment in which x maps to 10. Later, f 3 may be called from an environment where x maps to 100, but that caller binding does not determine the meaning of x inside f." },
-        { cls: "", text: "Applying the closure starts the body in the captured environment extended with y mapping to 3. The body sees x = 10 and y = 3, so it evaluates to 13. If the machine used the caller's x = 100 instead, the result would be 103—that would be dynamic scoping, not lexical scoping." },
-        { cls: "h", text: "One useful precision" },
-        { cls: "", text: "Saying the machine “restores” the saved environment does not mean it mutates one global environment. It transitions into a new CEK state whose environment component is the closure's saved environment plus the parameter binding. The continuation still remembers where computation should resume after the body produces its value." },
+        { cls: "", text: "You have the snapshot mechanics right, but your second note contains an important misconception: WAL mode allows concurrent readers alongside a writer, but it does not allow infinite concurrent writes. SQLite still permits exactly one writer process at any moment." },
+        { cls: "h", text: "Where your mental model is accurate" },
+        { cls: "", text: "Your first and fourth notes are completely spot on. When a reader starts, it samples the WAL index in shared memory (the .shm file). It only scans frames up to that recorded mark, which gives you snapshot isolation without taking shared read locks on the database file." },
+        { cls: "", text: "And your realization about disk growth identifies the real operational hazard. A stalled reader never causes writers to fail—writers keep appending happily. But the checkpoint process cannot advance past the oldest active read-mark, so earlier WAL frames cannot be moved to the database file or truncated. That is why slow background analytics can balloon your WAL file into gigabytes." },
+        { cls: "h", text: "The correction to keep in mind" },
+        { cls: "", text: "Remember that concurrency in WAL mode is strictly single-writer, multi-reader. If two connection pools attempt to commit at once, the second writer will still encounter an SQLITE_BUSY error or wait on the busy timeout handler." },
       ];
       let hls = [], added = [];
       const scrollDown = () => msgs.scrollTo({ top: msgs.scrollHeight, behavior: "smooth" });
@@ -1262,10 +1227,10 @@
       const app = {
         name: "Safari", win: $("doc"), scroller: msgs,
         notes: [
-          { sel: "s1", time: "2:14 PM", said: "so only the free variables matter, but storing the whole environment is the simpler model" },
-          { sel: "s2", time: "2:15 PM", said: "the caller has x equals one hundred, but the function body still restores x equals ten from the closure" },
-          { sel: "s3", time: "2:16 PM", said: "creation saves the environment; application restores it and adds the argument binding" },
-          { sel: null, time: "2:17 PM", said: "right, so that is lexical scoping rather than dynamic scoping" },
+          { sel: "s1", time: "2:14 PM", said: "wait so the reader doesn't even touch or lock the main db file, it just grabs an integer index in memory and walks the log for changes before that number?" },
+          { sel: "s2", time: "2:15 PM", said: "ok so writers and readers literally never interfere with each other, meaning writes are basically free and we can run infinite concurrent writes without any blocking whatsoever" },
+          { sel: "s3", time: "2:16 PM", said: "wait hang on, so if a background query hangs, does that mean writes start failing, or does the wal file just expand forever because checkpoint can't touch it?" },
+          { sel: null, time: "2:17 PM", said: "right, so writes still succeed, but disk usage explodes because old frames can't be recycled until every slow reader drops its read-mark" },
         ],
         async select(sel, signal) {
           const range = document.createRange();
@@ -1363,7 +1328,7 @@
       const tscroll = $("tscroll"), tcol = $("tcol"), tinput = $("tinput");
       const CURSOR = '<span class="term-cursor"></span>';
       const SPINNER = "·✢✳✶✻✽✻✶✳✢";
-      const replyWords = "Right on all three. extend links one new frame onto the closure's environment, so nothing is copied, which is why old environments stay valid and closures can share them. And the body never needs the caller's environment: anything it uses was captured when the closure was made. That is the lexical part.".split(" ");
+      const replyWords = "You got the core rebase concept right, but there is one critical detail you missed: the in-flight mutations are kept in an append-only SQLite journal, not just in-memory variables. If the app crashes during rollback, nothing is lost. When the rebase runs, it applies remote changes first and then replays your uncommitted queue on top. That gives you zero-latency local edits while guaranteeing eventual consistency with the server.".split(" ");
       let added = [];
       const row = (cls, html) => {
         const r = document.createElement("div");
@@ -1388,10 +1353,10 @@
       const app = {
         name: "Ghostty", win: $("term"), scroller: tscroll,
         notes: [
-          { sel: "t1", time: "2:14 PM", said: "does extend copy the whole environment, or just put one frame on top" },
-          { sel: "t2", time: "2:15 PM", said: "wait, dropped? what if the body needs something from the caller" },
-          { sel: "t3", time: "2:16 PM", said: "ok so frames are shared, that answers my first one. nothing gets copied" },
-          { sel: null, time: "2:17 PM", said: "so a closure only ever sees where it was written. that's the lexical part" },
+          { sel: "t1", time: "2:14 PM", said: "so the client just writes directly to its own local log first, meaning the UI never ever blocks on network latency or drops offline frames" },
+          { sel: "t2", time: "2:15 PM", said: "wait, if it rolls back the entire local db to the base revision, wouldn't that wipe out edits the user literally just typed while syncing?" },
+          { sel: "t3", time: "2:16 PM", said: "oh wait, the uncommitted mutations were already grabbed into memory right before the rollback, so they're safe to re-apply" },
+          { sel: null, time: "2:17 PM", said: "so optimistic mutations get rebased on top of remote changes like git. the local database is just a scratchpad with transactional replay" },
         ],
         async select(sel, signal) {
           const cells = sel.querySelectorAll("i");
@@ -1451,9 +1416,9 @@
       const passage = (id) => $(id).textContent.replace(/\s+/g, " ").trim();
       const STACKS = [
         { name: "Reading notes", notes: [
-          { t: "2:09 PM", q: "A CEK machine is an abstract machine for evaluating call-by-value lambda calculus. Its state has three parts: a control string, an environment, and a continuation.", b: "control, environment, continuation. so the name is literally the three registers" },
-          { t: "2:10 PM", q: "The continuation is a stack of frames, each recording what to do once the current expression has been evaluated.", b: "the continuation is just the call stack made explicit. that's the part I kept glossing over" },
-          { t: "2:12 PM", b: "look up how CESK differs, I think the S is a store for mutable cells" },
+          { t: "2:09 PM", q: "In write-ahead logging, all modifications are written to a separate WAL file before changes are applied to the database.", b: "so writes don't touch the main db file directly, they just append to the log first" },
+          { t: "2:10 PM", q: "The WAL index is maintained in shared memory to accelerate searches for page frames without disk I/O.", b: "the shm file is just an index for the log, so checking page versions is memory speed" },
+          { t: "2:12 PM", b: "check if our backup script runs into checkpoint locks during nightly batch writes" },
           { t: "2:14 PM", q: passage("s1"), b: safari.notes[0].said },
           { t: "2:15 PM", q: passage("s2"), b: safari.notes[1].said },
           { t: "2:16 PM", q: passage("s3"), b: safari.notes[2].said },
@@ -1469,7 +1434,7 @@
           { t: "9:34 AM", b: "demo the new capture flow on thursday, keep it under five minutes" },
         ] },
       ];
-      const EDIT = { index: 5, typed: ", not the caller's" };
+      const EDIT = { index: 5, typed: " until we kill the reader" };
       const ROW = 36, TOP = 6;
       for (const stack of STACKS) {
         const row = document.createElement("div");
@@ -1581,23 +1546,23 @@
       tether(sel ? sel.textContent : null);
       capsuleState("live");
       capsule.classList.add("on");
-      await wait(450, signal);
+      await wait(225, signal);
 
       await speak(note.said, signal);
-      await wait(250, signal);
+      await wait(125, signal);
 
       capsuleState("busy");
-      await wait(350, signal);
+      await wait(175, signal);
       subs.classList.remove("on");
-      await wait(650, signal);
+      await wait(325, signal);
 
       capsule.classList.remove("on");
       const fly = flyCard(sel ? sel.textContent : null, note.said, signal);
       fly.catch(() => {});
-      await wait(380, signal);
+      await wait(200, signal);
       if (sel) app.unselect(false);
       await fly;
-      await wait(500, signal);
+      await wait(250, signal);
     };
 
     // idempotent: clears every app and every overlay, whatever state a run left

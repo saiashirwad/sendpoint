@@ -42,15 +42,23 @@ These are my reading notes, captured in order while I read. Each entry is either
 
 ## 1
 
-> Because the closure captures the environment at definition time, a CEK machine never substitutes. It extends the environment instead.
+> When a reader begins a transaction, it records a read-mark in the shared-memory WAL index (.shm file), pointing to the last valid commit frame at that exact moment.
 
-wait, doesn't the environment grow forever then? when does anything get pruned
+wait so the reader doesn't even touch or lock the main db file, it just grabs an integer index in memory and walks the log for changes before that number?
 
 _2:14 PM_
 
 ## 2
 
-actually I think I get it. environment is data, continuation is control
+> Checkpoint rule: SQLite cannot truncate or overwrite WAL frames beyond the oldest active reader's read-mark.
+
+wait hang on, so if a background query hangs, does that mean writes start failing, or does the wal file just expand forever because checkpoint can't touch it?
+
+_2:16 PM_
+
+## 3
+
+right, so writes still succeed, but disk usage explodes because old frames can't be recycled until every slow reader drops its read-mark
 
 _2:17 PM_
 ```
