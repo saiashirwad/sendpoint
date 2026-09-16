@@ -1,7 +1,7 @@
 #!/bin/bash
 # Cut a distributable build, entirely from this Mac.
 #
-#   ./release.sh 1.2                         build, notarize, staple, zip
+#   ./release.sh 1.2                         build, notarize, staple, DMG
 #   ./release.sh 1.2 --publish               ...then publish on GitHub
 #   ./release.sh 1.2 --ad-hoc                build without notarizing
 #   ./release.sh 1.2 --ad-hoc --publish      ...then publish on GitHub
@@ -15,7 +15,7 @@
 #
 # Publishing also refreshes a hard-coded website download URL when present,
 # commits it with the version bump, and deploys the site with wrangler. The
-# current /download route resolves the latest GitHub release dynamically.
+# current /download route resolves the latest GitHub DMG dynamically.
 #
 # One-time setup:
 #   1. Sparkle's update-signing key is generated independently of Apple:
@@ -74,8 +74,8 @@ fi
 
 APP_NAME="Sendpoint"
 APP="dist/${APP_NAME}.app"
-ARCHIVE="dist/Sendpoint-${VERSION}.zip"
-LATEST_ARCHIVE="dist/Sendpoint.zip"
+ARCHIVE="dist/Sendpoint-${VERSION}.dmg"
+LATEST_ARCHIVE="dist/Sendpoint.dmg"
 CHECKSUM="${ARCHIVE}.sha256"
 NOTARY_PROFILE="${NOTARY_PROFILE:-sendpoint}"
 APPCAST="web/public/appcast.xml"
@@ -125,7 +125,7 @@ if [ "$PUBLISH" = true ]; then
 fi
 
 SITE_PAGE="web/public/index.html"
-DOWNLOAD_URL="https://github.com/saiashirwad/sendpoint/releases/download/v${VERSION}/Sendpoint-${VERSION}.zip"
+DOWNLOAD_URL="https://github.com/saiashirwad/sendpoint/releases/download/v${VERSION}/Sendpoint-${VERSION}.dmg"
 
 publish_github_release() {
     if gh release view "v${VERSION}" >/dev/null 2>&1; then
@@ -200,8 +200,19 @@ if [ "$AD_HOC" = false ]; then
     spctl -a -t exec -vv "$APP"
 fi
 
-echo "==> Archiving ${ARCHIVE}"
-ditto -c -k --keepParent "$APP" "$ARCHIVE"
+echo "==> Creating ${ARCHIVE}"
+DMG_ROOT=$(mktemp -d)
+trap 'rm -rf "$DMG_ROOT"' EXIT
+ditto "$APP" "${DMG_ROOT}/${APP_NAME}.app"
+ln -s /Applications "${DMG_ROOT}/Applications"
+hdiutil create \
+    -volname "$APP_NAME" \
+    -srcfolder "$DMG_ROOT" \
+    -ov \
+    -format UDZO \
+    "$ARCHIVE"
+rm -rf "$DMG_ROOT"
+trap - EXIT
 cp "$ARCHIVE" "$LATEST_ARCHIVE"
 (
     cd dist
@@ -233,7 +244,7 @@ if [ "$PUBLISH" = true ]; then
         echo "==> Website uses the dynamic /download route"
     else
         echo "==> Pointing the website at ${DOWNLOAD_URL}"
-        sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.zip#${DOWNLOAD_URL}#" "$SITE_PAGE"
+        sed -i '' -E "s#https://github.com/saiashirwad/sendpoint/releases/download/v[0-9.]+/Sendpoint-[0-9.]+\.(zip|dmg)#${DOWNLOAD_URL}#" "$SITE_PAGE"
         if ! grep -q "$DOWNLOAD_URL" "$SITE_PAGE"; then
             echo "Could not find the download link in ${SITE_PAGE}." >&2
             exit 1

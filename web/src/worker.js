@@ -3,7 +3,7 @@
 // depend on a GitHub API request succeeding at click time.
 
 const REPO = "saiashirwad/sendpoint";
-const DOWNLOAD_URL = `https://github.com/${REPO}/releases/latest/download/Sendpoint.zip`;
+const DOWNLOAD_URL = `https://github.com/${REPO}/releases/latest/download/Sendpoint.dmg`;
 
 export default {
   async fetch(request, env, ctx) {

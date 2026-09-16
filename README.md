@@ -89,7 +89,7 @@ defaults delete app.sendpoint
 swift test                  # tests
 ./build.sh                  # debug app bundle
 ./install.sh                # replace the installed app and launch it
-./release.sh 1.6 --ad-hoc --publish  # Sparkle-sign, zip, publish; no paid Apple account
+./release.sh 1.6 --ad-hoc --publish  # Sparkle-sign, package as DMG, publish; no paid Apple account
 ./release.sh 1.6 --publish           # also Developer ID-sign and notarize
 ./release.sh 1.6 --ad-hoc --resume-publish  # finish a failed upload/deploy
 ```
