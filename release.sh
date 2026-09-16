@@ -75,6 +75,7 @@ fi
 APP_NAME="Sendpoint"
 APP="dist/${APP_NAME}.app"
 ARCHIVE="dist/Sendpoint-${VERSION}.zip"
+LATEST_ARCHIVE="dist/Sendpoint.zip"
 CHECKSUM="${ARCHIVE}.sha256"
 NOTARY_PROFILE="${NOTARY_PROFILE:-sendpoint}"
 APPCAST="web/public/appcast.xml"
@@ -129,7 +130,7 @@ DOWNLOAD_URL="https://github.com/saiashirwad/sendpoint/releases/download/v${VERS
 publish_github_release() {
     if gh release view "v${VERSION}" >/dev/null 2>&1; then
         echo "==> Replacing assets on existing GitHub release v${VERSION}"
-        gh release upload "v${VERSION}" "$ARCHIVE" "$CHECKSUM" --clobber
+        gh release upload "v${VERSION}" "$ARCHIVE" "$LATEST_ARCHIVE" "$CHECKSUM" --clobber
         return
     fi
 
@@ -141,12 +142,12 @@ publish_github_release() {
             '' \
             'Move **Sendpoint.app** to `/Applications` and try to open it once.' \
             'If macOS blocks it, open **System Settings > Privacy & Security**, scroll to **Security**, click **Open Anyway**, then confirm **Open**.')
-        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
+        gh release create "v${VERSION}" "$ARCHIVE" "$LATEST_ARCHIVE" "$CHECKSUM" \
             --title "${APP_NAME} ${VERSION}" \
             --generate-notes \
             --notes "$RELEASE_NOTES"
     else
-        gh release create "v${VERSION}" "$ARCHIVE" "$CHECKSUM" \
+        gh release create "v${VERSION}" "$ARCHIVE" "$LATEST_ARCHIVE" "$CHECKSUM" \
             --title "${APP_NAME} ${VERSION}" \
             --generate-notes
     fi
@@ -161,7 +162,7 @@ if [ "$RESUME_PUBLISH" = true ]; then
         echo "==> Pushing release commit and tag"
         git push --atomic origin HEAD "refs/tags/v${VERSION}"
     fi
-    for required in "$ARCHIVE" "$CHECKSUM" "$APPCAST"; do
+    for required in "$ARCHIVE" "$LATEST_ARCHIVE" "$CHECKSUM" "$APPCAST"; do
         if [ ! -f "$required" ]; then
             echo "Cannot resume: ${required} is missing." >&2
             echo "Do not rebuild an already-tagged release; publish a new version instead." >&2
@@ -201,6 +202,7 @@ fi
 
 echo "==> Archiving ${ARCHIVE}"
 ditto -c -k --keepParent "$APP" "$ARCHIVE"
+cp "$ARCHIVE" "$LATEST_ARCHIVE"
 (
     cd dist
     shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$CHECKSUM")"
