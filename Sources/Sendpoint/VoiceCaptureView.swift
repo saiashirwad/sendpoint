@@ -1,36 +1,56 @@
 import AppKit
 import SwiftUI
 
+/// Geometry shared by the capsule, the card, and the one panel that hosts
+/// whichever of them is showing.
 enum VoiceCaptureLayout {
     static let pillHeight: CGFloat = 32
     static let shadowPadding: CGFloat = 24
-    static let previewWidth: CGFloat = 420
-    static let previewLineSpacing: CGFloat = 2
-    static let previewPaddingY: CGFloat = 10
+    /// Wide enough for the capsule plus a one-line failure message; the
+    /// transparent margin gives the anchored destination popover room.
+    static let panelWidth: CGFloat = 680
 
-    static func previewLineHeight(fontSize: CGFloat) -> CGFloat {
+    static let cardWidth: CGFloat = 420
+    static let cardPaddingX: CGFloat = 14
+    static let cardPaddingTop: CGFloat = 10
+    static let cardPaddingBottom: CGFloat = 8
+    /// The destination row under the transcript: tall enough for the orb's
+    /// loudest bloom, no taller.
+    static let cardFooterHeight: CGFloat = 24
+    static let cardFooterGap: CGFloat = 6
+    static let transcriptLineSpacing: CGFloat = 2
+
+    static var transcriptWidth: CGFloat { cardWidth - cardPaddingX * 2 }
+
+    static func transcriptLineHeight(fontSize: CGFloat) -> CGFloat {
         fontSize + 4.5
     }
 
-    static func previewTextHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
+    static func transcriptHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
         let lines = VoiceSettings.clampedPreviewLines(lines)
-        let lineHeight = previewLineHeight(fontSize: fontSize)
-        return CGFloat(lines) * lineHeight + CGFloat(max(lines - 1, 0)) * previewLineSpacing
+        let lineHeight = transcriptLineHeight(fontSize: fontSize)
+        return CGFloat(lines) * lineHeight + CGFloat(max(lines - 1, 0)) * transcriptLineSpacing
     }
 
-    static func previewHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
-        previewTextHeight(lines: lines, fontSize: fontSize) + previewPaddingY * 2
+    static func cardHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
+        cardPaddingTop + transcriptHeight(lines: lines, fontSize: fontSize)
+            + cardFooterGap + cardFooterHeight + cardPaddingBottom
     }
 
-    static func previewPanelSize(lines: Int, fontSize: CGFloat) -> NSSize {
-        NSSize(
-            width: previewWidth + shadowPadding * 2,
-            height: previewHeight(lines: lines, fontSize: fontSize) + shadowPadding * 2
-        )
+    /// From the footer's bottom edge to the card's top edge. The destination
+    /// picker hangs off the footer but must clear the whole card.
+    static func cardAnchorHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
+        cardHeight(lines: lines, fontSize: fontSize) - cardPaddingBottom
+    }
+
+    static func panelSize(card: Bool, lines: Int, fontSize: CGFloat) -> NSSize {
+        let body = card ? cardHeight(lines: lines, fontSize: fontSize) : pillHeight
+        return NSSize(width: panelWidth, height: body + shadowPadding * 2)
     }
 }
 
-/// A compact recording capsule that stays visible below its destination picker.
+/// The recording overlay: a compact capsule, or, when live captions are on,
+/// one card carrying the transcript with the same controls along its foot.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
@@ -42,58 +62,19 @@ struct VoiceCaptureView: View {
     private var appeared: Bool { model.state.session?.mode == .voice }
 
     private var palette: OverlayPalette { .against(systemScheme) }
+    private var showsCard: Bool { model.transcriptionPreview }
+    private var lineCount: Int { model.transcriptionPreviewLines }
+    private var fontSize: CGFloat { CGFloat(model.transcriptionPreviewFontSize) }
+    private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
 
     var body: some View {
-        HStack(spacing: 10) {
-            CaptureDestinationButton(model: model, mode: .voice, fontSize: 11.5)
-                .foregroundStyle(palette.ink.opacity(0.9))
-                .frame(maxWidth: 180, alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false)
-            if let stack = model.targetStack {
-                Text("\(stack.noteCount)")
-                    .font(.mono(11))
-                    .foregroundStyle(palette.ink.opacity(0.5))
-                    .padding(.leading, -4)
-            }
-            if let tether {
-                divider
-                Text(tether)
-                    .font(.mono(11))
-                    .foregroundStyle(palette.ink.opacity(0.55))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .transition(.opacity.combined(with: .offset(x: 6)))
-            }
-            MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent)
-                .frame(width: 22, height: 22)
-                .padding(.leading, 2)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(accessibilityLabel)
-            if let failureMessage {
-                Text(failureMessage)
-                    .font(.ui(11.5, weight: .medium))
-                    .foregroundStyle(palette.amber)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .transition(.opacity.combined(with: .offset(x: -6)))
+        Group {
+            if showsCard {
+                card
+            } else {
+                pill
             }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
-        .font(.uiBody)
-        .frame(height: VoiceCaptureLayout.pillHeight)
-        .background(Capsule().fill(palette.paper))
-        .overlay(
-            Capsule().strokeBorder(
-                LinearGradient(
-                    colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 0.5
-            )
-        )
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .scaleEffect(appeared ? 1 : 0.92)
         .opacity(appeared ? 1 : 0)
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: appeared)
@@ -101,11 +82,148 @@ struct VoiceCaptureView: View {
         .animation(.easeOut(duration: 0.18), value: failureMessage)
         .environment(\.colorScheme, palette.contentScheme)
         .padding(VoiceCaptureLayout.shadowPadding)
-        // The hosting panel is wider than the capsule so the tether and a
+        // The hosting panel is wider than the overlay so the tether and a
         // failure message can appear later without the window resizing.
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Voice capture")
+    }
+
+    // MARK: - Capsule
+
+    private var pill: some View {
+        HStack(spacing: 10) {
+            destination(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
+            noteCount
+            if let tether {
+                divider
+                tetherText(tether)
+            }
+            orb
+                .padding(.leading, 2)
+            failure
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 10)
+        .font(.uiBody)
+        .frame(height: VoiceCaptureLayout.pillHeight)
+        .background(Capsule().fill(palette.paper))
+        .overlay(Capsule().strokeBorder(rim, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+    }
+
+    // MARK: - Card
+
+    private var card: some View {
+        let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
+            transcriptBody
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: VoiceCaptureLayout.transcriptHeight(lines: lineCount, fontSize: fontSize),
+                    maxHeight: VoiceCaptureLayout.transcriptHeight(lines: lineCount, fontSize: fontSize),
+                    alignment: .topLeading
+                )
+            HStack(spacing: 10) {
+                destination(
+                    rowHeight: VoiceCaptureLayout.cardFooterHeight,
+                    anchorHeight: VoiceCaptureLayout.cardAnchorHeight(lines: lineCount, fontSize: fontSize)
+                )
+                noteCount
+                if let tether {
+                    divider
+                    tetherText(tether)
+                }
+                Spacer(minLength: 8)
+                failure
+                orb
+            }
+            .font(.uiBody)
+            .frame(height: VoiceCaptureLayout.cardFooterHeight)
+        }
+        .padding(.horizontal, VoiceCaptureLayout.cardPaddingX)
+        .padding(.top, VoiceCaptureLayout.cardPaddingTop)
+        .padding(.bottom, VoiceCaptureLayout.cardPaddingBottom)
+        .frame(width: VoiceCaptureLayout.cardWidth)
+        .background(shape.fill(palette.paper.opacity(paperOpacity)))
+        .overlay(shape.strokeBorder(rim, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
+        .animation(.easeOut(duration: 0.22), value: transcript.rows.map(\.id))
+    }
+
+    @ViewBuilder
+    private var transcriptBody: some View {
+        if transcript.rows.isEmpty {
+            VoiceTranscriptWaiting(ink: palette.ink)
+        } else {
+            VoiceTranscriptLines(
+                rows: transcript.rows,
+                overflow: transcript.overflow,
+                ink: palette.ink,
+                fontSize: fontSize
+            )
+        }
+    }
+
+    private var transcript: (rows: [VoiceTranscriptRow], overflow: Bool) {
+        LiveTranscriptPreview.window(
+            LiveTranscriptPreview.lines(
+                for: model.state.session?.liveTranscript ?? "",
+                width: VoiceCaptureLayout.transcriptWidth,
+                font: .ui(fontSize)
+            ),
+            max: lineCount
+        )
+    }
+
+    // MARK: - Shared controls
+
+    private func destination(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
+        CaptureDestinationButton(
+            model: model, mode: .voice, fontSize: 11.5,
+            rowHeight: rowHeight, anchorHeight: anchorHeight
+        )
+        .foregroundStyle(palette.ink.opacity(0.9))
+        .frame(maxWidth: 180, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var noteCount: some View {
+        if let stack = model.targetStack {
+            Text("\(stack.noteCount)")
+                .font(.mono(11))
+                .foregroundStyle(palette.ink.opacity(0.5))
+                .padding(.leading, -4)
+        }
+    }
+
+    private func tetherText(_ tether: String) -> some View {
+        Text(tether)
+            .font(.mono(11))
+            .foregroundStyle(palette.ink.opacity(0.55))
+            .lineLimit(1)
+            .fixedSize()
+            .transition(.opacity.combined(with: .offset(x: 6)))
+    }
+
+    private var orb: some View {
+        MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent)
+            .frame(width: 22, height: 22)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var failure: some View {
+        if let failureMessage {
+            Text(failureMessage)
+                .font(.ui(11.5, weight: .medium))
+                .foregroundStyle(palette.amber)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .transition(.opacity.combined(with: .offset(x: -6)))
+        }
     }
 
     private var divider: some View {
@@ -113,6 +231,14 @@ struct VoiceCaptureView: View {
             .fill(palette.ink.opacity(0.12))
             .frame(width: 1, height: 12)
             .transition(.opacity)
+    }
+
+    private var rim: LinearGradient {
+        LinearGradient(
+            colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     // MARK: - Copy
@@ -140,9 +266,12 @@ struct VoiceCaptureView: View {
 
     private var accessibilityLabel: String {
         let destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
+        let transcript = showsCard && !self.transcript.rows.isEmpty
+            ? " Live transcript: \(self.transcript.rows.map(\.text).joined(separator: " "))"
+            : ""
         switch model.state.session?.phase {
-        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)"
-        case .transcribing: return "Voice body: transcribing.\(destination)"
+        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)\(transcript)"
+        case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
         case let .failed(message): return "Voice body: \(message)"
         case .saving: return "Voice body: saving.\(destination)"
         default: return ""
@@ -150,114 +279,22 @@ struct VoiceCaptureView: View {
     }
 }
 
-/// Live captions in their own panel, so the pill's layout never owns this card.
-struct VoicePreviewCard: View {
-    @Bindable var model: CaptureController
-    @Environment(\.colorScheme) private var systemScheme
-
-    private var palette: OverlayPalette { .against(systemScheme) }
-    private var isVoice: Bool {
-        model.transcriptionPreview && model.state.session?.mode == .voice
-    }
-    private var lineCount: Int { model.transcriptionPreviewLines }
-    private var fontSize: CGFloat { CGFloat(model.transcriptionPreviewFontSize) }
-    private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
-
-    var body: some View {
-        Group {
-            if isVoice {
-                card
-            }
-        }
-        .scaleEffect(isVoice ? 1 : 0.92)
-        .opacity(isVoice ? 1 : 0)
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: isVoice)
-        .animation(.easeOut(duration: 0.22), value: layout.rows.map(\.id))
-        .environment(\.colorScheme, palette.contentScheme)
-        .padding(VoiceCaptureLayout.shadowPadding)
-        .frame(
-            width: VoiceCaptureLayout.previewWidth + VoiceCaptureLayout.shadowPadding * 2,
-            height: VoiceCaptureLayout.previewHeight(lines: lineCount, fontSize: fontSize)
-                + VoiceCaptureLayout.shadowPadding * 2,
-            alignment: .bottom
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var card: some View {
-        Group {
-            if layout.rows.isEmpty {
-                VoicePreviewWaiting(ink: palette.ink)
-            } else {
-                VoicePreviewLines(
-                    rows: layout.rows,
-                    overflow: layout.overflow,
-                    ink: palette.ink,
-                    fontSize: fontSize
-                )
-            }
-        }
-        .frame(
-            maxWidth: .infinity,
-            minHeight: VoiceCaptureLayout.previewTextHeight(lines: lineCount, fontSize: fontSize),
-            maxHeight: VoiceCaptureLayout.previewTextHeight(lines: lineCount, fontSize: fontSize),
-            alignment: .topLeading
-        )
-        .padding(.horizontal, 14)
-        .padding(.vertical, VoiceCaptureLayout.previewPaddingY)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(palette.paper.opacity(paperOpacity))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
-                LinearGradient(
-                    colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 0.5
-            )
-        )
-        .shadow(color: .black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
-    }
-
-    private var layout: (rows: [VoicePreviewLine], overflow: Bool) {
-        let all = LiveTranscriptPreview.lines(
-            for: model.state.session?.liveTranscript ?? "",
-            width: VoiceCaptureLayout.previewWidth - 36,
-            font: .ui(fontSize)
-        )
-        let start = max(0, all.count - lineCount)
-        let rows = (start..<all.count).map { VoicePreviewLine(id: $0, text: all[$0]) }
-        return (rows, all.count > lineCount)
-    }
-
-    private var accessibilityLabel: String {
-        if !layout.rows.isEmpty {
-            return "Live transcript: \(layout.rows.map(\.text).joined(separator: " "))"
-        }
-        return isVoice ? "Listening" : ""
-    }
-}
-
-private struct VoicePreviewLine: Identifiable, Equatable {
+struct VoiceTranscriptRow: Identifiable, Equatable {
     let id: Int
     let text: String
 }
 
-/// Owns a snapshot of lines so a disappearing card cannot subscript a live array.
-private struct VoicePreviewLines: View {
-    let rows: [VoicePreviewLine]
+/// Owns a snapshot of rows so a disappearing card cannot subscript a live array.
+private struct VoiceTranscriptLines: View {
+    let rows: [VoiceTranscriptRow]
     let overflow: Bool
     let ink: Color
     let fontSize: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: VoiceCaptureLayout.previewLineSpacing) {
+        VStack(alignment: .leading, spacing: VoiceCaptureLayout.transcriptLineSpacing) {
             ForEach(rows) { row in
-                VoicePreviewLineText(text: row.text, ink: ink, fontSize: fontSize)
+                VoiceTranscriptLineText(text: row.text, ink: ink, fontSize: fontSize)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -281,7 +318,7 @@ private struct VoicePreviewLines: View {
     }
 }
 
-private struct VoicePreviewWaiting: View {
+private struct VoiceTranscriptWaiting: View {
     let ink: Color
 
     var body: some View {
@@ -300,7 +337,7 @@ private struct VoicePreviewWaiting: View {
     }
 }
 
-private struct VoicePreviewLineText: View {
+private struct VoiceTranscriptLineText: View {
     let text: String
     let ink: Color
     let fontSize: CGFloat
@@ -311,7 +348,7 @@ private struct VoicePreviewLineText: View {
             .foregroundStyle(ink.opacity(0.92))
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: VoiceCaptureLayout.previewLineHeight(fontSize: fontSize), alignment: .center)
+            .frame(height: VoiceCaptureLayout.transcriptLineHeight(fontSize: fontSize), alignment: .center)
             .transition(.asymmetric(
                 insertion: .move(edge: .bottom).combined(with: .opacity),
                 removal: .move(edge: .top).combined(with: .opacity)
@@ -336,10 +373,11 @@ private struct MeteredOrb: View {
 /// Pure text shaping for the overlay.
 enum VoiceOverlayCopy {
     /// How much is selected, without repeating it. `nil` when nothing is.
+    /// Named as the selection so it never reads as a count of spoken words.
     static func tether(for text: String) -> String? {
         let words = text.split(whereSeparator: \.isWhitespace).count
         guard words > 0 else { return nil }
-        return words == 1 ? "1 word" : "\(words) words"
+        return words == 1 ? "1 word selected" : "\(words) words selected"
     }
 }
 
@@ -372,7 +410,15 @@ enum LiveTranscriptPreview {
     }
 
     static func visible(_ lines: [String], max: Int = maxVisibleLines) -> [String] {
-        Array(lines.suffix(max))
+        window(lines, max: max).rows.map(\.text)
+    }
+
+    /// The last `max` lines, keyed by their index in the whole transcript so a
+    /// line keeps its identity while earlier ones scroll off the top.
+    static func window(_ lines: [String], max: Int) -> (rows: [VoiceTranscriptRow], overflow: Bool) {
+        let start = Swift.max(0, lines.count - max)
+        let rows = (start..<lines.count).map { VoiceTranscriptRow(id: $0, text: lines[$0]) }
+        return (rows, lines.count > max)
     }
 
     private static func measure(_ text: String, font: NSFont) -> CGFloat {

@@ -75,8 +75,8 @@ struct SettingsPreviewPane: View {
 
     private var cardFootnote: String {
         if voiceSettings.transcriptionPreview {
-            return "Sits above the capsule while you speak. The note still saves either way."
+            return "Replaces the capsule with a card that shows your words as you speak."
         }
-        return "The note still saves without the card."
+        return "A small capsule shows instead. The note still saves either way."
     }
 }

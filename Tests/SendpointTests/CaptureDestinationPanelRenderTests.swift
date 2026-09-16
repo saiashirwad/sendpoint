@@ -72,6 +72,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             load: { document }, commit: { _ in }
         ))
         let controller = makeController(store: store)
+        controller.setTranscriptionPreview(false)
         let context = NoteCaptureContext(stackID: stacks[0].id)
         controller.send(.begin(.voice, context))
         controller.send(.recordingStarted(context))
@@ -85,7 +86,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             model: controller, meter: controller.levelMeter
         ))
         let voice = CaptureWindows.makeVoicePanel(contentView: hosting)
-        voice.setContentSize(NSSize(width: 680, height: hosting.fittingSize.height))
+        voice.setContentSize(VoiceCaptureLayout.panelSize(card: false, lines: 4, fontSize: 13))
         voice.setFrameOrigin(NSPoint(x: 400, y: 160))
         defer {
             controller.send(.teardown)
@@ -104,14 +105,66 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             8, accuracy: 0.5
         )
 
-        // Composite the actual hosting views at their live window coordinates.
-        // This includes the real anchor placement, rather than a mock VStack.
-        let bounds = voice.frame.union(picker.frame)
+        try composite([voice, picker], to: directory, name: "voice-capture-destination.png")
+    }
+
+    func testRenderLiveVoiceCard() async throws {
+        guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
+            throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
+        }
+        let stacks = [
+            Stack(name: "Research", notes: [
+                Note(subject: .standalone, body: "One"),
+                Note(subject: .standalone, body: "Two"),
+            ]),
+        ]
+        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        controller.setTranscriptionPreview(true)
+        let lines = controller.transcriptionPreviewLines
+        let fontSize = CGFloat(controller.transcriptionPreviewFontSize)
+        let context = NoteCaptureContext(stackID: stacks[0].id)
+        controller.send(.begin(.voice, context))
+        controller.send(.recordingStarted(context))
+        controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
+        controller.send(.voicePartial(
+            context,
+            "So this is what it looks like, testing, testing, testing, testing, testing, "
+                + "and the words keep arriving while the card stays put at the foot of the screen."
+        ))
+        let hosting = CaptureHostingView(rootView: VoiceCaptureView(
+            model: controller, meter: controller.levelMeter
+        ))
+        let voice = CaptureWindows.makeVoicePanel(contentView: hosting)
+        voice.setContentSize(VoiceCaptureLayout.panelSize(card: true, lines: lines, fontSize: fontSize))
+        voice.setFrameOrigin(NSPoint(x: 400, y: 160))
+        defer {
+            controller.send(.teardown)
+            voice.contentView = nil
+            voice.close()
+        }
+        voice.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(400))
+        try composite([voice], to: directory, name: "voice-capture-card.png")
+
+        controller.send(.toggleDestinations(context))
+        try await Task.sleep(for: .milliseconds(200))
+        let picker = try XCTUnwrap(voice.childWindows?.first)
+        try composite([voice, picker], to: directory, name: "voice-capture-card-destination.png")
+    }
+
+    /// Composites the actual hosting views at their live window coordinates.
+    /// This includes the real anchor placement, rather than a mock VStack.
+    private func composite(_ windows: [NSWindow], to directory: String, name: String) throws {
+        let bounds = windows.map(\.frame).reduce(windows[0].frame) { $0.union($1) }
         let image = NSImage(size: bounds.size)
         image.lockFocus()
         NSColor.windowBackgroundColor.setFill()
         NSRect(origin: .zero, size: bounds.size).fill()
-        for window in [voice, picker] {
+        for window in windows {
             let view = try XCTUnwrap(window.contentView)
             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -127,12 +180,51 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         let tiff = try XCTUnwrap(image.tiffRepresentation)
         let representation = try XCTUnwrap(NSBitmapImageRep(data: tiff))
         let data = try XCTUnwrap(representation.representation(using: .png, properties: [:]))
-        let url = URL(fileURLWithPath: directory)
-            .appendingPathComponent("voice-capture-destination.png")
+        let url = URL(fileURLWithPath: directory).appendingPathComponent(name)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try data.write(to: url, options: .atomic)
+    }
+
+    func testPickerClearsTheWholeCardWhenCaptionsAreOn() async throws {
+        let stack = Stack(name: "Default")
+        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        controller.setTranscriptionPreview(true)
+        controller.setTranscriptionPreviewLines(3)
+        let lines = controller.transcriptionPreviewLines
+        let fontSize = CGFloat(controller.transcriptionPreviewFontSize)
+        let hosting = CaptureHostingView(rootView: VoiceCaptureView(
+            model: controller, meter: controller.levelMeter
+        ))
+        let voice = CaptureWindows.makeVoicePanel(contentView: hosting)
+        voice.setContentSize(VoiceCaptureLayout.panelSize(card: true, lines: lines, fontSize: fontSize))
+        voice.setFrameOrigin(NSPoint(x: 400, y: 160))
+        defer {
+            controller.send(.teardown)
+            voice.contentView = nil
+            voice.close()
+        }
+        let context = NoteCaptureContext(stackID: stack.id)
+        controller.send(.begin(.voice, context))
+        controller.send(.recordingStarted(context))
+        voice.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(300))
+        controller.send(.toggleDestinations(context))
+        try await Task.sleep(for: .milliseconds(200))
+
+        let picker = try XCTUnwrap(voice.childWindows?.first)
+        let cardTop = voice.frame.minY + VoiceCaptureLayout.shadowPadding
+            + VoiceCaptureLayout.cardHeight(lines: lines, fontSize: fontSize)
+        XCTAssertEqual(
+            picker.frame.minY + CaptureDestinationPanelLayout.shadowPadding - cardTop,
+            CaptureDestinationPanelLayout.anchorGap, accuracy: 0.5,
+            "The picker must sit above the transcript, not over it"
+        )
     }
 
     private func makeController(store: StackStore) -> CaptureController {

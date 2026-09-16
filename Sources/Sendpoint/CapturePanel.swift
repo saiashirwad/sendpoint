@@ -42,9 +42,6 @@ final class CaptureWindows {
     /// and the first sample of audio or the first typed letter. Showing one
     /// again is a reposition.
     private var voicePanel: CapturePanel?
-    /// Own window so the pill never grows a caption stack; later this frame
-    /// can move without the destination picker.
-    private var previewPanel: CapturePanel?
     private var editorPanel: CapturePanel?
     private var keyMonitor: Any?
     private var voiceEscapeMonitor: Any?
@@ -116,7 +113,6 @@ final class CaptureWindows {
         panel?.onClose = nil
         panel?.orderOut(nil)
         panel = nil
-        if hidden == .voice { previewPanel?.orderOut(nil) }
         surface = nil
     }
 
@@ -124,12 +120,11 @@ final class CaptureWindows {
         close()
         surfaces.unregister(.captureEditor)
         surfaces.unregister(.captureVoice)
-        for kept in [voicePanel, previewPanel, editorPanel] {
+        for kept in [voicePanel, editorPanel] {
             kept?.contentView = nil
             kept?.close()
         }
         voicePanel = nil
-        previewPanel = nil
         editorPanel = nil
     }
 
@@ -137,7 +132,6 @@ final class CaptureWindows {
     /// nothing for its window.
     func prepareSurfaces() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
-        if previewPanel == nil { previewPanel = makePreviewPanel() }
         if editorPanel == nil { editorPanel = makeEditorPanel() }
     }
 
@@ -195,9 +189,10 @@ final class CaptureWindows {
     /// app keeps focus while its selection is still being read.
     private func presentVoice() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
-        if previewPanel == nil { previewPanel = makePreviewPanel() }
         guard let panel = voicePanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
+        // Captions may have been switched on or resized since the last take.
+        panel.setContentSize(voiceOverlaySize)
         positionVoiceOverlay(panel)
         self.panel = panel
 
@@ -211,18 +206,14 @@ final class CaptureWindows {
             installVoiceEscapeFallback()
         }
         panel.orderFrontRegardless()
-        if model.transcriptionPreview, let preview = previewPanel {
-            preview.setContentSize(
-                VoiceCaptureLayout.previewPanelSize(
-                    lines: model.transcriptionPreviewLines,
-                    fontSize: CGFloat(model.transcriptionPreviewFontSize)
-                )
-            )
-            positionPreview(preview, above: panel)
-            preview.orderFrontRegardless()
-        } else {
-            previewPanel?.orderOut(nil)
-        }
+    }
+
+    private var voiceOverlaySize: NSSize {
+        VoiceCaptureLayout.panelSize(
+            card: model.transcriptionPreview,
+            lines: model.transcriptionPreviewLines,
+            fontSize: CGFloat(model.transcriptionPreviewFontSize)
+        )
     }
 
     private func makeVoicePanel() -> CapturePanel {
@@ -231,20 +222,7 @@ final class CaptureWindows {
             meter: model.levelMeter
         ))
         let panel = Self.makeVoicePanel(contentView: hosting)
-        panel.setContentSize(NSSize(width: Self.voiceOverlayWidth, height: hosting.fittingSize.height))
-        return panel
-    }
-
-    private func makePreviewPanel() -> CapturePanel {
-        let hosting = CaptureHostingView(rootView: VoicePreviewCard(model: model))
-        let panel = Self.makeVoicePanel(contentView: hosting)
-        panel.ignoresMouseEvents = true
-        panel.setContentSize(
-            VoiceCaptureLayout.previewPanelSize(
-                lines: VoiceSettings.defaultPreviewLines,
-                fontSize: CGFloat(VoiceSettings.defaultPreviewFontSize)
-            )
-        )
+        panel.setContentSize(voiceOverlaySize)
         return panel
     }
 
@@ -298,10 +276,6 @@ final class CaptureWindows {
         panel.setFrameOrigin(origin)
     }
 
-    /// Wide enough for the capsule plus a one-line failure message; the
-    /// transparent margin gives the anchored destination popover room.
-    private static let voiceOverlayWidth: CGFloat = 680
-
     private func positionVoiceOverlay(_ panel: NSPanel) {
         let screen = screenContaining(point: NSEvent.mouseLocation) ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
@@ -313,16 +287,6 @@ final class CaptureWindows {
             y: visible.minY + 4
         )
         panel.setFrameOrigin(origin)
-    }
-
-    /// Sits just above the capsule. Own origin so a later drag does not move
-    /// the pill or the destination picker.
-    private func positionPreview(_ preview: NSPanel, above voice: NSPanel) {
-        let pillTop = voice.frame.minY + VoiceCaptureLayout.shadowPadding + VoiceCaptureLayout.pillHeight
-        preview.setFrameOrigin(NSPoint(
-            x: voice.frame.midX - preview.frame.width / 2,
-            y: pillTop + 4 - VoiceCaptureLayout.shadowPadding
-        ))
     }
 
     private func flipY(quartzRect rect: CGRect) -> CGFloat {

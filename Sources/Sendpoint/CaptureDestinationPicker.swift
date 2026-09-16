@@ -9,6 +9,10 @@ struct CaptureDestinationButton: View {
     var showsIcon = false
     var fontSize: CGFloat = 12
     var arrowEdge: Edge = .bottom
+    /// Voice only. The row the button sits in, and how far above that row's
+    /// bottom edge the picker must clear: the capsule, or the whole card.
+    var rowHeight: CGFloat = VoiceCaptureLayout.pillHeight
+    var anchorHeight: CGFloat = VoiceCaptureLayout.pillHeight
 
     @ViewBuilder
     var body: some View {
@@ -27,14 +31,15 @@ struct CaptureDestinationButton: View {
 
             if mode == .voice {
                 destinationButton(name: name, context: context, enabled: session.canChooseDestination)
-                    .frame(height: VoiceCaptureLayout.pillHeight)
-                    .background {
+                    .frame(height: rowHeight)
+                    .background(alignment: .bottom) {
                         CaptureDestinationPanelAnchor(
                             isPresented: isPresented,
                             rows: model.destinationStacks,
                             selectedID: session.destinationStackID,
                             onSelect: { model.chooseDestination($0, context: context) }
                         )
+                        .frame(height: anchorHeight)
                     }
             } else {
                 destinationButton(name: name, context: context, enabled: session.canChooseDestination)
@@ -83,7 +88,7 @@ struct CaptureDestinationButton: View {
     }
 }
 
-/// The visible list sits above the full pill height, excluding shadow margins.
+/// The visible list sits above the anchor's full height, excluding shadow margins.
 enum CaptureDestinationPanelLayout {
     static let bodyWidth: CGFloat = 250
     static let rowHeight: CGFloat = 32
@@ -111,13 +116,13 @@ enum CaptureDestinationPanelLayout {
         let idealX = anchor.midX - size.width / 2
         return NSPoint(
             x: min(max(idealX, visibleFrame.minX), visibleFrame.maxX - size.width),
-            // The anchor spans the pill; the margin is outside the visible list.
+            // The anchor spans the overlay; the margin is outside the visible list.
             y: anchor.maxY + anchorGap - shadowPadding
         )
     }
 }
 
-/// An AppKit anchor spanning the destination button and the pill's full height.
+/// An AppKit anchor spanning the destination button and the overlay above it.
 /// Owns a nonmodal panel so recording shortcuts keep receiving events.
 private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
     @Binding var isPresented: Bool

@@ -60,6 +60,58 @@ final class CapturePanelTests: XCTestCase {
         )
     }
 
+    func testVoicePanelSizeFollowsTheCaptionsSetting() {
+        let pill = VoiceCaptureLayout.panelSize(card: false, lines: 4, fontSize: 13)
+        XCTAssertEqual(pill.width, VoiceCaptureLayout.panelWidth)
+        XCTAssertEqual(pill.height, VoiceCaptureLayout.pillHeight + VoiceCaptureLayout.shadowPadding * 2)
+
+        let card = VoiceCaptureLayout.panelSize(card: true, lines: 4, fontSize: 13)
+        XCTAssertEqual(card.width, pill.width, "one window, one width: the picker margin stays")
+        XCTAssertEqual(
+            card.height,
+            VoiceCaptureLayout.cardHeight(lines: 4, fontSize: 13) + VoiceCaptureLayout.shadowPadding * 2
+        )
+        XCTAssertGreaterThan(
+            VoiceCaptureLayout.cardHeight(lines: 5, fontSize: 16),
+            VoiceCaptureLayout.cardHeight(lines: 2, fontSize: 11)
+        )
+        XCTAssertEqual(
+            VoiceCaptureLayout.cardHeight(lines: 99, fontSize: 13),
+            VoiceCaptureLayout.cardHeight(lines: VoiceSettings.previewLinesMax, fontSize: 13),
+            "the card never grows past the settings ceiling"
+        )
+    }
+
+    func testCardAnchorReachesTheCardTop() {
+        // The footer's bottom edge sits one bottom padding above the card's
+        // bottom, so an anchor of this height ends exactly at the card's top.
+        let anchor = VoiceCaptureLayout.cardAnchorHeight(lines: 3, fontSize: 13)
+        XCTAssertEqual(
+            anchor + VoiceCaptureLayout.cardPaddingBottom,
+            VoiceCaptureLayout.cardHeight(lines: 3, fontSize: 13)
+        )
+        XCTAssertGreaterThan(anchor, VoiceCaptureLayout.cardFooterHeight)
+    }
+
+    func testTranscriptWindowKeepsRowIdentityWhileScrolling() {
+        let lines = ["one", "two", "three", "four", "five"]
+        let window = LiveTranscriptPreview.window(lines, max: 3)
+        XCTAssertEqual(window.rows.map(\.id), [2, 3, 4])
+        XCTAssertEqual(window.rows.map(\.text), ["three", "four", "five"])
+        XCTAssertTrue(window.overflow)
+
+        let short = LiveTranscriptPreview.window(["one"], max: 3)
+        XCTAssertEqual(short.rows.map(\.id), [0])
+        XCTAssertFalse(short.overflow)
+        XCTAssertTrue(LiveTranscriptPreview.window([], max: 3).rows.isEmpty)
+    }
+
+    func testTetherNamesTheSelection() {
+        XCTAssertNil(VoiceOverlayCopy.tether(for: "  \n"))
+        XCTAssertEqual(VoiceOverlayCopy.tether(for: "one"), "1 word selected")
+        XCTAssertEqual(VoiceOverlayCopy.tether(for: "a short  selected\npassage"), "4 words selected")
+    }
+
     func testPaletteFactoryKeepsWindowInvariants() {
         let palette = StackPaletteWindowController.makePanel()
         XCTAssertTrue(palette.styleMask.contains([.titled, .fullSizeContentView, .resizable, .nonactivatingPanel]))
