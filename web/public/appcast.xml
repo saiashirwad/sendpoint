@@ -6,6 +6,16 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Sendpoint</title>
         <item>
+            <title>1.7.2</title>
+            <pubDate>Wed, 16 Sep 2026 11:53:34 +0530</pubDate>
+            <link>https://sendpoint.app</link>
+            <sparkle:version>186</sparkle:version>
+            <sparkle:shortVersionString>1.7.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/saiashirwad/sendpoint/releases/download/v1.7.2/Sendpoint-1.7.2.zip" length="11951434" type="application/octet-stream" sparkle:edSignature="cyv9uYc3Jb2K11MoSEUZ09u+D5MjHehPXTITO4z4Dkd4UZKms3/RocJHh4JCj131W6JSfKOYRlBfkAPRmcbmDg=="/>
+        </item>
+        <item>
             <title>1.7.1</title>
             <pubDate>Wed, 16 Sep 2026 01:23:36 +0530</pubDate>
             <link>https://sendpoint.app</link>
@@ -25,19 +35,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/saiashirwad/sendpoint/releases/download/v1.7/Sendpoint-1.7.zip" length="10894227" type="application/octet-stream" sparkle:edSignature="M1QduYjIwC1+h9PJ10TVQ795bpaPGxvm4B94N79eTm6wXWi4siYylIZ2BKLr9JtPw1e41DKnJYKqHmsLRv4gCA=="/>
         </item>
-        <item>
-            <title>1.6</title>
-            <pubDate>Tue, 15 Sep 2026 16:56:50 +0530</pubDate>
-            <link>https://sendpoint.app</link>
-            <sparkle:version>179</sparkle:version>
-            <sparkle:shortVersionString>1.6</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/saiashirwad/sendpoint/releases/download/v1.6/Sendpoint-1.6.zip" length="10875449" type="application/octet-stream" sparkle:edSignature="KVT66rVPHfrVox9ZM51kprrGn+1ThR30AFa2rABdwvvVtcobdH2bxmTivSmGJ2rxogzlShN+wjBZaMLIQHcJCg=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: O6yWv9MzYaoszVGpWWeFilvttHTYOlAUToJ9HoY3ogHQb2xYWyH5lnD4JsAfYFU7dNASJ90sDbkruTQeMgmrBw==
-length: 2622
+edSignature: +NhmbvDXZqiMaFg6jfLchhwxgJwaGVUMlUY7eFBHr7l9bp3Nk9C/FvINsbE+lkpHBAQDt1aNwndVTcKVwabiBg==
+length: 2630
 -->
