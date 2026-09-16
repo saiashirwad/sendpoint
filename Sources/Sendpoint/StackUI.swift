@@ -28,41 +28,6 @@ nonisolated func noteTimeLabel(_ date: Date, calendar: Calendar = .current) -> S
     date.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute())
 }
 
-/// A run of notes captured on the same day, under the day's name.
-nonisolated struct NoteDaySection: Equatable {
-    let label: String
-    let notes: [Note]
-}
-
-/// Notes grouped into days, in the order given: "Today", "Yesterday", then
-/// the date, with the year only once it is not this year.
-nonisolated func noteDaySections(
-    _ notes: [Note], now: Date = Date(), calendar: Calendar = .current
-) -> [NoteDaySection] {
-    var sections: [NoteDaySection] = []
-    for note in notes {
-        let label = noteDayLabel(note.createdAt, now: now, calendar: calendar)
-        if let last = sections.last, last.label == label,
-           calendar.isDate(last.notes[0].createdAt, inSameDayAs: note.createdAt) {
-            sections[sections.count - 1] = NoteDaySection(label: label, notes: last.notes + [note])
-        } else {
-            sections.append(NoteDaySection(label: label, notes: [note]))
-        }
-    }
-    return sections
-}
-
-nonisolated func noteDayLabel(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-    if calendar.isDate(date, inSameDayAs: now) { return "Today" }
-    if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-       calendar.isDate(date, inSameDayAs: yesterday) { return "Yesterday" }
-    let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
-    if calendar.isDate(date, equalTo: now, toGranularity: .year) {
-        return date.formatted(style.day().month(.abbreviated))
-    }
-    return date.formatted(style.day().month(.abbreviated).year())
-}
-
 /// One line on the state of a stack: how many notes it holds and when the
 /// last one landed, or that nothing has landed yet.
 nonisolated func stackStatusDetail(

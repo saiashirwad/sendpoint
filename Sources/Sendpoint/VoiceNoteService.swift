@@ -48,6 +48,8 @@ final class VoiceNoteService {
     private var spareEngine: AVAudioEngine?
     private var audioQueue: PreviewAudioQueue?
     private var streamTask: Task<Void, Never>?
+    private var warmUpTask: Task<Void, Never>?
+    private var abandonment: (id: UUID, task: Task<Void, Never>)?
     private var streamGeneration: Int?
     private var recordingStartedAt: Date?
 
@@ -89,10 +91,17 @@ final class VoiceNoteService {
             _ = engine.inputNode
             spareEngine = engine
         }
-        Task { await transcriber.prepareIfNeeded() }
+        guard warmUpTask == nil else { return }
+        let transcriber = transcriber
+        warmUpTask = Task { [weak self] in
+            await transcriber.prepareIfNeeded()
+            self?.warmUpTask = nil
+        }
     }
 
-    func startRecording() throws {
+    func startRecording() async throws {
+        await finishPendingAbandonment()
+        try Task.checkCancellation()
         guard !isRecording else { return }
 
         let engine = spareEngine ?? AVAudioEngine()
@@ -171,12 +180,32 @@ final class VoiceNoteService {
     func discardRecording() {
         let wasLive = isRecording || recordingStartedAt != nil || streamTask != nil
         _ = try? stopMicrophone()
-        streamTask?.cancel()
+        let pump = streamTask
+        pump?.cancel()
         streamTask = nil
         audioQueue = nil
         streamGeneration = nil
-        Task { await transcriber.abandon() }
+        let previous = abandonment?.task
+        let transcriber = transcriber
+        let id = UUID()
+        let task = Task {
+            await pump?.value
+            await previous?.value
+            await transcriber.abandon()
+        }
+        abandonment = (id, task)
         if wasLive { Diag.log("voice recording discarded") }
+    }
+
+    /// A discarded stream must finish invalidating and resetting its decoder
+    /// before a later recording is allowed to open one.
+    private func finishPendingAbandonment() async {
+        while let pending = abandonment {
+            await pending.task.value
+            if abandonment?.id == pending.id {
+                abandonment = nil
+            }
+        }
     }
 
     private func startStreamPump(_ queue: PreviewAudioQueue) {
@@ -294,6 +323,7 @@ actor LocalStreamingPreview {
     private var generation = 0
     private var sessionOpen = false
     private var loggedFirstFeed = false
+    private var preparationAttemptID: UUID?
 
     func prepareIfNeeded() async {
         do {
@@ -304,17 +334,30 @@ actor LocalStreamingPreview {
     }
 
     func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+        // Claiming a retry resets stale progress before this observer is
+        // registered. A subscriber joining an in-flight attempt still gets
+        // that attempt's latest fraction replayed.
+        let attemptID = await claimPreparationAttempt()
         let token = progress.subscribe(onProgress)
         defer { progress.unsubscribe(token) }
-        _ = try await manager()
+        _ = try await manager(attemptID: attemptID)
     }
 
     func begin(onPartial: @escaping @Sendable (String) -> Void) async -> Int? {
-        guard await preparation.isPrepared() else { return nil }
-        generation += 1
-        loggedFirstFeed = false
         guard let manager = try? await manager() else { return nil }
-        try? await manager.reset()
+        return try? await open(manager: manager, onPartial: onPartial)
+    }
+
+    private func open(
+        manager: StreamingUnifiedAsrManager,
+        onPartial: @escaping @Sendable (String) -> Void
+    ) async throws -> Int {
+        generation += 1
+        let active = generation
+        loggedFirstFeed = false
+        try await manager.reset()
+        try Task.checkCancellation()
+        guard active == generation else { throw CancellationError() }
         let firstPartial = PreviewLogOnce()
         await manager.setPartialTranscriptCallback { text in
             if firstPartial.mark() {
@@ -322,9 +365,11 @@ actor LocalStreamingPreview {
             }
             onPartial(text)
         }
+        try Task.checkCancellation()
+        guard active == generation else { throw CancellationError() }
         sessionOpen = true
         Diag.log("voice stream started")
-        return generation
+        return active
     }
 
     func feed(_ frames: [PreviewAudioFrame], generation: Int) async {
@@ -337,6 +382,7 @@ actor LocalStreamingPreview {
         }
         do {
             try await manager.appendAudio(buffer)
+            guard generation == self.generation, sessionOpen else { return }
             try await manager.processBufferedAudio()
         } catch {
             Diag.log("voice stream chunk failed: \(error.localizedDescription)")
@@ -347,16 +393,22 @@ actor LocalStreamingPreview {
     func finish(leftover: [PreviewAudioFrame], generation: Int?) async throws -> String {
         var active = generation
         if active == nil, sessionOpen { active = self.generation }
-        if active == nil || active != self.generation {
-            active = await begin(onPartial: { _ in })
+        if active == nil || active != self.generation || !sessionOpen {
+            let manager = try await manager()
+            active = try await open(manager: manager, onPartial: { _ in })
         }
-        if let active, !leftover.isEmpty {
+        guard let active else { throw CancellationError() }
+        if !leftover.isEmpty {
             await feed(leftover, generation: active)
         }
+        guard active == self.generation, sessionOpen else { throw CancellationError() }
         let manager = try await manager()
         let text = try await manager.finish()
+        guard active == self.generation, sessionOpen else { throw CancellationError() }
         await manager.setPartialTranscriptCallback { _ in }
+        guard active == self.generation, sessionOpen else { throw CancellationError() }
         try await manager.reset()
+        guard active == self.generation, sessionOpen else { throw CancellationError() }
         sessionOpen = false
         Diag.log("voice transcription finished, chars=\(text.count)")
         return text
@@ -364,9 +416,11 @@ actor LocalStreamingPreview {
 
     func abandon() async {
         generation += 1
+        let abandoned = generation
         sessionOpen = false
         guard await preparation.isPrepared(), let manager = try? await manager() else { return }
         await manager.setPartialTranscriptCallback { _ in }
+        guard abandoned == generation else { return }
         try? await manager.reset()
     }
 
@@ -400,22 +454,46 @@ actor LocalStreamingPreview {
         return offset > 0 ? buffer : nil
     }
 
-    private func manager() async throws -> StreamingUnifiedAsrManager {
+    /// Returns the ID of the preparation attempt this caller joins. Only the
+    /// first caller creates the ID and clears progress for that attempt.
+    private func claimPreparationAttempt() async -> UUID? {
+        if let preparationAttemptID { return preparationAttemptID }
+        let isPrepared = await preparation.isPrepared()
+        guard !isPrepared else { return nil }
+        if let preparationAttemptID { return preparationAttemptID }
+        let id = UUID()
+        preparationAttemptID = id
+        progress.reset()
+        return id
+    }
+
+    private func manager(attemptID claimedID: UUID? = nil) async throws -> StreamingUnifiedAsrManager {
+        let attemptID: UUID?
+        if let claimedID {
+            attemptID = claimedID
+        } else {
+            attemptID = await claimPreparationAttempt()
+        }
         let progress = progress
-        let loaded = try await preparation.value {
-            progress.reset()
-            let manager = StreamingUnifiedAsrManager(config: LocalVoiceModelFiles.streaming)
-            try await manager.loadModels(
-                progressHandler: { @Sendable in progress.report($0.fractionCompleted) }
-            )
-            try await Self.prime(manager)
-            Diag.log("voice model loaded")
-            return manager
+        do {
+            let loaded = try await preparation.value {
+                let manager = StreamingUnifiedAsrManager(config: LocalVoiceModelFiles.streaming)
+                try await manager.loadModels(
+                    progressHandler: { @Sendable in progress.report($0.fractionCompleted) }
+                )
+                try await Self.prime(manager)
+                Diag.log("voice model loaded")
+                return manager
+            }
+            if preparationAttemptID == attemptID { preparationAttemptID = nil }
+            await MainActor.run {
+                NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
+            }
+            return loaded
+        } catch {
+            if preparationAttemptID == attemptID { preparationAttemptID = nil }
+            throw error
         }
-        await MainActor.run {
-            NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
-        }
-        return loaded
     }
 
     private static func prime(_ manager: StreamingUnifiedAsrManager) async throws {

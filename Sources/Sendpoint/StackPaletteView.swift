@@ -361,14 +361,11 @@ struct StackPaletteView: View {
                     // lazy stacks of variable-height text re-measure on
                     // every move.
                     VStack(spacing: 0) {
-                        ForEach(noteDaySections(listing.notes), id: \.label) { section in
-                            NoteDayLabel(section.label)
-                            ForEach(Array(section.notes.enumerated()), id: \.element.id) { index, entry in
-                                if index > 0 {
-                                    Hairline().padding(.horizontal, NoteCard.inset)
-                                }
-                                noteCard(entry)
+                        ForEach(Array(listing.notes.enumerated()), id: \.element.id) { index, entry in
+                            if index > 0 {
+                                Hairline().padding(.horizontal, NoteCard.inset)
                             }
+                            noteCard(entry)
                         }
                     }
                     .animation(Self.travel, value: model.projection.highlightedNoteID)
@@ -900,22 +897,6 @@ private struct PassageHeightsKey: PreferenceKey {
         let next = nextValue()
         value.preview = max(value.preview, next.preview)
         value.full = max(value.full, next.full)
-    }
-}
-
-/// A section heading inside the ⌘K menu: what the rows below act on.
-/// The day a run of notes was captured, in the settings' micro-label voice.
-private struct NoteDayLabel: View {
-    let title: String
-
-    init(_ title: String) { self.title = title }
-
-    var body: some View {
-        SettingsLabel(title)
-            .padding(.horizontal, NoteCard.inset)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

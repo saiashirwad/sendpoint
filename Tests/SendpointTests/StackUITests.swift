@@ -272,7 +272,7 @@ final class StackStatusDetailTests: XCTestCase {
     }
 }
 
-final class NoteDaySectionTests: XCTestCase {
+final class NoteTimeLabelTests: XCTestCase {
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -281,31 +281,6 @@ final class NoteDaySectionTests: XCTestCase {
 
     private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9) -> Date {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
-    }
-
-    private func note(_ at: Date) -> Note {
-        Note(subject: .standalone, body: "n", createdAt: at)
-    }
-
-    func testGroupsConsecutiveNotesByDayInOrder() {
-        let now = date(2026, 9, 15, 21)
-        let notes = [
-            note(date(2025, 12, 31)), note(date(2026, 9, 12)), note(date(2026, 9, 12, 18)),
-            note(date(2026, 9, 14)), note(date(2026, 9, 15, 8)), note(date(2026, 9, 15, 20)),
-        ]
-        let sections = noteDaySections(notes, now: now, calendar: calendar)
-        let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
-        XCTAssertEqual(sections.map(\.label), [
-            date(2025, 12, 31).formatted(style.day().month(.abbreviated).year()),
-            date(2026, 9, 12).formatted(style.day().month(.abbreviated)),
-            "Yesterday", "Today",
-        ])
-        XCTAssertEqual(sections.map(\.notes.count), [1, 2, 1, 2])
-        XCTAssertEqual(sections.last?.notes.map(\.id), Array(notes.suffix(2)).map(\.id))
-    }
-
-    func testEmptyListHasNoSections() {
-        XCTAssertTrue(noteDaySections([], calendar: calendar).isEmpty)
     }
 
     func testTimeLabelIsJustTheTime() {

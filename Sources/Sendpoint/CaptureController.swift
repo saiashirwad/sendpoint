@@ -21,7 +21,7 @@ struct VoiceRecorder {
                     throw VoiceRecorderError.microphoneDenied
                 }
                 try Task.checkCancellation()
-                try service.startRecording()
+                try await service.startRecording()
             },
             stopAndTranscribe: { try await service.stopAndTranscribe() },
             discard: { service.discardRecording() },
@@ -126,14 +126,6 @@ final class CaptureController {
         self.selection = selection
         self.recorder = recorder
         self.makeSurfaces = surfaces
-        // Streaming partials arrive off the main thread; each hop re-checks
-        // the current session so stale hypotheses never touch new captures.
-        recorder.observePartials { [weak self] text in
-            Task { @MainActor [weak self] in
-                guard let self, let context = self.state.session?.context else { return }
-                self.send(.voicePartial(context, text))
-            }
-        }
     }
 
     func configure(store: StackStore) {
@@ -227,6 +219,14 @@ final class CaptureController {
                 })
             }
         case let .startRecording(context):
+            // Bind every callback to the recording that installed it. Looking
+            // up the current session when a queued callback is delivered can
+            // mislabel an old hypothesis as belonging to a newer capture.
+            recorder.observePartials { [weak self] text in
+                Task { @MainActor [weak self] in
+                    self?.send(.voicePartial(context, text))
+                }
+            }
             launch(.recording, context: context) { [recorder] in
                 try await recorder.start()
                 return .recordingStarted(context)

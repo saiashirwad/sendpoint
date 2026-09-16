@@ -46,6 +46,7 @@ final class VoiceStreamingTests: XCTestCase {
         var starts = 0
         var discards = 0
         var partialHandler: ((String) -> Void)?
+        var partialHandlers: [(String) -> Void] = []
         let started = Gate<Bool>()
         var boundary: VoiceRecorder {
             VoiceRecorder(
@@ -56,7 +57,10 @@ final class VoiceStreamingTests: XCTestCase {
                 stopAndTranscribe: { "final transcript" },
                 discard: { self.discards += 1 },
                 levelMeter: VoiceLevelMeter(),
-                observePartials: { self.partialHandler = $0 }
+                observePartials: {
+                    self.partialHandler = $0
+                    self.partialHandlers.append($0)
+                }
             )
         }
     }
@@ -145,6 +149,25 @@ final class VoiceStreamingTests: XCTestCase {
         f.controller.send(.voicePartial(oldContext, "late hypothesis"))
         await Task.yield()
         XCTAssertFalse(f.controller.isOpen, "a dead capture stays closed")
+    }
+
+    func testQueuedPartialKeepsTheContextOfTheRecordingThatProducedIt() async throws {
+        let f = try await makeFixture()
+        await startRecording(f)
+        let firstHandler = try XCTUnwrap(f.recorder.partialHandlers.first)
+
+        f.controller.send(.cancelVoice)
+        f.controller.send(.voiceReleased)
+        await waitUntil { !f.controller.isOpen }
+        await startRecording(f)
+        XCTAssertEqual(f.recorder.partialHandlers.count, 2)
+
+        firstHandler("late first recording")
+        await Task.yield()
+        XCTAssertNil(f.controller.state.session?.liveTranscript)
+
+        f.recorder.partialHandlers[1]("current recording")
+        await waitUntil { f.controller.state.session?.liveTranscript == "current recording" }
     }
 
     func testPartialOutsideRecordingPhasesIsIgnored() async throws {
