@@ -8,7 +8,9 @@ APP_NAME="Sendpoint"
 BUNDLE_ID="app.sendpoint"
 APP="/Applications/${APP_NAME}.app"
 SUPPORT="${HOME}/Library/Application Support/${APP_NAME}"
-VOICE_MODEL="${HOME}/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3"
+VOICE_MODEL="${HOME}/Library/Application Support/FluidAudio/Models/parakeet-unified-en-0.6b"
+# The engine before streaming captions; gone from new installs, still on old ones.
+LEGACY_VOICE_MODEL="${HOME}/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3"
 
 remove() {
     local path="$1"
@@ -64,6 +66,7 @@ remove "${HOME}/Library/Application Support/ClipboardAnnotatorNext"
 
 echo "==> Removing the voice model"
 remove "$VOICE_MODEL"
+remove "$LEGACY_VOICE_MODEL"
 
 echo "==> Removing settings"
 delete_defaults "$BUNDLE_ID"
