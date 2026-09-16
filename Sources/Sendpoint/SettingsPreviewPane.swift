@@ -36,7 +36,7 @@ struct SettingsPreviewPane: View {
                     )
                     SettingsDivider()
                     SettingsStepperRow(
-                        "Type size",
+                        "Font size",
                         valueText: "\(voiceSettings.transcriptionPreviewFontSize)",
                         canDecrement: voiceSettings.transcriptionPreviewFontSize > VoiceSettings.previewFontSizeMin,
                         canIncrement: voiceSettings.transcriptionPreviewFontSize < VoiceSettings.previewFontSizeMax,
