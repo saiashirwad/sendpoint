@@ -22,7 +22,7 @@ final class VoiceSettings {
     static let previewOpacityMin = 50
     static let previewOpacityMax = 100
     static let previewOpacityStep = 10
-    static let defaultPreviewOpacity = 50
+    static let defaultPreviewOpacity = 80
 
     private let defaults: UserDefaults
     private(set) var voiceMode: VoiceRecordingMode

@@ -55,7 +55,7 @@ final class SetupTourTests: XCTestCase {
         XCTAssertEqual(tour.step, .done)
     }
 
-    func testCopyNamesTheUsersOwnShortcutsOnOneLine() {
+    func testCopyNamesTheUsersOwnShortcutsOnOneLine() throws {
         let keys = SetupTourKeys(voice: "⌘E", capture: "⌘G", stack: "⌃⌘S", copy: "⌃⌘V")
         XCTAssertEqual(
             SetupTour.Step.voice.detail(keys: keys, voiceMode: .hold),
@@ -81,10 +81,14 @@ final class SetupTourTests: XCTestCase {
             SetupTour.Step.done.detail(keys: keys, voiceMode: .hold),
             "It lives in the menu bar. Settings are there too."
         )
-        XCTAssertTrue(SetupTour.Step.voice.showsPassage)
-        XCTAssertFalse(SetupTour.Step.stack.showsPassage)
-        XCTAssertFalse(SetupTour.Step.done.showsPassage)
         XCTAssertEqual(SetupTour.Step.railNames, ["Voice note", "Typed note", "Stack"])
+
+        let voice = try XCTUnwrap(SetupTour.Step.voice.passage)
+        let text = try XCTUnwrap(SetupTour.Step.text.passage)
+        XCTAssertNotEqual(voice, text, "a fresh passage means a fresh selection")
+        XCTAssertNil(SetupTour.Step.stack.passage)
+        XCTAssertNil(SetupTour.Step.done.passage)
+        for passage in [voice, text] { XCTAssertLessThan(passage.count, 125) }
     }
 
     func testNoteCountSpansEveryStack() async throws {

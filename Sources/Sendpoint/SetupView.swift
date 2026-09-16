@@ -215,8 +215,19 @@ struct SetupView: View {
             steps
             ask
                 .padding(.top, 12)
-            if inTour, tour.step.showsPassage {
-                SetupPassage(text: SetupTour.passage)
+            if inTour, let passage = tour.step.passage {
+                SetupPassage(text: passage)
+                    .id(tour.step)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Ink.raised(colorScheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
+                    )
                     .padding(.top, 16)
             }
             control
@@ -666,9 +677,10 @@ struct CapabilityProgress: View {
     }
 }
 
-/// Two lines the user can select for real. A text view rather than SwiftUI
-/// text so the capture's Accessibility read finds the selection the same
-/// way it does in any other app.
+/// Two lines the user can select for real, on their own sheet of paper so
+/// they read as a document rather than the window's chrome. A text view
+/// rather than SwiftUI text so the capture's Accessibility read finds the
+/// selection the same way it does in any other app.
 struct SetupPassage: NSViewRepresentable {
     let text: String
 
@@ -694,7 +706,9 @@ struct SetupPassage: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSTextView, context: Context) {
-        if view.string != text { view.string = text }
+        guard view.string != text else { return }
+        view.string = text
+        view.setSelectedRange(NSRange(location: 0, length: 0))
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextView, context: Context) -> CGSize? {

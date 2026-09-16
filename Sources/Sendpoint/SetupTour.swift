@@ -52,7 +52,20 @@ final class SetupTour {
             }
         }
 
-        var showsPassage: Bool { self == .voice || self == .text }
+        /// Something to select: two lines about the very thing to try. A
+        /// fresh passage per slide, so the second one is selected afresh.
+        var passage: String? {
+            switch self {
+            case .voice:
+                "Say a thought out loud while you read, and the passage you "
+                    + "selected is quoted under it, word for word."
+            case .text:
+                "Type a thought instead when you would rather not speak. "
+                    + "The same quote is kept under it."
+            case .stack, .done:
+                nil
+            }
+        }
     }
 
     enum Event {
@@ -62,11 +75,6 @@ final class SetupTour {
         /// The stack is on screen; setup waits behind it with the last word.
         case openedStack
     }
-
-    /// Something to select. Two lines at the setup window's width.
-    static let passage =
-        "Sendpoint keeps each note you make while reading, in order, "
-        + "so a whole train of thought can be sent as one prompt."
 
     private(set) var step: Step = .voice
     private var seenNotes: Int?
