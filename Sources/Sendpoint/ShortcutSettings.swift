@@ -4,12 +4,13 @@ import Foundation
 import Observation
 
 nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
-    case voiceCapture, capture, copy, stack, switchStack, nextStack, previousStack, clear
+    case voiceCapture, capture, dictate, copy, stack, switchStack, nextStack, previousStack, clear
 
     var title: String {
         switch self {
         case .voiceCapture: "Voice note"
         case .capture: "Typed note"
+        case .dictate: "Dictate"
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
         case .switchStack: "Switch stack"
@@ -19,9 +20,10 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// An optional slot can be unbound; for dictation, unbound means off.
     var isOptional: Bool {
         switch self {
-        case .nextStack, .previousStack: true
+        case .dictate, .nextStack, .previousStack: true
         default: false
         }
     }
@@ -30,6 +32,7 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         switch self {
         case .voiceCapture: .voiceCapture
         case .capture: .capture
+        case .dictate: .dictate
         case .copy: .copy
         case .stack: .stack
         case .switchStack: .switchStack
@@ -86,6 +89,7 @@ final class ShortcutSettings {
     private static let defaultCombos: [ShortcutSlot: KeyCombo] = [
         .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.command]),
         .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_G), modifiers: [.command]),
+        .dictate: KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option]),
         .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
         .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
         .switchStack: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),
@@ -106,15 +110,19 @@ final class ShortcutSettings {
     var switchStackReverseCombo: KeyCombo? { switchStackCombo.addingShift }
     var nextStackCombo: KeyCombo? { combos[.nextStack] }
     var previousStackCombo: KeyCombo? { combos[.previousStack] }
+    /// `nil` means dictation is off.
+    var dictateCombo: KeyCombo? { combos[.dictate] }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        combos = Self.defaultCombos.merging(
-            ShortcutSlot.allCases.compactMap { slot in
-                Self.read(Key.combo(slot), from: defaults).map { (slot, $0) }
-            },
-            uniquingKeysWith: { _, stored in stored }
-        )
+        combos = Self.defaultCombos
+        for slot in ShortcutSlot.allCases {
+            switch Self.read(Key.combo(slot), from: defaults) {
+            case .absent: break
+            case .unbound: combos[slot] = nil
+            case let .combo(combo): combos[slot] = combo
+            }
+        }
         shortcutRegistrationIssues = ShortcutSlot.allCases.compactMap { slot in
             guard let combo = combos[slot] else { return nil }
             if let conflict = shortcutConflict(for: combo, excluding: slot) {
@@ -178,8 +186,16 @@ final class ShortcutSettings {
         defaults.set(data, forKey: key)
     }
 
-    private static func read(_ key: String, from defaults: UserDefaults) -> KeyCombo? {
-        guard let data = defaults.data(forKey: key), data != unboundMarker else { return nil }
-        return try? JSONDecoder().decode(KeyCombo.self, from: data)
+    /// A cleared optional slot is stored as a marker so it stays clear
+    /// across launches even when the slot has a default.
+    private enum Stored {
+        case absent, unbound, combo(KeyCombo)
+    }
+
+    private static func read(_ key: String, from defaults: UserDefaults) -> Stored {
+        guard let data = defaults.data(forKey: key) else { return .absent }
+        if data == unboundMarker { return .unbound }
+        guard let combo = try? JSONDecoder().decode(KeyCombo.self, from: data) else { return .absent }
+        return .combo(combo)
     }
 }

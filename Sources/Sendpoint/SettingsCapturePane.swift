@@ -37,8 +37,9 @@ struct SettingsCapturePane: View {
             SettingsSection("Shortcuts") {
                 ShortcutRows(
                     specs: [
-                        ShortcutSpec(title: "Voice note", hint: voiceHint, slot: .voiceCapture),
+                        ShortcutSpec(title: "Voice note", hint: "Saves what you say to the stack", slot: .voiceCapture),
                         ShortcutSpec(title: "Typed note", hint: "Quotes the selected text", slot: .capture),
+                        ShortcutSpec(title: "Dictate", hint: "Pastes what you say at the cursor", slot: .dictate),
                     ],
                     shortcuts: shortcuts,
                     hotKeyRegistrar: hotKeyRegistrar,
@@ -55,13 +56,6 @@ struct SettingsCapturePane: View {
             levelMonitor.start(preferredUID: voiceSettings.inputDeviceUID)
         }
         .onDisappear { levelMonitor.stop() }
-    }
-
-    private var voiceHint: String {
-        switch voiceSettings.voiceMode {
-        case .hold: "Hold while speaking"
-        case .tap: "Once to start, again to stop"
-        }
     }
 
     private var levelMonitorKey: String {

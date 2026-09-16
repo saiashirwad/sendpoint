@@ -8,6 +8,8 @@ final class HotKeyRegistrar {
         var voicePressed: () -> Void
         var voiceReleased: () -> Void
         var typedNote: () -> Void
+        var dictatePressed: () -> Void
+        var dictateReleased: () -> Void
         var copy: () -> Void
         var showStack: () -> Void
         var switchStack: (_ reverse: Bool) -> Void
@@ -45,10 +47,12 @@ final class HotKeyRegistrar {
                 issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
                 continue
             }
-            let released: (() -> Void)? = slot == .voiceCapture ? actions.voiceReleased : nil
+            // The two speech keys also report their release, for hold mode.
             let action: () -> Void
+            var released: (() -> Void)?
             switch slot {
-            case .voiceCapture: action = actions.voicePressed
+            case .voiceCapture: (action, released) = (actions.voicePressed, actions.voiceReleased)
+            case .dictate: (action, released) = (actions.dictatePressed, actions.dictateReleased)
             case .capture: action = actions.typedNote
             case .copy: action = actions.copy
             case .stack: action = actions.showStack

@@ -23,6 +23,9 @@ struct SelectionCapture {
     var read: (FallbackPolicy, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
     /// Sends ⌘V to the app that was frontmost when export began.
     var paste: (_ processIdentifier: pid_t, _ expectedRevision: Int) async throws -> Bool
+    /// Dictation: puts `text` on the clipboard and pastes it into that app.
+    /// The clipboard keeps the text afterwards, the same as a stack export.
+    var insertText: (_ text: String, _ processIdentifier: pid_t) async throws -> Bool = { _, _ in false }
 
     static func live(monitor: AutomaticSelectionMonitor, pasteboard: NSPasteboard = .general) -> Self {
         Self(
@@ -32,6 +35,14 @@ struct SelectionCapture {
             },
             paste: { processIdentifier, expectedRevision in
                 try await paste(into: processIdentifier, expectedRevision: expectedRevision,
+                    pasteboard: pasteboard)
+            },
+            insertText: { text, processIdentifier in
+                pasteboard.clearContents()
+                guard pasteboard.setString(text, forType: .string) else { return false }
+                let revision = pasteboard.changeCount
+                try await Task.sleep(for: .milliseconds(120))
+                return try await paste(into: processIdentifier, expectedRevision: revision,
                     pasteboard: pasteboard)
             }
         )

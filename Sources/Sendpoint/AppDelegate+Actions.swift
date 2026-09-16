@@ -26,6 +26,8 @@ extension AppDelegate {
             voicePressed: { [weak self] in self?.captureController.send(.voicePressed) },
             voiceReleased: { [weak self] in self?.captureController.send(.voiceReleased) },
             typedNote: { [weak self] in self?.captureSelection() },
+            dictatePressed: { [weak self] in self?.captureController.send(.dictatePressed) },
+            dictateReleased: { [weak self] in self?.captureController.send(.dictateReleased) },
             copy: { [weak self] in self?.copyMarkdown() },
             showStack: { [weak self] in self?.showStack() },
             switchStack: { [weak self] reverse in self?.cycleStacks(reverse: reverse) },
@@ -42,6 +44,7 @@ extension AppDelegate {
         switch action {
         case .voiceNote: captureController.send(.voiceToggled)
         case .typedNote: captureSelection()
+        case .dictate: captureController.send(.dictateToggled)
         case .showStack: showStack()
         case let .switchToStack(stackID): switchToStack(stackID)
         case .quickSwitcher: showQuickSwitcher()

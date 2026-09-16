@@ -9,10 +9,23 @@ nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
     var title: String { self == .hold ? "Hold" : "Tap" }
     var detail: String {
         switch self {
-        case .hold: "Hold to speak, release to save."
-        case .tap: "Press to speak, press again to save."
+        case .hold: "Hold to speak, release to finish."
+        case .tap: "Press to speak, press again to finish."
         }
     }
+}
+
+/// Which speech key a press, release, or menu item came from.
+nonisolated enum SpeechKey: Equatable, Sendable {
+    case note, dictate
+
+    var mode: CaptureMode { self == .note ? .voice : .dictation }
+}
+
+/// Where dictation lands: the app that was in front when the key went down.
+nonisolated struct DictationTarget: Equatable, Sendable {
+    let processIdentifier: pid_t
+    let appName: String?
 }
 
 nonisolated struct CaptureSaveRequest: Equatable {
@@ -21,7 +34,9 @@ nonisolated struct CaptureSaveRequest: Equatable {
     let note: Note
 }
 
-nonisolated enum CaptureMode: Equatable { case text, voice }
+/// Dictation is a voice capture with no passage and no stack: the words
+/// paste into the front app instead.
+nonisolated enum CaptureMode: Equatable, Sendable { case text, voice, dictation }
 
 nonisolated enum CapturePhase: Equatable {
     case selectingText
@@ -29,6 +44,8 @@ nonisolated enum CapturePhase: Equatable {
     case startingVoice
     case recording
     case transcribing
+    /// Dictation only: the transcript is on its way to the front app.
+    case inserting
     case editing(String)
     case saving(CaptureSaveRequest)
     case saveFailed(CaptureSaveRequest, message: String, retryable: Bool, targetMissing: Bool)
@@ -51,9 +68,10 @@ nonisolated struct CaptureSession: Equatable {
     /// ⌘↩ arrived while the selection was still being read; the save runs
     /// the moment the target exists.
     var saveAwaitsSelection = false
+    var dictationTarget: DictationTarget? = nil
 
     var canChooseDestination: Bool {
-        guard !saveAwaitsSelection else { return false }
+        guard !saveAwaitsSelection, mode != .dictation else { return false }
         switch phase {
         case .selectingText, .startingVoice, .recording, .editing,
              .selectingVoice(_, finishRequested: false): return true
@@ -69,16 +87,21 @@ nonisolated struct VoiceGesture: Equatable {
     var keyHeld = false
     /// The current press has done its work; nothing happens until the key comes up.
     var releasePending = false
+    /// The key behind the current press, so the other key's release is inert.
+    var key: SpeechKey? = nil
 }
 
 nonisolated enum CaptureAction {
-    case begin(CaptureMode, NoteCaptureContext)
+    case begin(CaptureMode, NoteCaptureContext, DictationTarget? = nil)
     /// The controller could not start a voice capture the reducer asked for.
     case voiceRefused
     case voicePressed
     case voiceReleased
     /// The status menu item: one press starts, the next finishes.
     case voiceToggled
+    case dictatePressed
+    case dictateReleased
+    case dictateToggled
     case voiceEscape
     case voiceModeChanged(VoiceRecordingMode)
     /// The selection reader can finish against the original app after the note
@@ -101,6 +124,7 @@ nonisolated enum CaptureAction {
     case retry
     case retarget(UUID)
     case saved(CaptureSaveRequest, StackMutationOutcome, destinationExists: Bool)
+    case inserted(NoteCaptureContext, Bool)
     case failureTimeout(NoteCaptureContext)
     case teardown
 }
@@ -110,9 +134,12 @@ nonisolated enum CaptureSurface { case editor, voice }
 nonisolated enum CaptureEffect: Equatable {
     /// Check the store and permissions, then send `.begin(.voice, _)` or `.voiceRefused`.
     case beginVoice
+    /// The same checks plus the front app, then `.begin(.dictation, _, target)` or `.voiceRefused`.
+    case beginDictation
     case readSelection(NoteCaptureContext, CaptureMode)
     case startRecording(NoteCaptureContext)
     case transcribe(NoteCaptureContext)
+    case insert(NoteCaptureContext, String, DictationTarget)
     case commit(CaptureSaveRequest)
     case switchStack(UUID)
     case retry
@@ -147,34 +174,21 @@ nonisolated struct CaptureState: Equatable {
         case .teardown:
             lifecycle = .tornDown
             return [.close]
-        case let .begin(mode, context):
-            return begin(mode, context)
-        case .voicePressed:
-            guard !voice.keyHeld, !voice.releasePending else { return [] }
-            voice.keyHeld = true
-            guard let session else { return [.beginVoice] }
-            voice.releasePending = true
-            return session.mode == .voice ? finishOrBeep(session) : busy(session)
+        case let .begin(mode, context, target):
+            return begin(mode, context, target: target)
+        case .voicePressed: return pressed(.note)
+        case .dictatePressed: return pressed(.dictate)
         case .voiceRefused:
             guard voice.keyHeld else { return [] }
             voice.keyHeld = false
             voice.releasePending = true
             return []
-        case .voiceReleased:
-            let wasHeld = voice.keyHeld
-            voice.keyHeld = false
-            if voice.releasePending {
-                voice.releasePending = false
-                return []
-            }
-            guard wasHeld, voice.mode == .hold, session?.mode == .voice else { return [] }
-            return update(.finishVoice)
-        case .voiceToggled:
-            guard !voice.keyHeld, !voice.releasePending else { return [] }
-            guard let session else { return [.beginVoice] }
-            return session.mode == .voice ? finishOrBeep(session) : busy(session)
+        case .voiceReleased: return released(.note)
+        case .dictateReleased: return released(.dictate)
+        case .voiceToggled: return toggled(.note)
+        case .dictateToggled: return toggled(.dictate)
         case .voiceEscape:
-            guard let session, session.mode == .voice else { return [] }
+            guard let session, session.mode != .text else { return [] }
             if session.destinationPicker == .open {
                 return update(.dismissDestinations(session.context))
             }
@@ -185,7 +199,7 @@ nonisolated struct CaptureState: Equatable {
             return update(.cancelVoice)
         case let .voiceModeChanged(mode):
             voice = VoiceGesture(mode: mode)
-            return session?.mode == .voice ? update(.cancelVoice) : []
+            return session.map { $0.mode != .text } == true ? update(.cancelVoice) : []
         default:
             break
         }
@@ -271,6 +285,16 @@ nonisolated struct CaptureState: Equatable {
                 guard case let .editing(text) = session.phase else { return [] }
                 note = text
             }
+            if session.mode == .dictation {
+                guard let target = session.dictationTarget, let text = note.nonblank else {
+                    session.phase = .failed(note.nonblank == nil ? "No speech was found." : "Couldn’t paste.")
+                    lifecycle = .active(session)
+                    return [.failureTimer(session.context)]
+                }
+                session.phase = .inserting
+                lifecycle = .active(session)
+                return [.insert(session.context, text, target)]
+            }
             guard let target = session.target,
                   let note = target.note(body: note)
             else {
@@ -303,7 +327,7 @@ nonisolated struct CaptureState: Equatable {
             guard context == session.context else { return [] }
             session.liveTranscript = nil
             switch session.phase {
-            case .selectingVoice, .startingVoice, .recording, .transcribing:
+            case .selectingVoice, .startingVoice, .recording, .transcribing, .inserting:
                 session.phase = .failed(message)
                 effects = [.failureTimer(context)]
             case .selectingText:
@@ -345,13 +369,18 @@ nonisolated struct CaptureState: Equatable {
             session.destinationStackID = destination
             session.phase = .saving(request)
             effects = [.commit(request)]
+        case let .inserted(context, pasted):
+            guard context == session.context, session.phase == .inserting else { return [] }
+            if pasted { return finish(session) }
+            session.phase = .failed("Couldn’t paste.")
+            effects = [.failureTimer(context)]
         case .dismiss:
             return finish(session)
         case let .failureTimeout(context):
             guard context == session.context, case .failed = session.phase else { return [] }
             return finish(session)
         case .begin, .teardown, .voiceRefused, .voicePressed, .voiceReleased, .voiceToggled,
-             .voiceEscape, .voiceModeChanged:
+             .dictatePressed, .dictateReleased, .dictateToggled, .voiceEscape, .voiceModeChanged:
             return []
         }
         if !session.canChooseDestination { session.destinationPicker = .closed }
@@ -359,15 +388,54 @@ nonisolated struct CaptureState: Equatable {
         return effects
     }
 
-    private mutating func begin(_ mode: CaptureMode, _ context: NoteCaptureContext) -> [CaptureEffect] {
+    private mutating func begin(
+        _ mode: CaptureMode, _ context: NoteCaptureContext, target: DictationTarget?
+    ) -> [CaptureEffect] {
         guard let session else {
-            lifecycle = .active(CaptureSession(context: context, mode: mode,
-                phase: mode == .text ? .selectingText : .selectingVoice(recording: false, finishRequested: false),
-                destinationStackID: context.stackID))
-            return mode == .text ? [.readSelection(context, mode)]
-                : [.show(.voice), .startRecording(context), .readSelection(context, mode)]
+            let phase: CapturePhase = switch mode {
+            case .text: .selectingText
+            case .voice: .selectingVoice(recording: false, finishRequested: false)
+            case .dictation: .startingVoice
+            }
+            lifecycle = .active(CaptureSession(context: context, mode: mode, phase: phase,
+                destinationStackID: context.stackID, dictationTarget: mode == .dictation ? target : nil))
+            switch mode {
+            case .text: return [.readSelection(context, mode)]
+            case .voice: return [.show(.voice), .startRecording(context), .readSelection(context, mode)]
+            case .dictation: return [.show(.voice), .startRecording(context)]
+            }
         }
         return busy(session)
+    }
+
+    /// A speech key went down. With nothing open it starts that key's
+    /// capture; over its own capture it finishes; over anything else it beeps.
+    private mutating func pressed(_ key: SpeechKey) -> [CaptureEffect] {
+        guard !voice.keyHeld, !voice.releasePending else { return [] }
+        voice.keyHeld = true
+        voice.key = key
+        guard let session else { return [key == .note ? .beginVoice : .beginDictation] }
+        voice.releasePending = true
+        return session.mode == key.mode ? finishOrBeep(session) : busy(session)
+    }
+
+    private mutating func released(_ key: SpeechKey) -> [CaptureEffect] {
+        guard voice.key == key else { return [] }
+        let wasHeld = voice.keyHeld
+        voice.keyHeld = false
+        voice.key = nil
+        if voice.releasePending {
+            voice.releasePending = false
+            return []
+        }
+        guard wasHeld, voice.mode == .hold, session?.mode == key.mode else { return [] }
+        return update(.finishVoice)
+    }
+
+    private mutating func toggled(_ key: SpeechKey) -> [CaptureEffect] {
+        guard !voice.keyHeld, !voice.releasePending else { return [] }
+        guard let session else { return [key == .note ? .beginVoice : .beginDictation] }
+        return session.mode == key.mode ? finishOrBeep(session) : busy(session)
     }
 
     /// A capture is already open; point the user at it.
@@ -388,7 +456,7 @@ nonisolated struct CaptureState: Equatable {
     private mutating func finish(_ session: CaptureSession) -> [CaptureEffect] {
         lifecycle = .idle
         // The key is still down after its capture ended; its release must not start another.
-        if session.mode == .voice, voice.keyHeld {
+        if session.mode != .text, voice.keyHeld {
             voice.keyHeld = false
             voice.releasePending = true
         }

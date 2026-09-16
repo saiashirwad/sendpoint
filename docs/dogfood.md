@@ -11,6 +11,11 @@ tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
 - [ ] Typed note over a selection in an Electron app (VS Code or Slack). The quote is the selection.
 - [ ] Typed note with nothing selected. A standalone thought saves.
 - [ ] Open a typed note, then quit immediately after saving. Relaunch and confirm the note is there.
+- [ ] Put the cursor in a text field in another app, hold ⌥Space, speak, release. The words paste there and no note is saved.
+- [ ] Dictate with the card on. The card shows the app's name in its footer and no stack picker.
+- [ ] Hold ⌥Space while a voice note is recording. It beeps and the note keeps recording.
+- [ ] Press ⌥Space with Sendpoint's Settings in front. Nothing happens.
+- [ ] Clear the Dictate shortcut in Settings. The status menu loses its Dictate item.
 
 ## Export
 

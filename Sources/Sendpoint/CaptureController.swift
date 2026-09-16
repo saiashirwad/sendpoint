@@ -69,6 +69,7 @@ final class CaptureController {
     @ObservationIgnored private let permissionState: PermissionState
     @ObservationIgnored private let selection: SelectionCapture
     @ObservationIgnored private let recorder: VoiceRecorder
+    @ObservationIgnored private let frontApp: @MainActor () -> DictationTarget?
     @ObservationIgnored private let makeSurfaces: (CaptureController) -> CaptureSurfaces
     @ObservationIgnored private lazy var surfaces = makeSurfaces(self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
@@ -76,7 +77,7 @@ final class CaptureController {
     /// never sees state from halfway through another action.
     @ObservationIgnored private var pending: [CaptureAction] = []
     @ObservationIgnored private var isDraining = false
-    private enum Work: Hashable { case selection, recording, transcription, failure }
+    private enum Work: Hashable { case selection, recording, transcription, insertion, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
 
     var onAccessibilityRequired: (() -> Void)?
@@ -119,13 +120,23 @@ final class CaptureController {
 
     init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionState,
          selection: SelectionCapture, recorder: VoiceRecorder,
+         frontApp: @escaping @MainActor () -> DictationTarget? = { CaptureController.frontmostApp() },
          surfaces: @escaping (CaptureController) -> CaptureSurfaces) {
         self.settings = settings
         self.voiceSettings = voiceSettings
         self.permissionState = permissionState
         self.selection = selection
         self.recorder = recorder
+        self.frontApp = frontApp
         self.makeSurfaces = surfaces
+    }
+
+    /// The app dictation pastes into. Sendpoint's own windows are never a
+    /// target, so a press over Settings does nothing.
+    static func frontmostApp() -> DictationTarget? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.bundleIdentifier != Bundle.main.bundleIdentifier else { return nil }
+        return DictationTarget(processIdentifier: app.processIdentifier, appName: app.localizedName)
     }
 
     func configure(store: StackStore) {
@@ -212,6 +223,13 @@ final class CaptureController {
         switch effect {
         case .beginVoice:
             if let context = beginContext() { send(.begin(.voice, context)) } else { send(.voiceRefused) }
+        case .beginDictation:
+            guard let target = frontApp() else {
+                NSSound.beep()
+                send(.voiceRefused)
+                return
+            }
+            if let context = beginContext() { send(.begin(.dictation, context, target)) } else { send(.voiceRefused) }
         case let .readSelection(context, mode):
             launch(.selection, context: context) { [selection, weak self] in
                 .selection(context, try await selection.read(mode == .text ? .patient : .brief) {
@@ -235,6 +253,10 @@ final class CaptureController {
             surfaces.stopEscapeHandling()
             launch(.transcription, context: context) { [recorder] in
                 .transcript(context, try await recorder.stopAndTranscribe())
+            }
+        case let .insert(context, text, target):
+            launch(.insertion, context: context) { [selection] in
+                .inserted(context, try await selection.insertText(text, target.processIdentifier))
             }
         case let .commit(request):
             guard let store else { return }

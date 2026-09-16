@@ -9,7 +9,7 @@ final class VoiceShortcutSettingsTests: XCTestCase {
         try withDefaults { defaults in
             let shortcuts = ShortcutSettings(defaults: defaults)
             let voice = VoiceSettings(defaults: defaults)
-            let combo = KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option])
+            let combo = KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option, .shift])
             try shortcuts.setShortcut(combo, for: .voiceCapture)
             voice.setVoiceMode(.tap)
             XCTAssertEqual(ShortcutSettings(defaults: defaults).voiceCaptureCombo, combo)
@@ -35,6 +35,28 @@ final class VoiceShortcutSettingsTests: XCTestCase {
             XCTAssertEqual(voice.transcriptionPreviewLines, 5)
             XCTAssertEqual(voice.transcriptionPreviewFontSize, 11)
             XCTAssertEqual(voice.transcriptionPreviewOpacity, 50)
+        }
+    }
+
+    /// Dictation ships bound to ⌥Space. Clearing it turns dictation off, and
+    /// that must survive a relaunch even though the slot has a default.
+    func testDictationIsOnByDefaultAndStaysOffOnceCleared() throws {
+        try withDefaults { defaults in
+            let shortcuts = ShortcutSettings(defaults: defaults)
+            XCTAssertEqual(shortcuts.dictateCombo, KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option]))
+            XCTAssertEqual(
+                shortcuts.shortcutConflict(for: KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option]),
+                                           excluding: .voiceCapture),
+                .duplicate(.dictate)
+            )
+
+            shortcuts.clearShortcut(for: .dictate)
+            XCTAssertNil(shortcuts.dictateCombo)
+            XCTAssertNil(ShortcutSettings(defaults: defaults).dictateCombo, "unbound survives a relaunch")
+
+            let rebound = KeyCombo(keyCode: UInt16(kVK_ANSI_D), modifiers: [.option])
+            try shortcuts.setShortcut(rebound, for: .dictate)
+            XCTAssertEqual(ShortcutSettings(defaults: defaults).dictateCombo, rebound)
         }
     }
 

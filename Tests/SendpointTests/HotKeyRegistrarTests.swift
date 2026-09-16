@@ -195,6 +195,8 @@ final class HotKeyRegistrarTests: XCTestCase {
             voicePressed: {},
             voiceReleased: {},
             typedNote: {},
+            dictatePressed: {},
+            dictateReleased: {},
             copy: {},
             showStack: {},
             switchStack: { _ in },

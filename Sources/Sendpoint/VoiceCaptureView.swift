@@ -60,7 +60,10 @@ struct VoiceCaptureView: View {
 
     /// The overlay window is built once at launch and kept, so the entrance
     /// animation keys off the stack rather than the view's first appearance.
-    private var appeared: Bool { model.state.session?.mode == .voice }
+    private var appeared: Bool {
+        guard let mode = model.state.session?.mode else { return false }
+        return mode != .text
+    }
     private var animates: Bool { windowIsVisible && appeared }
 
     private var palette: OverlayPalette { .against(systemScheme) }
@@ -96,8 +99,7 @@ struct VoiceCaptureView: View {
 
     private var pill: some View {
         HStack(spacing: 10) {
-            destination(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
-            noteCount
+            leading(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
             if let tether {
                 divider
                 tetherText(tether)
@@ -128,11 +130,10 @@ struct VoiceCaptureView: View {
                     alignment: .topLeading
                 )
             HStack(spacing: 10) {
-                destination(
+                leading(
                     rowHeight: VoiceCaptureLayout.cardFooterHeight,
                     anchorHeight: VoiceCaptureLayout.cardAnchorHeight(lines: lineCount, fontSize: fontSize)
                 )
-                noteCount
                 if let tether {
                     divider
                     tetherText(tether)
@@ -180,6 +181,22 @@ struct VoiceCaptureView: View {
     }
 
     // MARK: - Shared controls
+
+    /// A note says which stack it is going to; dictation says which app.
+    @ViewBuilder
+    private func leading(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
+        if let target = model.state.session?.dictationTarget {
+            Text(target.appName ?? "Front app")
+                .font(.ui(11.5, weight: .medium))
+                .foregroundStyle(palette.ink.opacity(0.9))
+                .lineLimit(1)
+                .frame(maxWidth: 180, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+        } else {
+            destination(rowHeight: rowHeight, anchorHeight: anchorHeight)
+            noteCount
+        }
+    }
 
     private func destination(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
         CaptureDestinationButton(
@@ -251,7 +268,7 @@ struct VoiceCaptureView: View {
     private var orbMode: VoiceOrb.Mode {
         switch model.state.session?.phase {
         case .recording, .selectingVoice(recording: true, finishRequested: _): .live
-        case .transcribing, .saving: .thinking
+        case .transcribing, .saving, .inserting: .thinking
         case .failed, .saveFailed: .flat
         default: .idle
         }
@@ -268,7 +285,12 @@ struct VoiceCaptureView: View {
     }
 
     private var accessibilityLabel: String {
-        let destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
+        let destination: String
+        if let target = model.state.session?.dictationTarget {
+            destination = " Pasting into \(target.appName ?? "the front app")."
+        } else {
+            destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
+        }
         let transcript = showsCard && !self.transcript.rows.isEmpty
             ? " Live transcript: \(self.transcript.rows.map(\.text).joined(separator: " "))"
             : ""
@@ -277,6 +299,7 @@ struct VoiceCaptureView: View {
         case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
         case let .failed(message): return "Voice body: \(message)"
         case .saving: return "Voice body: saving.\(destination)"
+        case .inserting: return "Voice body: pasting.\(destination)"
         default: return ""
         }
     }

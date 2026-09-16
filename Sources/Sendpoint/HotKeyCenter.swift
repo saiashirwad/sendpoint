@@ -5,6 +5,7 @@ import Carbon.HIToolbox
 enum HotKeyName: String, CaseIterable, Hashable {
     case voiceCapture
     case capture
+    case dictate
     case copy
     case stack
     case switchStack

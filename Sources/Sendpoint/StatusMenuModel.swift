@@ -6,6 +6,7 @@ import SendpointDomain
 enum StatusMenuAction: Hashable {
     case voiceNote
     case typedNote
+    case dictate
     case showStack
     case switchToStack(UUID)
     case quickSwitcher
@@ -84,6 +85,12 @@ enum StatusMenuModel {
         menu.append(.entry(entry("Typed Note",
             action: ready ? .typedNote : nil,
             combo: shortcuts.captureCombo)))
+        // Dictation is off when its shortcut is unbound, so the item goes too.
+        if let combo = shortcuts.dictateCombo {
+            menu.append(.entry(entry("Dictate",
+                action: ready ? .dictate : nil,
+                combo: combo)))
+        }
         menu.append(.entry(entry("Show Stack…",
             action: ready ? .showStack : nil,
             combo: shortcuts.stackCombo)))

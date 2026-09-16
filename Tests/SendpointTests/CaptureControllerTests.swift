@@ -60,18 +60,28 @@ final class CaptureControllerTests: XCTestCase {
         }
     }
 
+    @MainActor private final class Pasteboard {
+        var inserted: [(String, pid_t)] = []
+        var pasteSucceeds = true
+    }
+
     private struct Fixture {
         let controller: CaptureController
         let store: StackStore
         let surfaces: Surfaces
         let recorder: Recorder
+        let pasteboard: Pasteboard
         let selectionGate: Gate<CapturedSelection>
         var accessibilityRequests = 0
     }
 
     private let selection = CapturedSelection(text: "A passage")
+    private let frontApp = DictationTarget(processIdentifier: 7, appName: "Safari")
 
-    private func makeFixture(accessibility: AccessibilityPermissionState = .granted) async throws -> Fixture {
+    private func makeFixture(
+        accessibility: AccessibilityPermissionState = .granted,
+        hasFrontApp: Bool = true
+    ) async throws -> Fixture {
         let suite = "CaptureControllerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(false, forKey: "restoreFocusAfterSave")
@@ -84,7 +94,9 @@ final class CaptureControllerTests: XCTestCase {
         let store = try await StackStore(persistence: StorePersistence(load: { nil }, commit: { _ in }))
         let surfaces = Surfaces()
         let recorder = Recorder()
+        let pasteboard = Pasteboard()
         let gate = Gate<CapturedSelection>()
+        let frontApp = hasFrontApp ? self.frontApp : nil
         let controller = CaptureController(
             settings: AppSettings(defaults: defaults),
             voiceSettings: VoiceSettings(defaults: defaults),
@@ -94,14 +106,19 @@ final class CaptureControllerTests: XCTestCase {
                     editorMayOpen()
                     return await gate.wait()
                 },
-                paste: { _, _ in false }
+                paste: { _, _ in false },
+                insertText: { text, pid in
+                    pasteboard.inserted.append((text, pid))
+                    return pasteboard.pasteSucceeds
+                }
             ),
             recorder: recorder.boundary,
+            frontApp: { frontApp },
             surfaces: { _ in surfaces.boundary }
         )
         controller.configure(store: store)
         return Fixture(controller: controller, store: store, surfaces: surfaces,
-                       recorder: recorder, selectionGate: gate)
+                       recorder: recorder, pasteboard: pasteboard, selectionGate: gate)
     }
 
     private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
@@ -233,6 +250,54 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(f.store.currentNotes.map(\.body), ["hello there"])
         XCTAssertEqual(f.recorder.discards, 1, "closing releases the microphone once")
         XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+    }
+
+    func testDictationHoldPastesTheTranscriptIntoTheFrontAppAndSavesNothing() async throws {
+        let f = try await makeFixture()
+        f.controller.send(.dictatePressed)
+        XCTAssertEqual(f.surfaces.events, ["show voice"])
+        XCTAssertEqual(f.controller.state.session?.dictationTarget, frontApp)
+        await waitUntil { f.recorder.starts == 1 }
+        await f.recorder.started.open(true)
+        await waitUntil { f.controller.state.session?.phase == .recording }
+
+        f.controller.send(.dictateReleased)
+        XCTAssertEqual(f.surfaces.events.last, "stopEscape")
+        await waitUntil { !f.controller.isOpen }
+
+        XCTAssertEqual(f.pasteboard.inserted.map(\.0), ["hello there"])
+        XCTAssertEqual(f.pasteboard.inserted.map(\.1), [7])
+        XCTAssertTrue(f.store.currentNotes.isEmpty, "dictation never touches the stack")
+        XCTAssertEqual(f.recorder.discards, 1)
+        XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+    }
+
+    func testDictationWithNoFrontAppIsRefusedUntilTheKeyComesUp() async throws {
+        let f = try await makeFixture(hasFrontApp: false)
+        f.controller.send(.dictatePressed)
+        XCTAssertFalse(f.controller.isOpen)
+        XCTAssertEqual(f.surfaces.events, [])
+        XCTAssertEqual(f.controller.state.voice, VoiceGesture(releasePending: true, key: .dictate))
+        f.controller.send(.dictatePressed)
+        XCTAssertFalse(f.controller.isOpen, "still down")
+        f.controller.send(.dictateReleased)
+        XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+    }
+
+    func testAFailedPasteShowsAMessageAndCloses() async throws {
+        let f = try await makeFixture()
+        f.pasteboard.pasteSucceeds = false
+        f.controller.send(.dictatePressed)
+        await waitUntil { f.recorder.starts == 1 }
+        await f.recorder.started.open(true)
+        await waitUntil { f.controller.state.session?.phase == .recording }
+        f.controller.send(.dictateReleased)
+        await waitUntil { f.controller.state.session?.phase == .failed("Couldn’t paste.") }
+        XCTAssertEqual(f.pasteboard.inserted.count, 1)
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
+        f.controller.send(.voiceEscape)
+        XCTAssertFalse(f.controller.isOpen)
+        XCTAssertEqual(f.surfaces.events.last, "close")
     }
 
     func testReleaseBeforeTheMicrophoneOpensEndsQuietly() async throws {
