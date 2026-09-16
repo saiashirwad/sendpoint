@@ -163,31 +163,27 @@ nonisolated enum Shaders {
     static let isAvailable = Bundle.main.url(forResource: "default", withExtension: "metallib") != nil
 }
 
-/// The paper every window is drawn on. Grain and a slow soft light, both
+/// The paper every window is drawn on. Grain and a soft light, both
 /// too faint to name, so a flat sheet stops looking like a flat fill.
 struct Backdrop: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if Shaders.isAvailable {
-            TimelineView(.animation(minimumInterval: 1 / 10, paused: reduceMotion)) { context in
-                let time = Float(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600))
-                let dark = scheme == .dark
-                let paper = Ink.paper(scheme)
-                let tint = Color(white: dark ? 0.32 : 1.0)
-                let glow: Float = dark ? 0.08 : 0
-                let depth: Float = dark ? 0.025 : 0.014
-                let grain: Float = dark ? 0.016 : 0.010
-                Rectangle()
-                    .fill(paper)
-                    .visualEffect { content, proxy in
-                        content.colorEffect(ShaderLibrary.paper(
-                            .float2(proxy.size), .float(time), .color(tint),
-                            .float(glow), .float(depth), .float(grain)
-                        ))
-                    }
-            }
+            let dark = scheme == .dark
+            let paper = Ink.paper(scheme)
+            let tint = Color(white: dark ? 0.32 : 1.0)
+            let glow: Float = dark ? 0.08 : 0
+            let depth: Float = dark ? 0.025 : 0.014
+            let grain: Float = dark ? 0.016 : 0.010
+            Rectangle()
+                .fill(paper)
+                .visualEffect { content, proxy in
+                    content.colorEffect(ShaderLibrary.paper(
+                        .float2(proxy.size), .color(tint),
+                        .float(glow), .float(depth), .float(grain)
+                    ))
+                }
         } else {
             Rectangle().fill(Ink.paper(scheme))
         }
@@ -199,7 +195,7 @@ struct Backdrop: View {
 /// alive at the trailing end.
 struct WordmarkPill: View {
     var mode: VoiceOrb.Mode = .idle
-    var level: Double = 0
+    var animates = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -208,7 +204,7 @@ struct WordmarkPill: View {
             Text("Sendpoint")
                 .font(.ui(12.5, weight: .semibold))
                 .foregroundStyle(palette.ink.opacity(0.92))
-            VoiceOrb(mode: mode, level: level, ink: palette.ink, amber: palette.amber, accent: palette.accent)
+            VoiceOrb(mode: mode, level: 0, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
                 .frame(width: 22, height: 22)
         }
         .padding(.leading, 14)
@@ -234,11 +230,9 @@ struct WordmarkPill: View {
 /// An empty stack, drawn: three thin sheets fanned back, each one paper so
 /// it hides the sheet behind it, the front one holding two lines waiting
 /// for words. Stroked in a pink-to-white gradient over a faint glow.
-/// Vector, so it is crisp at any size; it drifts a little unless motion is
-/// reduced.
+/// Vector, so it is crisp at any size, with no idle animation work.
 struct EmptyStackGlyph: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let sheet = CGSize(width: 104, height: 66)
     private static let radius: CGFloat = 12
@@ -252,45 +246,39 @@ struct EmptyStackGlyph: View {
             colors: [accent, accent.opacity(0.75), faint],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            let drift = reduceMotion ? 0 : sin(time * 0.8) * 1.5
-            ZStack {
-                Circle()
-                    .fill(accent.opacity(scheme == .dark ? 0.12 : 0.07))
-                    .frame(width: 140, height: 140)
-                    .blur(radius: 28)
-                    .offset(y: 6)
-                ForEach([2, 1, 0], id: \.self) { depth in
-                    let d = CGFloat(depth)
-                    let shape = RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                    shape
-                        .fill(Ink.paper(scheme))
-                        .overlay(shape.strokeBorder(stroke, lineWidth: 1).opacity(1 - Double(depth) * 0.3))
-                        .frame(width: Self.sheet.width - d * Self.inset * 2, height: Self.sheet.height)
-                        .offset(y: -d * Self.lift + drift * (1 - d * 0.3))
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Capsule().fill(stroke).frame(width: 40, height: 1.2)
-                    Capsule().fill(stroke).frame(width: 24, height: 1.2)
-                }
-                .frame(width: Self.sheet.width - 34, height: Self.sheet.height - 30, alignment: .topLeading)
-                .offset(y: drift)
+        ZStack {
+            Circle()
+                .fill(accent.opacity(scheme == .dark ? 0.12 : 0.07))
+                .frame(width: 140, height: 140)
+                .blur(radius: 28)
+                .offset(y: 6)
+            ForEach([2, 1, 0], id: \.self) { depth in
+                let d = CGFloat(depth)
+                let shape = RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
+                shape
+                    .fill(Ink.paper(scheme))
+                    .overlay(shape.strokeBorder(stroke, lineWidth: 1).opacity(1 - Double(depth) * 0.3))
+                    .frame(width: Self.sheet.width - d * Self.inset * 2, height: Self.sheet.height)
+                    .offset(y: -d * Self.lift)
             }
+            VStack(alignment: .leading, spacing: 8) {
+                Capsule().fill(stroke).frame(width: 40, height: 1.2)
+                Capsule().fill(stroke).frame(width: 24, height: 1.2)
+            }
+            .frame(width: Self.sheet.width - 34, height: Self.sheet.height - 30, alignment: .topLeading)
         }
         .frame(width: 160, height: 120)
         .accessibilityHidden(true)
     }
 }
 
-/// Soft pools of pink, lavender and sky drifting over paper: the status
+/// Soft pools of pink, lavender and sky over paper: the status
 /// card's background. Dark mode keeps the same hues, dimmer.
 struct Aurora: View {
     /// How far the pools are allowed to tint the base. A small card takes
     /// the full amount; a large sheet wants about half.
     var strength: Double = 1
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let dark = scheme == .dark
@@ -299,17 +287,14 @@ struct Aurora: View {
         let lavender = dark ? Color(red: 0.42, green: 0.36, blue: 0.62) : Color(red: 0.84, green: 0.82, blue: 0.98)
         let sky = dark ? Color(red: 0.30, green: 0.42, blue: 0.56) : Color(red: 0.80, green: 0.88, blue: 0.98)
         if Shaders.isAvailable {
-            TimelineView(.animation(minimumInterval: 1 / 12, paused: reduceMotion)) { context in
-                let time = Float(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600))
-                Rectangle()
-                    .fill(base)
-                    .visualEffect { content, proxy in
-                        content.colorEffect(ShaderLibrary.aurora(
-                            .float2(proxy.size), .float(time),
-                            .color(pink), .color(lavender), .color(sky), .float(Float(strength))
-                        ))
-                    }
-            }
+            Rectangle()
+                .fill(base)
+                .visualEffect { content, proxy in
+                    content.colorEffect(ShaderLibrary.aurora(
+                        .float2(proxy.size),
+                        .color(pink), .color(lavender), .color(sky), .float(Float(strength))
+                    ))
+                }
         } else {
             ZStack {
                 base
@@ -1146,31 +1131,56 @@ struct WindowVisibilityReporter: NSViewRepresentable {
         nsView.onChange = { isVisible = $0 }
     }
 
+    static func dismantleNSView(_ nsView: ReporterView, coordinator: ()) {
+        nsView.teardown()
+    }
+
     final class ReporterView: NSView {
         var onChange: ((Bool) -> Void)?
-        private var observers: [NSObjectProtocol] = []
+        private var reportTask: Task<Void, Never>?
+
+        deinit { reportTask?.cancel() }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            observers.forEach(NotificationCenter.default.removeObserver)
-            observers = []
+            NotificationCenter.default.removeObserver(self)
+            reportTask?.cancel()
             guard let window else { report(false); return }
-            observers.append(NotificationCenter.default.addObserver(
-                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-            ) { [weak self] _ in MainActor.assumeIsolated { self?.reportCurrent() } })
-            observers.append(NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification, object: window, queue: .main
-            ) { [weak self] _ in MainActor.assumeIsolated { self?.report(false) } })
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(reportCurrent),
+                name: NSWindow.didChangeOcclusionStateNotification, object: window
+            )
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(windowWillClose),
+                name: NSWindow.willCloseNotification, object: window
+            )
             reportCurrent()
         }
 
-        private func reportCurrent() {
+        @objc private func reportCurrent() {
             guard let window else { report(false); return }
             report(window.isVisible && window.occlusionState.contains(.visible))
         }
 
         private func report(_ visible: Bool) {
-            DispatchQueue.main.async { [onChange] in onChange?(visible) }
+            reportTask?.cancel()
+            reportTask = Task { @MainActor [weak self] in
+                // Deliver outside the AppKit/SwiftUI attachment update. A newer
+                // visibility event or teardown cancels this pending delivery.
+                await Task.yield()
+                guard !Task.isCancelled, let self else { return }
+                self.reportTask = nil
+                self.onChange?(visible)
+            }
+        }
+
+        @objc private func windowWillClose() { report(false) }
+
+        func teardown() {
+            NotificationCenter.default.removeObserver(self)
+            reportTask?.cancel()
+            reportTask = nil
+            onChange = nil
         }
     }
 }

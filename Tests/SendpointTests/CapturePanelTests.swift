@@ -149,19 +149,6 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertTrue(setup.collectionBehavior.contains(.moveToActiveSpace))
     }
 
-    func testSetupHeroMotionSpeaksThenRests() {
-        let speaking = SetupHeroMotion.phase(at: 1)
-        XCTAssertEqual(speaking.mode, .live)
-        XCTAssertGreaterThan(speaking.level, 0)
-
-        let rest = SetupHeroMotion.phase(at: 5)
-        XCTAssertEqual(rest.mode, .idle)
-        XCTAssertEqual(rest.level, 0)
-
-        let wrapped = SetupHeroMotion.phase(at: SetupHeroMotion.period + 1)
-        XCTAssertEqual(wrapped.mode, .live)
-    }
-
     func testSetupHeroStageWalksPermissionsInOrder() {
         XCTAssertEqual(
             SetupHeroStage.from(

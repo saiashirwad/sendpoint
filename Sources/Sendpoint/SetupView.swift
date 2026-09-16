@@ -1,31 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Looping demo of the recording capsule: two spoken phrases, then a rest.
-enum SetupHeroMotion {
-    static let period: TimeInterval = 6
-    static let speakingDuration: TimeInterval = 4
-    /// How long the living pill plays before setup dismisses itself.
-    static let completionPause: Duration = .milliseconds(1400)
-
-    static func phase(at time: TimeInterval) -> (mode: VoiceOrb.Mode, level: Double) {
-        let cycle = time.truncatingRemainder(dividingBy: period)
-        if cycle < speakingDuration {
-            return (.live, speechLevel(cycle))
-        }
-        return (.idle, 0)
-    }
-
-    /// Two envelopes inside the speaking window, with a little flutter so
-    /// the orb does not swell as a perfect sine.
-    static func speechLevel(_ cycle: TimeInterval) -> Double {
-        let phrase = cycle < 2 ? cycle / 2 : (cycle - 2) / 2
-        let envelope = sin(phrase * .pi)
-        let flutter = 0.5 + 0.5 * sin(cycle * 11)
-        return min(max(envelope * flutter, 0), 1)
-    }
-}
-
 /// The next thing the setup pill should do. One stage at a time, in the
 /// order Sendpoint actually needs them.
 enum SetupHeroStage: Equatable {
@@ -181,6 +156,7 @@ struct SetupView: View {
     let onDismiss: () -> Void
     let onOpenStack: () -> Void
     @State private var didFinish = false
+    @State private var windowIsVisible = false
     @Environment(\.colorScheme) private var colorScheme
 
     /// Emblem, one ask, the step rail and its button. Never scrolls.
@@ -209,7 +185,7 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SetupHeroPill(permissionState: permissionState)
+            SetupHeroPill(permissionState: permissionState, animates: windowIsVisible)
                 .padding(.top, 30)
             Spacer(minLength: 0)
             steps
@@ -237,6 +213,7 @@ struct SetupView: View {
         .padding(.bottom, Self.inset - 4)
         .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
         .background(Aurora(strength: 0.55))
+        .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
         .font(.uiBody)
         .clipShape(RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
         .overlay {
@@ -248,7 +225,10 @@ struct SetupView: View {
             guard stage == .ready else { return }
             onDismiss()
         }
-        .task { await permissionState.watchVoiceModel() }
+        .task(id: windowIsVisible) {
+            guard windowIsVisible else { return }
+            await permissionState.watchVoiceModel()
+        }
     }
 
     /// Permissions first; once they are in, the tour takes the same rail.
@@ -352,12 +332,12 @@ struct SetupView: View {
 }
 
 /// The recording capsule, alive, wearing the wordmark: the emblem at the
-/// top of setup. It listens on a loop once everything is granted, thinks
+/// top of setup. It lights up once everything is granted, thinks
 /// while the model downloads, and goes flat when a download fails.
 /// Clicking it does the next thing Sendpoint needs, like the button.
 private struct SetupHeroPill: View {
     @Bindable var permissionState: PermissionState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let animates: Bool
     @State private var appeared = false
     @State private var hovering = false
 
@@ -370,15 +350,7 @@ private struct SetupHeroPill: View {
     }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || !usesDemoMotion)) { context in
-            let demo = SetupHeroMotion.phase(
-                at: context.date.timeIntervalSinceReferenceDate
-            )
-            pill(
-                mode: orbMode(demo: demo),
-                level: usesDemoMotion && !reduceMotion ? demo.level : 0
-            )
-        }
+        WordmarkPill(mode: orbMode, animates: animates)
         .scaleEffect((appeared ? 1 : 0.9) * (hovering && stage.isActionable ? 1.04 : 1))
         .opacity(appeared ? 1 : 0)
         .onAppear {
@@ -393,12 +365,9 @@ private struct SetupHeroPill: View {
         .accessibilityAddTraits(stage.isActionable ? .isButton : [])
     }
 
-    private var usesDemoMotion: Bool { stage == .ready }
-
-    private func orbMode(demo: (mode: VoiceOrb.Mode, level: Double)) -> VoiceOrb.Mode {
-        if reduceMotion { return .idle }
+    private var orbMode: VoiceOrb.Mode {
         switch stage {
-        case .ready: return demo.mode
+        case .ready: return .live
         case .downloading: return .thinking
         case .failedOffline, .failedOther: return .flat
         default: return .idle
@@ -408,10 +377,6 @@ private struct SetupHeroPill: View {
     private func activate() {
         guard stage.isActionable else { return }
         stage.perform(on: permissionState)
-    }
-
-    private func pill(mode: VoiceOrb.Mode, level: Double) -> some View {
-        WordmarkPill(mode: mode, level: level)
     }
 }
 

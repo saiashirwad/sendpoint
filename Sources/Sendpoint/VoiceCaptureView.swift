@@ -56,10 +56,12 @@ struct VoiceCaptureView: View {
     let meter: VoiceLevelMeter
 
     @Environment(\.colorScheme) private var systemScheme
+    @State private var windowIsVisible = false
 
     /// The overlay window is built once at launch and kept, so the entrance
     /// animation keys off the stack rather than the view's first appearance.
     private var appeared: Bool { model.state.session?.mode == .voice }
+    private var animates: Bool { windowIsVisible && appeared }
 
     private var palette: OverlayPalette { .against(systemScheme) }
     private var showsCard: Bool { model.transcriptionPreview }
@@ -85,6 +87,7 @@ struct VoiceCaptureView: View {
         // The hosting panel is wider than the overlay so the tether and a
         // failure message can appear later without the window resizing.
         .frame(maxWidth: .infinity)
+        .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Voice capture")
     }
@@ -154,7 +157,7 @@ struct VoiceCaptureView: View {
     @ViewBuilder
     private var transcriptBody: some View {
         if transcript.rows.isEmpty {
-            VoiceTranscriptWaiting(ink: palette.ink)
+            VoiceTranscriptWaiting(ink: palette.ink, animates: animates && (orbMode == .idle || orbMode == .live))
         } else {
             VoiceTranscriptLines(
                 rows: transcript.rows,
@@ -208,7 +211,7 @@ struct VoiceCaptureView: View {
     }
 
     private var orb: some View {
-        MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent)
+        MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
             .frame(width: 22, height: 22)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
@@ -320,20 +323,31 @@ private struct VoiceTranscriptLines: View {
 
 private struct VoiceTranscriptWaiting: View {
     let ink: Color
+    let animates: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: false)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 5) {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .fill(ink.opacity(0.22 + 0.5 * (0.5 + 0.5 * sin(time * 4.2 + Double(index) * 0.85))))
-                        .frame(width: 6, height: 6)
+        Group {
+            if animates, !reduceMotion {
+                TimelineView(.animation(minimumInterval: 1 / 30)) { context in
+                    dots(at: context.date.timeIntervalSinceReferenceDate)
                 }
+            } else {
+                dots(at: 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.top, 4)
+    }
+
+    private func dots(at time: TimeInterval) -> some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(ink.opacity(0.22 + 0.5 * (0.5 + 0.5 * sin(time * 4.2 + Double(index) * 0.85))))
+                    .frame(width: 6, height: 6)
+            }
+        }
     }
 }
 
@@ -364,9 +378,11 @@ private struct MeteredOrb: View {
     let ink: Color
     let amber: Color
     let accent: Color
+    let animates: Bool
 
     var body: some View {
-        VoiceOrb(mode: mode, level: Double(meter.current), ink: ink, amber: amber, accent: accent)
+        VoiceOrb(mode: mode, level: animates && mode == .live ? Double(meter.current) : 0,
+                 ink: ink, amber: amber, accent: accent, animates: animates)
     }
 }
 
