@@ -169,6 +169,23 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertNil(projection.primaryAction, "An empty result must not advertise Return to edit")
     }
 
+    func testOverlayHighlightWithCurrentIndexIsANoOp() {
+        var harness = makeHarness()
+        harness.send(.open(.stacks, highlighting: firstStackID))
+        harness.send(.toggleOverlay(.actions))
+        XCTAssertEqual(harness.state.overlayHighlight, 0)
+
+        harness.send(.overlayHighlight(2))
+        XCTAssertEqual(harness.state.overlayHighlight, 2)
+
+        let generation = harness.state.focusRequest.generation
+        harness.send(.overlayHighlight(2))
+        XCTAssertEqual(harness.state.overlayHighlight, 2)
+        XCTAssertTrue(harness.effects.isEmpty, "re-highlighting the current index must not produce effects")
+        XCTAssertEqual(harness.state.focusRequest.generation, generation,
+            "re-highlighting the current index must not touch state")
+    }
+
     // MARK: - Harness
 
     private func makeHarness() -> Harness {

@@ -42,6 +42,14 @@ struct ShortcutRows: View {
                 .foregroundStyle(Ink.amber(scheme))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 10)
+                // A failed rebind leaves the old keys and explains why here.
+                // The block reads as one element, and a new message is
+                // announced politely (macOS SwiftUI has no live-region
+                // modifier, so the announcement is posted explicitly).
+                .accessibilityElement(children: .combine)
+                .onChange(of: errorMessage ?? "") { _, message in
+                    announcePolitely(message)
+                }
             }
         }
     }
@@ -51,22 +59,21 @@ struct ShortcutRows: View {
         return shortcuts.shortcutRegistrationIssues.filter { slots.contains($0.id) }
     }
 
+    /// The error block's text as one string, so a change can be announced.
+    private var errorMessage: String? {
+        let parts = issues.map { "\($0.id.title): \($0.message)" } + (feedback.map { [$0] } ?? [])
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
     private func binding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {
         Binding(
             get: { shortcuts.combo(for: slot) },
             set: { proposed in
-                guard let proposed else {
-                    hotKeyRegistrar.clear(slot)
+                if let message = hotKeyRegistrar.updateShortcut(proposed, for: slot) {
+                    feedback = message
+                } else {
                     feedback = nil
                     onSettingsChanged()
-                    return
-                }
-                do {
-                    try hotKeyRegistrar.rebind(proposed, for: slot)
-                    feedback = nil
-                    onSettingsChanged()
-                } catch {
-                    feedback = error.localizedDescription
                 }
             }
         )

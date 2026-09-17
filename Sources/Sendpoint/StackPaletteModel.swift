@@ -49,6 +49,12 @@ final class StackPaletteModel {
     /// applied waits its turn and reports itself handled.
     @discardableResult
     func send(_ event: PaletteEvent) -> Bool {
+        if case .overlayHighlight = event {
+            pending.removeAll {
+                if case .overlayHighlight = $0 { return true }
+                return false
+            }
+        }
         pending.append(event)
         guard !isDraining else { return true }
         isDraining = true

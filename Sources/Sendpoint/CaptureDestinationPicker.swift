@@ -328,6 +328,7 @@ struct CaptureDestinationList: View {
                             row: row, selected: row.id == selectedID,
                             onSelect: { onSelect(row.id) }
                         )
+                        .equatable()
                         .frame(height: CaptureDestinationPanelLayout.rowHeight)
                         .id(row.id)
                     }
@@ -350,11 +351,17 @@ struct CaptureDestinationList: View {
     }
 }
 
-private struct CaptureDestinationRow: View {
+private struct CaptureDestinationRow: View, Equatable {
     let row: StackItemFacts
     let selected: Bool
     let onSelect: () -> Void
     @State private var hovering = false
+
+    /// Rendered inputs only: the row facts and the selected mark. The
+    /// select closure is an identity, and hover is transient @State.
+    static func == (lhs: CaptureDestinationRow, rhs: CaptureDestinationRow) -> Bool {
+        lhs.row == rhs.row && lhs.selected == rhs.selected
+    }
 
     var body: some View {
         Button(action: onSelect) {

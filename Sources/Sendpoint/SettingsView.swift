@@ -187,7 +187,6 @@ private struct SettingsSidebar: View {
         .padding(.bottom, 12)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Ink.well(scheme).opacity(0.85))
-        .task { await permissionState.watchVoiceModel() }
     }
 
     private var wordmark: some View {

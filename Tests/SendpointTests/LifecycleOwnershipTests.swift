@@ -1,0 +1,260 @@
+import XCTest
+@testable import Sendpoint
+
+/// Ownership and teardown tests for the lifecycle-task consolidation: the
+/// NoteFrames disarm, the single-flight voice-model poll, and the
+/// mic-preview owner. None of these needs microphone hardware, panels, or
+/// windows: the poll reads an injected file-existence closure and the mic
+/// owner runs against a fake engine.
+@MainActor
+final class NoteFramesDisarmTests: XCTestCase {
+    func testDisarmClearsLandingSoSettleNoOps() {
+        let frames = NoteFrames()
+        let id = UUID()
+        frames.frames[id] = CGRect(x: 0, y: 0, width: 100, height: 100)
+
+        frames.land(on: id)
+        XCTAssertEqual(frames.landing, id)
+
+        frames.disarm()
+        XCTAssertNil(frames.landing)
+
+        frames.settle()
+        XCTAssertNil(frames.landing)
+        XCTAssertEqual(frames.frames[id], CGRect(x: 0, y: 0, width: 100, height: 100), "disarm clears the landing, never the frames")
+    }
+
+    func testDisarmIsIdempotent() {
+        let frames = NoteFrames()
+        frames.disarm()
+        frames.disarm()
+        XCTAssertNil(frames.landing)
+    }
+
+    func testLateSettleRetryAfterDisarmNoOps() async {
+        let frames = NoteFrames()
+        let id = UUID()
+        frames.frames[id] = CGRect(x: 0, y: 400, width: 100, height: 100)
+
+        // No scroll view is attached, so the landing cannot complete and a
+        // retry is scheduled on the main queue with a weak self capture.
+        frames.land(on: id)
+        frames.disarm()
+
+        // Let the scheduled retry fire; it must no-op instead of relanding.
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertNil(frames.landing)
+    }
+}
+
+@MainActor
+final class VoiceModelWatchOwnershipTests: XCTestCase {
+    private final class BoolBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storedValue: Bool
+
+        init(_ value: Bool) {
+            storedValue = value
+        }
+
+        var value: Bool {
+            get {
+                lock.lock()
+                defer { lock.unlock() }
+                return storedValue
+            }
+            set {
+                lock.lock()
+                storedValue = newValue
+                lock.unlock()
+            }
+        }
+    }
+
+    private func services(
+        modelFilesExist: (@Sendable () -> Bool)? = nil,
+        downloadModel: @escaping @Sendable (
+            _ onProgress: @escaping @Sendable (Double) -> Void
+        ) async throws -> Void = { _ in }
+    ) -> PermissionServices {
+        PermissionServices(
+            accessibilityStatus: { .granted },
+            requestAccessibility: { true },
+            microphoneStatus: { .granted },
+            requestMicrophone: { true },
+            voiceModelFilesExist: modelFilesExist ?? { true },
+            downloadVoiceModel: downloadModel,
+            openAccessibilitySettings: {},
+            openMicrophoneSettings: {}
+        )
+    }
+
+    private func waitUntil(
+        _ predicate: @escaping @MainActor () async -> Bool
+    ) async {
+        for _ in 0..<1_000 {
+            if await predicate() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for asynchronous test work")
+    }
+
+    func testRedundantStartsShareOneLoopUntilLastStop() async {
+        let files = BoolBox(false)
+        let state = PermissionState(services: services(
+            modelFilesExist: { files.value }
+        ))
+        XCTAssertFalse(state.isWatchingVoiceModel)
+
+        // Two presented windows (Setup + Settings) each hold one wait.
+        state.startWatchingVoiceModel(interval: .milliseconds(5))
+        state.startWatchingVoiceModel(interval: .milliseconds(5))
+        XCTAssertTrue(state.isWatchingVoiceModel)
+
+        state.stopWatchingVoiceModel()
+        XCTAssertTrue(state.isWatchingVoiceModel, "one waiter remains, so the single loop keeps running")
+
+        files.value = true
+        await waitUntil { state.localVoiceModel == .ready }
+        XCTAssertTrue(state.isWatchingVoiceModel)
+
+        state.stopWatchingVoiceModel()
+        XCTAssertFalse(state.isWatchingVoiceModel)
+
+        files.value = false
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(state.localVoiceModel, .ready, "no loop is left to pick up the removal")
+        state.teardown()
+    }
+
+    func testStopWatchingIsNarrowerThanTeardown() async {
+        let state = PermissionState(services: services(
+            modelFilesExist: { false },
+            downloadModel: { _ in try? await Task.sleep(for: .milliseconds(50)) }
+        ))
+
+        state.downloadModel()
+        XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
+
+        state.startWatchingVoiceModel(interval: .milliseconds(5))
+        XCTAssertTrue(state.isWatchingVoiceModel)
+        state.stopWatchingVoiceModel()
+        XCTAssertFalse(state.isWatchingVoiceModel)
+        XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil), "releasing the poll leaves the download alone")
+
+        await state.waitForIdle()
+        XCTAssertEqual(state.localVoiceModel, .ready)
+        state.teardown()
+    }
+
+    func testTeardownStopsTheWatchAndIgnoresUnbalancedStops() {
+        let state = PermissionState(services: services())
+        state.startWatchingVoiceModel()
+        XCTAssertTrue(state.isWatchingVoiceModel)
+
+        state.teardown()
+        XCTAssertFalse(state.isWatchingVoiceModel)
+
+        state.startWatchingVoiceModel()
+        XCTAssertFalse(state.isWatchingVoiceModel, "no watch starts after teardown")
+        state.stopWatchingVoiceModel()
+        state.teardown()
+    }
+}
+
+@MainActor
+final class MicrophonePreviewOwnerTests: XCTestCase {
+    private actor StartGate {
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        func wait() async {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+            }
+        }
+
+        func release() {
+            continuation?.resume()
+            continuation = nil
+        }
+    }
+
+    private final class Recorder {
+        var startedUIDs: [String?] = []
+        var stopCount = 0
+        var running = false
+    }
+
+    private func makeOwner(
+        recorder: Recorder,
+        gatedUIDs: Set<String> = [],
+        gate: StartGate
+    ) -> MicrophonePreviewOwner {
+        MicrophonePreviewOwner(engine: .init(
+            start: { uid in
+                recorder.startedUIDs.append(uid)
+                recorder.running = true
+                if let uid, gatedUIDs.contains(uid) {
+                    await gate.wait()
+                }
+            },
+            stop: {
+                recorder.stopCount += 1
+                recorder.running = false
+            },
+            isRunning: { recorder.running },
+            level: { 0 }
+        ))
+    }
+
+    private func waitUntil(
+        _ predicate: @escaping @MainActor () async -> Bool
+    ) async {
+        for _ in 0..<1_000 {
+            if await predicate() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for asynchronous test work")
+    }
+
+    func testStopCancelsPendingStartAndCleansUpStaleBringUp() async {
+        let gate = StartGate()
+        let recorder = Recorder()
+        let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
+
+        owner.start(uid: "a")
+        await waitUntil { recorder.startedUIDs.count == 1 }
+        // One stop for the start clearing the previous engine first.
+        XCTAssertEqual(recorder.stopCount, 1)
+        owner.stop()
+        XCTAssertFalse(owner.isActive)
+        XCTAssertEqual(recorder.stopCount, 2)
+
+        await gate.release()
+        await waitUntil { recorder.stopCount == 3 }
+        XCTAssertFalse(owner.isActive)
+        XCTAssertEqual(recorder.startedUIDs, ["a"], "the stale bring-up never delivers a tap")
+    }
+
+    func testRestartSupersedesInFlightStart() async {
+        let gate = StartGate()
+        let recorder = Recorder()
+        let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
+
+        owner.start(uid: "a")
+        await waitUntil { recorder.startedUIDs.count == 1 }
+        owner.start(uid: "b")
+
+        await gate.release()
+        await waitUntil { recorder.startedUIDs.count == 2 }
+        XCTAssertEqual(recorder.startedUIDs, ["a", "b"])
+        // One stop for the first start's pre-clear, one for the superseded
+        // bring-up's cleanup, one for the restart clearing the stale engine
+        // before starting its own.
+        XCTAssertEqual(recorder.stopCount, 3)
+        XCTAssertTrue(owner.isActive)
+
+        owner.stop()
+        XCTAssertFalse(owner.isActive)
+    }
+}

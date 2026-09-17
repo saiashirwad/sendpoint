@@ -2,6 +2,10 @@ import SwiftUI
 
 /// The name, its ⌘digit, and the note count in the stack palette.
 /// Callers supply the surrounding chrome.
+/// Deliberately not Equatable: the row's pixels include the generic name
+/// closure (stack name, current dot, rename editor), which has no value
+/// equality. StackRowName itself is Equatable, but its only construction
+/// site pins Name == StackRowName, so the gate must wait for the split.
 struct StackRow<Name: View>: View {
     let noteCount: Int
     let position: Int
@@ -58,11 +62,17 @@ extension StackRow where Name == StackRowName {
 /// gutter for the accent dot, so names line up and only the current stack,
 /// where new notes land, fills it. Given a namespace, the dot is one shared
 /// mark that slides between rows when the current stack changes.
-struct StackRowName: View {
+struct StackRowName: View, Equatable {
     let name: String
     let isCurrent: Bool
     var dotNamespace: Namespace.ID? = nil
     @Environment(\.colorScheme) private var scheme
+
+    /// Rendered scalars only. The shared dot namespace is an identity, not
+    /// pixels, and the color scheme arrives via the environment, outside ==.
+    static func == (lhs: StackRowName, rhs: StackRowName) -> Bool {
+        lhs.name == rhs.name && lhs.isCurrent == rhs.isCurrent
+    }
 
     static let gutter: CGFloat = 13
 
@@ -86,4 +96,29 @@ struct StackRowName: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(isCurrent ? "\(name), current capture stack" : name)
     }
+}
+
+// MARK: - Previews
+
+#Preview("StackRowName") {
+    VStack(alignment: .leading, spacing: 8) {
+        StackRowName(name: "Reading", isCurrent: true)
+        StackRowName(name: "Writing", isCurrent: false)
+    }
+    .padding()
+    .frame(width: 240)
+}
+
+#Preview("StackRow") {
+    VStack(spacing: 0) {
+        StackRow(name: "Reading", noteCount: 3, isCurrent: true, position: 0, showsDigit: true)
+            .frame(height: 36)
+        StackRow(name: "Writing", noteCount: 12, isCurrent: false, position: 1, showsDigit: true)
+            .frame(height: 36)
+        // Position 9 hides the ⌘digit; only the count remains.
+        StackRow(name: "Archive", noteCount: 128, isCurrent: false, position: 9, showsDigit: true)
+            .frame(height: 36)
+    }
+    .padding()
+    .frame(width: 260)
 }

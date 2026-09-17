@@ -150,6 +150,32 @@ final class StackSwitchMachineTests: XCTestCase {
         XCTAssertEqual(machine.highlight, b)
     }
 
+    func testBeginGateBeepsWithoutChangingState() {
+        var machine = StackSwitchMachine()
+        XCTAssertEqual(machine.handle(.press(reverse: false), orders: orders, canBegin: false), [.beep])
+        XCTAssertEqual(machine.state, .idle)
+        XCTAssertNil(machine.highlight)
+        XCTAssertTrue(machine.order.isEmpty)
+        XCTAssertEqual(machine.handle(.step(1), orders: orders, canBegin: false), [.beep])
+        XCTAssertEqual(machine.state, .idle)
+        XCTAssertNil(machine.highlight)
+
+        // A rejection while the confirmation lingers leaves it up.
+        var lingering = StackSwitchMachine()
+        _ = lingering.handle(.step(1), orders: orders)
+        XCTAssertEqual(lingering.highlight, b)
+        XCTAssertEqual(lingering.handle(.press(reverse: false), orders: orders, canBegin: false), [.beep])
+        XCTAssertEqual(lingering.state, .lingering)
+        XCTAssertEqual(lingering.highlight, b)
+        XCTAssertEqual(lingering.order, [c, a, b])
+
+        // A press while cycling never consults the gate.
+        var cycling = StackSwitchMachine()
+        _ = cycling.handle(.press(reverse: false), orders: orders)
+        XCTAssertEqual(cycling.handle(.press(reverse: false), orders: orders, canBegin: false), [])
+        XCTAssertEqual(cycling.state, .cycling)
+    }
+
     func testTeardownHidesAndIgnoresEverythingAfter() {
         var machine = StackSwitchMachine()
         _ = machine.handle(.press(reverse: false), orders: orders)

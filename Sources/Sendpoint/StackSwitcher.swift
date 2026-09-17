@@ -3,6 +3,17 @@ import Carbon.HIToolbox
 import SendpointDomain
 
 /// Owns cycling and modifier release; the existing palette owns presentation.
+///
+/// Isolation: explicitly `@MainActor`. (The target's default isolation
+/// already implied this; the annotation locks it in.) Every caller is
+/// MainActor-bound — the hotkey firing path hops to the main queue before
+/// `HotKeyCenter.fire`, the window-controller cycling hooks, and the
+/// store-change callback — so serializing all `machine` mutations on the
+/// MainActor removes the cross-task races with no locks. The release-poll
+/// and linger tasks inherit this isolation explicitly (`Task { @MainActor`),
+/// never detached; the flags-changed monitor re-enters via
+/// `MainActor.assumeIsolated`, as its callback has no static isolation.
+@MainActor
 final class StackSwitcherController {
     private enum Lifecycle { case active, tornDown }
 
@@ -15,6 +26,11 @@ final class StackSwitcherController {
     private let onOpenPalette: (UUID) -> Void
     private let onSwitched: (StackItemFacts) -> Void
     private var machine = StackSwitchMachine()
+    /// Events sent while one is being applied wait their turn, so linger-task,
+    /// release-poll, and hotkey sends serialize instead of interleaving
+    /// `machine` mutations. Same inline drain as CaptureController.
+    private var pending: [StackSwitchEvent] = []
+    private var isDraining = false
     private var releaseWatch: Task<Void, Never>?
     private var flagMonitors: [Any] = []
     private var lingerTask: Task<Void, Never>?
@@ -57,12 +73,17 @@ final class StackSwitcherController {
     }
 
     private func send(_ event: StackSwitchEvent) {
-        guard lifecycle == .active else { return }
-        switch event {
-        case .press, .step:
-            if machine.state != .cycling, !canBeginCycle() { NSSound.beep(); return }
-        default: break
+        pending.append(event)
+        guard !isDraining else { return }
+        isDraining = true
+        defer { isDraining = false }
+        while !pending.isEmpty {
+            apply(pending.removeFirst())
         }
+    }
+
+    private func apply(_ event: StackSwitchEvent) {
+        guard lifecycle == .active else { return }
         let started = CFAbsoluteTimeGetCurrent()
         defer {
             let elapsed = (CFAbsoluteTimeGetCurrent() - started) * 1000
@@ -72,7 +93,18 @@ final class StackSwitcherController {
             recent: store.stacksByRecency.map(\.id),
             listed: store.stacks.map(\.id)
         )
-        let commands = machine.handle(event, orders: orders)
+        // The begin-gate lives in the reducer so tests can see the rejection;
+        // the controller only supplies the facts. The short-circuit keeps the
+        // old evaluation shape: the closure runs only for a begin attempt
+        // while no cycle is already running.
+        let commands: [StackSwitchCommand]
+        switch event {
+        case .press, .step:
+            commands = machine.handle(event, orders: orders,
+                canBegin: machine.state == .cycling || canBeginCycle())
+        default:
+            commands = machine.handle(event, orders: orders)
+        }
         if machine.isShowingPreview, let highlight = machine.highlight { showPreview(highlight) }
         for command in commands { run(command) }
         // Resources follow the state, not the commands, so a cycle begun
@@ -110,7 +142,7 @@ final class StackSwitcherController {
             onOpenPalette(id)
         case .startLinger:
             lingerTask?.cancel()
-            lingerTask = Task { [weak self] in
+            lingerTask = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: .seconds(Self.minimumVisibleDuration)) } catch { return }
                 guard !Task.isCancelled, let self else { return }
                 self.lingerTask = nil
@@ -146,7 +178,7 @@ final class StackSwitcherController {
             NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: handler),
             NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { handler($0); return $0 },
         ].compactMap { $0 }
-        releaseWatch = Task { [weak self] in
+        releaseWatch = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 if NSEvent.modifierFlags.intersection(watched).isEmpty {
                     guard let self, !Task.isCancelled else { return }

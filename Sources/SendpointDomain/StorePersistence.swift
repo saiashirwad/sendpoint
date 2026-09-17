@@ -23,17 +23,28 @@ public struct StorePersistence: Sendable {
 
     private let loadOperation: @Sendable () async throws -> StackDocument?
     private let commitOperation: @Sendable (StackDocument) async throws -> Void
+    private let quarantineFlagOperation: @Sendable () async -> Bool
 
     public init(
         load: @escaping @Sendable () async throws -> StackDocument?,
-        commit: @escaping @Sendable (StackDocument) async throws -> Void
+        commit: @escaping @Sendable (StackDocument) async throws -> Void,
+        quarantineFlag: @escaping @Sendable () async -> Bool = { false }
     ) {
         self.loadOperation = load
         self.commitOperation = commit
+        self.quarantineFlagOperation = quarantineFlag
     }
 
     public func load() async throws -> StackDocument? {
         try await loadOperation()
+    }
+
+    /// Whether the most recent `load()` quarantined a corrupt file before
+    /// reporting first launch. Lets callers distinguish "fresh start, moved
+    /// a corrupt file aside" from "fresh start, first launch". Always false
+    /// for injected doubles built without a quarantine source.
+    public func didQuarantineCorruptFile() async -> Bool {
+        await quarantineFlagOperation()
     }
 
     public func commit(_ document: StackDocument) async throws {
@@ -56,7 +67,8 @@ public struct StorePersistence: Sendable {
         let storage = AtomicJSONStore(directory: baseDirectory, now: now)
         return StorePersistence(
             load: { try await storage.load() },
-            commit: { try await storage.commit($0) }
+            commit: { try await storage.commit($0) },
+            quarantineFlag: { await storage.didQuarantine }
         )
     }
 }
@@ -72,6 +84,10 @@ private actor AtomicJSONStore {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let quarantineDateFormatter: ISO8601DateFormatter
+    /// Whether the most recent `load()` quarantined a corrupt file.
+    /// Reset at the start of every load; set only after a quarantine move
+    /// succeeds, so a failed quarantine (which throws) never reports one.
+    private(set) var didQuarantine = false
 
     init(directory: URL, now: @escaping @Sendable () -> Date) {
         self.directory = directory
@@ -91,14 +107,25 @@ private actor AtomicJSONStore {
 
     func load() throws -> StackDocument? {
         let fileManager = FileManager.default
+        didQuarantine = false
         guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
 
         let data: Data
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            try quarantine(using: fileManager)
-            return nil
+            // A file that vanished between the existence check and the read
+            // is still first launch, not an I/O failure.
+            let code = (error as NSError).code
+            if (error as NSError).domain == NSCocoaErrorDomain,
+               code == NSFileNoSuchFileError || code == NSFileReadNoSuchFileError
+            {
+                return nil
+            }
+            // Raw I/O failures must never look like a wipe: throw without
+            // quarantining so the caller reports "unavailable" instead of
+            // starting empty.
+            throw StorePersistenceError.unavailable
         }
 
         let version: Int
@@ -106,6 +133,7 @@ private actor AtomicJSONStore {
             version = try decoder.decode(VersionEnvelope.self, from: data).version
         } catch {
             try quarantine(using: fileManager)
+            didQuarantine = true
             return nil
         }
         guard version == StackDocument.currentVersion else {
@@ -118,6 +146,7 @@ private actor AtomicJSONStore {
             return document
         } catch {
             try quarantine(using: fileManager)
+            didQuarantine = true
             return nil
         }
     }

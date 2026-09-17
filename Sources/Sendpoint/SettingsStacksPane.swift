@@ -1,6 +1,27 @@
 import SendpointDomain
 import SwiftUI
 
+/// Every stack change the settings stacks page can make. Both entry points —
+/// the chips and the new-stack popover — funnel through `send(to:)`, so the
+/// views own no store transaction. The mutation sequence is unchanged:
+/// creating a stack selects it too, and the explicit switch after a create is
+/// kept as the harmless no-op it already was.
+enum StackSettingsIntent: Equatable {
+    case switchTo(stackID: UUID)
+    case createAndSwitch(Stack)
+
+    func send(to store: StackStore) {
+        switch self {
+        case .switchTo(let stackID):
+            guard stackID != store.currentStackID else { return }
+            store.mutate(.switchStack(stackID: stackID))
+        case .createAndSwitch(let stack):
+            store.mutate(.createStack(stack))
+            store.mutate(.switchStack(stackID: stack.id))
+        }
+    }
+}
+
 struct SettingsStacksPane: View {
     @Bindable var shortcuts: ShortcutSettings
     let storeHandle: SettingsStoreHandle
@@ -67,8 +88,7 @@ struct SettingsStacksPane: View {
             NSSound.beep()
         case let .valid(name):
             let stack = Stack(name: name)
-            store.mutate(.createStack(stack))
-            store.mutate(.switchStack(stackID: stack.id))
+            StackSettingsIntent.createAndSwitch(stack).send(to: store)
             newStack = nil
         }
     }
@@ -88,8 +108,7 @@ private struct StackChips: View {
                     count: stack.notes.count,
                     isSelected: stack.id == store.currentStackID
                 ) {
-                    guard stack.id != store.currentStackID else { return }
-                    store.mutate(.switchStack(stackID: stack.id))
+                    StackSettingsIntent.switchTo(stackID: stack.id).send(to: store)
                 }
             }
             AddChip(label: "New stack", action: onNew)

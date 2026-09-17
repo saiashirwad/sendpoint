@@ -77,3 +77,27 @@ struct VoiceOrb: View {
         CGFloat(pow(min(max(level, 0), 1), 1.3))
     }
 }
+
+// MARK: - Previews
+
+#Preview("VoiceOrb modes") {
+    HStack(spacing: 28) {
+        VStack(spacing: 8) {
+            VoiceOrb(mode: .idle, level: 0, ink: .primary, amber: .orange, accent: .pink)
+            Text("idle").font(.caption).foregroundStyle(.secondary)
+        }
+        VStack(spacing: 8) {
+            VoiceOrb(mode: .live, level: 0.7, ink: .primary, amber: .orange, accent: .pink)
+            Text("live").font(.caption).foregroundStyle(.secondary)
+        }
+        VStack(spacing: 8) {
+            VoiceOrb(mode: .thinking, level: 0, ink: .primary, amber: .orange, accent: .pink)
+            Text("thinking").font(.caption).foregroundStyle(.secondary)
+        }
+        VStack(spacing: 8) {
+            VoiceOrb(mode: .flat, level: 0, ink: .primary, amber: .orange, accent: .pink)
+            Text("flat").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    .padding()
+}

@@ -14,7 +14,7 @@ struct SettingsSystemPane: View {
                     isOn: Binding(
                         get: { settings.launchAtLogin },
                         set: {
-                            settings.setLaunchAtLogin($0)
+                            settings.send(.launchAtLogin($0))
                             onSettingsChanged()
                         }
                     )

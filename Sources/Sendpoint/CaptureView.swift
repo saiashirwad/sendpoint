@@ -116,6 +116,9 @@ struct CaptureView: View {
                 .scrollContentBackground(.hidden)
                 // NSTextView supplies a five-point text-container inset.
                 .padding(.horizontal, -5)
+                // The "Add a note…" overlay below is visual only: the editor
+                // carries the label so it is announced exactly once.
+                .accessibilityLabel("Note")
                 .focused($noteFocused)
                 .frame(minHeight: 72, idealHeight: 108, maxHeight: .infinity)
                 .disabled(model.isNoteFrozen)
@@ -126,6 +129,7 @@ struct CaptureView: View {
                     .foregroundStyle(.tertiary)
                     .padding(.top, 1)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
     }

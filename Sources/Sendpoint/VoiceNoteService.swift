@@ -41,6 +41,22 @@ nonisolated enum LocalVoiceModelFiles {
 /// Records from the microphone and transcribes with Parakeet Unified 0.6B
 /// streaming. The same decoder drives the live card and the saved note.
 /// Nothing leaves the Mac.
+///
+/// Isolation: explicitly `@MainActor`. (The target's default isolation
+/// already implied this; the annotation locks it in.) Every caller is
+/// MainActor-bound — `CaptureController`'s `@MainActor` launch operations
+/// and UI callbacks, plus `PermissionServices`' async hops — so serializing
+/// all mutable state (`engine`/`spareEngine`/`audioQueue`/`streamTask`/
+/// `warmUpTask`/`abandonment`/`streamGeneration`/`recordingStartedAt`, the
+/// meter, `recordingEpoch`) on the MainActor removes the cross-task races
+/// with no locks. An actor was rejected: the service is driven through
+/// synchronous test-seam closures (`discard`, `warmUp`, device/partial
+/// setters) that cannot await, so actor isolation would force signature
+/// churn for no gain. The one closure that truly leaves the actor — the
+/// realtime audio tap — captures only `Sendable` values (the frame queue and
+/// an `AsyncStream` continuation) and re-enters via the ordered,
+/// epoch-guarded meter pump below; it never blocks the tap thread.
+@MainActor
 final class VoiceNoteService {
     private let transcriber = LocalStreamingPreview()
     let levelMeter = VoiceLevelMeter()
@@ -49,9 +65,19 @@ final class VoiceNoteService {
     private var audioQueue: PreviewAudioQueue?
     private var streamTask: Task<Void, Never>?
     private var warmUpTask: Task<Void, Never>?
+    /// Retained consumer for the live recording's tap levels; cancelled on
+    /// every stop path. One owner, never detached.
+    private var meterTask: Task<Void, Never>?
+    /// Yield end of the tap-level stream. The tap holds its own copy, so the
+    /// realtime thread never touches actor state.
+    private var tapContinuation: AsyncStream<Float>.Continuation?
     private var abandonment: (id: UUID, task: Task<Void, Never>)?
     private var streamGeneration: Int?
     private var recordingStartedAt: Date?
+    private(set) var recordingEpoch = 0
+    /// Current recording generation. Bumped on every start and every stop
+    /// path; tap levels and pump writes presented with an older epoch are
+    /// stale and dropped, so a late flush can never corrupt post-stop state.
 
     /// UID of the microphone to record from; `nil` follows the system default.
     /// If the device is not connected when recording starts, the default is used.
@@ -85,6 +111,10 @@ final class VoiceNoteService {
     }
 
     /// Call once at launch and after every recording, when nobody is waiting.
+    /// MainActor-serialized, so the `warmUpTask == nil` check-and-set is
+    /// atomic — no second caller can interleave between the check and the
+    /// assignment, and the completion write-back runs on the same actor.
+    /// No generation counter needed.
     func warmUp() {
         if spareEngine == nil, PermissionCheck.isMicrophoneAuthorized {
             let engine = AVAudioEngine()
@@ -117,13 +147,24 @@ final class VoiceNoteService {
         meter.reset()
         let queue = PreviewAudioQueue()
         audioQueue = queue
+        // A new recording opens a new delivery generation: taps or pump
+        // iterations left over from an older recording go stale on arrival.
+        recordingEpoch += 1
+        let epoch = recordingEpoch
+        // Latest-value coalescing for the level meter. The tap captures only
+        // Sendable values (the frame queue, the continuation), so the
+        // realtime thread never blocks and schedules no hop of its own;
+        // `.bufferingNewest(1)` keeps only the newest level when the consumer
+        // lags, replacing the old unordered per-tap `Task { @MainActor }`
+        // fan-out (~40/s) with one ordered stream.
+        let (levels, continuation) = AsyncStream<Float>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        tapContinuation = continuation
         Diag.log("voice tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
-        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable buffer, _ in
+        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable [continuation] buffer, _ in
             if let frame = PreviewAudioFrame(buffer: buffer) {
                 queue.append(frame)
             }
-            let level = VoiceLevelMeter.level(of: buffer)
-            Task { @MainActor in meter.push(level) }
+            continuation.yield(VoiceLevelMeter.level(of: buffer))
         }
 
         do {
@@ -131,11 +172,14 @@ final class VoiceNoteService {
         } catch {
             input.removeTap(onBus: 0)
             audioQueue = nil
+            tapContinuation?.finish()
+            tapContinuation = nil
             throw error
         }
 
         self.engine = engine
         recordingStartedAt = Date()
+        startMeterPump(levels, epoch: epoch)
         startStreamPump(queue)
         Diag.log("voice recording started")
     }
@@ -180,6 +224,7 @@ final class VoiceNoteService {
     func discardRecording() {
         let wasLive = isRecording || recordingStartedAt != nil || streamTask != nil
         _ = try? stopMicrophone()
+        invalidateTapDelivery()
         let pump = streamTask
         pump?.cancel()
         streamTask = nil
@@ -195,6 +240,52 @@ final class VoiceNoteService {
         }
         abandonment = (id, task)
         if wasLive { Diag.log("voice recording discarded") }
+    }
+
+    /// Ends meter delivery for the current recording. The epoch bump comes
+    /// first, so levels already yielded but not yet delivered go stale and
+    /// cannot undo the reset below or leak into the next recording.
+    /// Idempotent; safe on every stop path, live or not.
+    private func invalidateTapDelivery() {
+        recordingEpoch += 1
+        meterTask?.cancel()
+        meterTask = nil
+        tapContinuation?.finish()
+        tapContinuation = nil
+    }
+
+    /// Applies one delivered tap level iff `epoch` is still the live
+    /// recording. Internal as a deterministic test seam for the
+    /// stale-delivery guard (no microphone needed).
+    func applyTapLevel(_ level: Float, epoch: Int) {
+        guard epoch == recordingEpoch else { return }
+        levelMeter.push(level)
+    }
+
+    /// The single retained consumer for the live recording's tap levels. One
+    /// owner, never detached; cancelled by `invalidateTapDelivery`. Values
+    /// apply in yield order; `AsyncStream` termination or task cancellation
+    /// ends the loop, and the epoch check drops anything yielded before a
+    /// stop that only gets delivered after it.
+    private func startMeterPump(_ levels: AsyncStream<Float>, epoch: Int) {
+        meterTask?.cancel()
+        meterTask = Task { [weak self] in
+            for await level in levels {
+                guard !Task.isCancelled else { return }
+                guard let self, self.recordingEpoch == epoch else { return }
+                self.applyTapLevel(level, epoch: epoch)
+            }
+        }
+    }
+
+    /// Records the pump's generation only while its queue is still the live
+    /// one. A pump cancelled by stop/discard/restart must not revive a
+    /// generation after teardown cleared it: stop and discard nil the queue
+    /// synchronously on this actor, and a restart installs a new queue, so
+    /// identity precisely marks the write stale.
+    private func applyStreamGeneration(_ generation: Int, for queue: PreviewAudioQueue) {
+        guard audioQueue === queue else { return }
+        streamGeneration = generation
     }
 
     /// A discarded stream must finish invalidating and resetting its decoder
@@ -221,7 +312,7 @@ final class VoiceNoteService {
                 }
             }
             guard let generation, !Task.isCancelled else { return }
-            await MainActor.run { self.streamGeneration = generation }
+            await MainActor.run { [weak self] in self?.applyStreamGeneration(generation, for: queue) }
             while !Task.isCancelled {
                 let frames = queue.drain()
                 if frames.isEmpty {
@@ -247,6 +338,7 @@ final class VoiceNoteService {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         self.engine = nil
+        invalidateTapDelivery()
         levelMeter.reset()
         let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         recordingStartedAt = nil

@@ -27,6 +27,14 @@ enum HotKeyRegistrationResult: Equatable {
 
 /// Registers system-wide shortcuts through Carbon, which works without
 /// Accessibility permission and fires even when another app is frontmost.
+///
+/// Isolation: explicitly `@MainActor`. (The target's default isolation
+/// already implied this; the annotation locks it in.) Every caller is
+/// MainActor-bound — `AppEnvironment` composition, `HotKeyRegistrar`,
+/// the `CapturePanel`/`StackSwitcherController` cycle keys, `AppDelegate`
+/// teardown, and the Carbon callback, which hops to the main queue before
+/// dispatching — so the mutable registry needs no locks.
+@MainActor
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
 
@@ -43,6 +51,22 @@ final class HotKeyCenter {
     private var handlerInstalled = false
     private let registerEvent: RegisterEvent
     private let unregisterEvent: @MainActor (EventHotKeyRef) -> Void
+
+    /// Weak box so the routing table never retains a center.
+    private final class WeakCenter {
+        weak var value: HotKeyCenter?
+        init(_ value: HotKeyCenter) { self.value = value }
+    }
+
+    /// Carbon dispatches carry only a numeric id, so the C callback looks up
+    /// which center instance registered that id here instead of hardcoding
+    /// `.shared`. The latest registrant of an id wins, mirroring Carbon's
+    /// single global id namespace per signature. Entries are weak: a
+    /// deallocated center simply stops receiving dispatches. Every access —
+    /// writes from `registerRaw`/`unregister`, reads from `route` — runs on
+    /// the MainActor (the C callback only reads inside `assumeIsolated`),
+    /// so no lock is needed.
+    private static var routes: [UInt32: WeakCenter] = [:]
 
     init(
         registerEvent: @escaping RegisterEvent = HotKeyCenter.liveRegisterEvent,
@@ -91,6 +115,7 @@ final class HotKeyCenter {
         handlers[id] = Handler(pressed: pressed, released: released)
         refs[id] = ref
         names[name.rawValue] = id
+        Self.routes[id] = WeakCenter(self)
         return .registered
     }
 
@@ -98,6 +123,9 @@ final class HotKeyCenter {
         guard let id = names.removeValue(forKey: name.rawValue) else { return }
         if let ref = refs.removeValue(forKey: id) { unregisterEvent(ref) }
         handlers[id] = nil
+        // Only clear the route when it still points at this center: another
+        // instance may have claimed the same id afterwards.
+        if Self.routes[id]?.value === self { Self.routes.removeValue(forKey: id) }
     }
 
 
@@ -105,6 +133,15 @@ final class HotKeyCenter {
         guard let handler = handlers[id] else { return }
         Diag.log("hotkey fired id=\(id)")
         if released { handler.released?() } else { handler.pressed() }
+    }
+
+    /// Dispatches one Carbon event to the center that registered `id`, when
+    /// that center is still alive. Each id maps to exactly one center, so an
+    /// event can never double-dispatch; events for unknown ids (stale events
+    /// for an unregistered hotkey) are dropped.
+    static func route(id: UInt32, released: Bool) {
+        guard let center = routes[id]?.value else { return }
+        center.fire(id: id, released: released)
     }
 
     private func installHandlerIfNeeded() {
@@ -152,7 +189,7 @@ nonisolated private func hotKeyEventHandler(
     let hotKeyID = id.id
     let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
     DispatchQueue.main.async {
-        MainActor.assumeIsolated { HotKeyCenter.shared.fire(id: hotKeyID, released: released) }
+        MainActor.assumeIsolated { HotKeyCenter.route(id: hotKeyID, released: released) }
     }
     return noErr
 }

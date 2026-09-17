@@ -54,7 +54,12 @@ nonisolated struct StackSwitchMachine: Equatable {
 
     var isShowingPreview: Bool { state == .cycling || state == .lingering }
 
-    mutating func handle(_ event: StackSwitchEvent, orders: StackSwitchOrders) -> [StackSwitchCommand] {
+    /// - Parameter canBegin: whether a new cycle may start (the palette is
+    ///   free). `.press`/`.step` arriving while a cycle cannot begin — and no
+    ///   cycle is already running — answer `[.beep]` with no state change, so
+    ///   the rejection is visible to reducer tests instead of being filtered
+    ///   by the owner. Defaults to `true`, preserving the old call shape.
+    mutating func handle(_ event: StackSwitchEvent, orders: StackSwitchOrders, canBegin: Bool = true) -> [StackSwitchCommand] {
         guard state != .tornDown else { return [] }
         switch event {
         case .teardown:
@@ -66,6 +71,7 @@ nonisolated struct StackSwitchMachine: Equatable {
         case let .press(reverse):
             switch state {
             case .idle, .lingering:
+                guard canBegin else { return [.beep] }
                 guard orders.listed.count > 1, orders.recent.count > 1,
                       let current = orders.listed.firstIndex(of: orders.recent[0])
                 else { return finish(with: [.beep]) }
@@ -101,6 +107,7 @@ nonisolated struct StackSwitchMachine: Equatable {
 
         case let .step(offset):
             guard state != .cycling else { return [] }
+            guard canBegin else { return [.beep] }
             let listed = orders.listed
             guard listed.count > 1, let current = orders.recent.first,
                   let index = listed.firstIndex(of: current)

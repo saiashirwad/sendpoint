@@ -15,7 +15,7 @@ struct SettingsPastingPane: View {
                         selection: Binding(
                             get: { settings.stackExportMode },
                             set: {
-                                settings.setPasteDirectly($0 == .paste)
+                                settings.send(.exportMode($0))
                                 onSettingsChanged()
                             }
                         ),
@@ -29,7 +29,7 @@ struct SettingsPastingPane: View {
                     isOn: Binding(
                         get: { settings.restoreFocusAfterSave },
                         set: {
-                            settings.setRestoreFocusAfterSave($0)
+                            settings.send(.restoreFocusAfterSave($0))
                             onSettingsChanged()
                         }
                     )

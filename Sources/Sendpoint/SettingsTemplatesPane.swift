@@ -25,7 +25,10 @@ struct SettingsTemplatesPane: View {
                 }
             }
             SettingsSection("Name") {
-                TextField("Template name", text: $editor.draft.name)
+                TextField("Template name", text: Binding(
+                    get: { editor.draft.name },
+                    set: { editor.send(.editName($0)) }
+                ))
                     .textFieldStyle(.plain)
                     .font(.ui(14, weight: .medium))
                     .padding(.horizontal, 12)
@@ -37,7 +40,10 @@ struct SettingsTemplatesPane: View {
             SettingsSection("Prompt", footnote: "Goes above the notes. Tell the AI what to do with them.") {
                 TextField(
                     "Summarise these notes…",
-                    text: $editor.draft.preamble,
+                    text: Binding(
+                        get: { editor.draft.preamble },
+                        set: { editor.send(.editPreamble($0)) }
+                    ),
                     axis: .vertical
                 )
                 .textFieldStyle(.plain)
@@ -50,14 +56,26 @@ struct SettingsTemplatesPane: View {
                 .accessibilityLabel("Prompt")
             }
             SettingsSection("Each note") {
-                SettingsToggleRow("Number the notes", isOn: $editor.draft.includeNoteNumbers)
+                SettingsToggleRow("Number the notes", isOn: Binding(
+                    get: { editor.draft.includeNoteNumbers },
+                    set: { editor.send(.editIncludeNoteNumbers($0)) }
+                ))
                 SettingsDivider()
-                SettingsToggleRow("Timestamps", isOn: $editor.draft.includeTimestamps)
+                SettingsToggleRow("Timestamps", isOn: Binding(
+                    get: { editor.draft.includeTimestamps },
+                    set: { editor.send(.editIncludeTimestamps($0)) }
+                ))
             }
             SettingsSection(settings.stackExportMode.exportMomentCaption) {
-                SettingsToggleRow("Date heading", isOn: $editor.draft.includeHeading)
+                SettingsToggleRow("Date heading", isOn: Binding(
+                    get: { editor.draft.includeHeading },
+                    set: { editor.send(.editIncludeHeading($0)) }
+                ))
                 SettingsDivider()
-                SettingsToggleRow("Clear the stack afterwards", isOn: $editor.draft.clearStackAfterExport)
+                SettingsToggleRow("Clear the stack afterwards", isOn: Binding(
+                    get: { editor.draft.clearStackAfterExport },
+                    set: { editor.send(.editClearStackAfterExport($0)) }
+                ))
             }
             HStack(spacing: 16) {
                 if editor.isDirty {

@@ -91,6 +91,24 @@ final class HotKeyRegistrar {
         applyCurrentBindings()
     }
 
+    /// One settings intent per user action, behind which `rebind`/`clear`
+    /// both funnel. Returns the feedback text to show under the rows, or nil
+    /// when the change applied cleanly. A failed rebind leaves the old keys
+    /// and reports the same message the throw carried; only a clean change
+    /// returns nil, and only then does the caller notify.
+    func updateShortcut(_ proposed: KeyCombo?, for slot: ShortcutSlot) -> String? {
+        if let proposed {
+            do {
+                try rebind(proposed, for: slot)
+            } catch {
+                return error.localizedDescription
+            }
+        } else {
+            clear(slot)
+        }
+        return nil
+    }
+
     func applyCurrentBindings() {
         guard let actions else { return }
         settings.updateShortcutRegistrationIssues(register(actions))

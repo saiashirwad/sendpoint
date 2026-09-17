@@ -15,6 +15,11 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private let panel: CapturePanel
     private let model: StackPaletteModel
     private let surfaces: SurfaceCoordinator
+    /// Owns the note frames (alongside the ScrollHandle acquaintances inside
+    /// them) so they outlive SwiftUI view identity. Disarmed on every hide
+    /// and on teardown; the frames dict is keyed by note UUID and merged on
+    /// overwrite, so the longer lifetime changes no behavior.
+    private let noteFrames = NoteFrames()
     private var keyMonitor: Any?
     private var lifecycle: Lifecycle = .active
     var onCycleClosed: () -> Void = {}
@@ -44,7 +49,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         super.init()
         model.onClose = { [weak surfaces] in surfaces?.dismiss(.palette) }
         panel.onClose = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: StackPaletteView(model: model))
+        let hosting = NSHostingView(rootView: StackPaletteView(model: model, noteFrames: noteFrames))
         hosting.sizingOptions = []
         hosting.safeAreaRegions = []
         panel.contentView = hosting
@@ -119,6 +124,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     private func hideCycle() {
         guard lifecycle == .active else { return }
+        noteFrames.disarm()
         model.send(.close)
         panel.orderOut(nil)
         panel.ignoresMouseEvents = false
@@ -151,6 +157,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     private func hide() {
         guard lifecycle == .active else { return }
+        noteFrames.disarm()
         model.send(.close)
         panel.saveFrame(usingName: Self.frameAutosaveName)
         panel.orderOut(nil)
@@ -159,6 +166,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private func releaseWindow() {
         guard lifecycle == .active else { return }
         lifecycle = .tornDown
+        noteFrames.disarm()
         panel.saveFrame(usingName: Self.frameAutosaveName)
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -183,15 +191,50 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     /// Every key the palette cares about is handled here, ahead of the text
     /// fields, so ↑↓ move the highlight instead of the insertion point. Any
     /// key the model declines falls through to the field.
+    ///
+    /// Single-fire routing predicate: the monitor DECLINES (returns the event
+    /// unhandled) only when `PaletteKeyRouting.shouldDeclineForRowFocus` says
+    /// so — arrows-only, focus on a non-text responder (a focused row Button),
+    /// browsing, no inline edit, no overlay. The declined arrow then reaches
+    /// the row sections' `.onMoveCommand`, which sends the SAME `.key`
+    /// events: exactly one owner either way (monitor consumes + view never
+    /// fires, or monitor declines + view handles). Tab, Return, Escape, and
+    /// all command/option keys are never declined, in any focus state.
+    ///
+    /// Ordering guarantee: `addLocalMonitorForEvents` runs BEFORE the event
+    /// is dispatched to the window's responder chain, so a consumed Return or
+    /// Escape never reaches a focused Button or field — no select+perform
+    /// double-fire — and a declined arrow is still claimed by at most the one
+    /// focused-section move handler.
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.lifecycle == .active, self.model.state.presentation != .cycling, event.window === self.panel,
                   let key = PaletteKey(event: event)
             else { return event }
+            if PaletteKeyRouting.shouldDeclineForRowFocus(
+                key: key,
+                responder: Self.responderKind(self.panel.firstResponder),
+                inlineEditActive: self.model.state.inlineEdit != nil,
+                overlayOpen: self.model.state.overlay != nil,
+                cycling: self.model.state.presentation == .cycling
+            ) {
+                return event
+            }
             let selection = (self.panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0
             let handled = self.model.send(.key(key, textHasSelection: selection > 0))
             return handled ? nil : event
         }
+    }
+
+    /// Maps the panel's first responder to the routing enum. TextFields and
+    /// their NSTextView field editor (search, rename, note editor, overlay
+    /// filter) map to `.text` and stay monitor-owned; any other responder —
+    /// a focused row Button, palette chrome, or hosting subview — maps to
+    /// `.control`; nil maps to `.none` and also stays monitor-owned.
+    private static func responderKind(_ responder: NSResponder?) -> PaletteResponderKind {
+        guard let responder else { return .none }
+        if responder is NSTextField || responder is NSTextView { return .text }
+        return .control
     }
 
     // MARK: - Placement

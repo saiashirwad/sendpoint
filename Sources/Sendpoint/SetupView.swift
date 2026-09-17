@@ -225,10 +225,6 @@ struct SetupView: View {
             guard stage == .ready else { return }
             onDismiss()
         }
-        .task(id: windowIsVisible) {
-            guard windowIsVisible else { return }
-            await permissionState.watchVoiceModel()
-        }
     }
 
     /// Permissions first; once they are in, the tour takes the same rail.
@@ -256,7 +252,10 @@ struct SetupView: View {
     }
 
     /// Headline and one line of why. Swaps as a block when the stage moves
-    /// on, so each step reads as a new page rather than edited text.
+    /// on, so each step reads as a new page rather than edited text. The
+    /// block is one combined element, and a stage change is announced
+    /// politely (macOS SwiftUI has no live-region modifier, so the
+    /// announcement is posted explicitly; sighted behavior is untouched).
     private var ask: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(headline)
@@ -270,6 +269,8 @@ struct SetupView: View {
                 .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .onChange(of: headline) { announcePolitely("\(headline). \(detail)") }
         .id(headline)
         .transition(.blurReplace)
         .animation(.snappy(duration: 0.35), value: headline)
@@ -702,6 +703,10 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     private let noteCount: () -> Int?
     private var lifecycle: Lifecycle = .active
     private var pollingTask: Task<Void, Never>?
+    /// Whether this window currently holds a wait on the shared voice-model
+    /// poll. Balances present/hide so the PermissionState waiter count stays
+    /// exact when both Setup and Settings are open.
+    private var voiceWatchActive = false
     private var lastStep: Int?
 
     init(
@@ -766,6 +771,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     private func present() {
         startPolling()
+        startVoiceWatch()
         if !window.isVisible {
             window.center()
         }
@@ -794,6 +800,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     private func hide() {
         stopPolling()
+        stopVoiceWatch()
         window.orderOut(nil)
         window.close()
     }
@@ -803,6 +810,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         surfaces.unregister(.setup)
         lifecycle = .tornDown
         stopPolling()
+        stopVoiceWatch()
         window.delegate = nil
         window.orderOut(nil)
         window.close()
@@ -838,8 +846,21 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         pollingTask = nil
     }
 
+    private func startVoiceWatch() {
+        guard !voiceWatchActive else { return }
+        voiceWatchActive = true
+        permissionState.startWatchingVoiceModel()
+    }
+
+    private func stopVoiceWatch() {
+        guard voiceWatchActive else { return }
+        voiceWatchActive = false
+        permissionState.stopWatchingVoiceModel()
+    }
+
     func windowWillClose(_ notification: Notification) {
         stopPolling()
+        stopVoiceWatch()
         surfaces.userClosed(.setup)
     }
 }

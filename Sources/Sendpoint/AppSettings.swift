@@ -31,6 +31,15 @@ enum StackExportMode: Equatable, Sendable {
     }
 }
 
+/// Every mutation the settings pages can make to `AppSettings`. Views send
+/// one event per user action, then run their `onSettingsChanged` effect, as
+/// before; the mode mapping lives here instead of in the view.
+enum AppSettingsEvent: Equatable {
+    case launchAtLogin(Bool)
+    case exportMode(StackExportMode)
+    case restoreFocusAfterSave(Bool)
+}
+
 @Observable
 final class AppSettings {
     private enum Key {
@@ -95,6 +104,17 @@ final class AppSettings {
         } catch {
             NSLog("Sendpoint: login item change failed: \(error)")
             launchAtLogin = !enabled
+        }
+    }
+
+    /// The single transition for settings-page mutations. Each case delegates
+    /// to its existing setter, so persistence writes and validation are
+    /// unchanged; callers run `onSettingsChanged` afterwards, as before.
+    func send(_ event: AppSettingsEvent) {
+        switch event {
+        case .launchAtLogin(let enabled): setLaunchAtLogin(enabled)
+        case .exportMode(let mode): setPasteDirectly(mode == .paste)
+        case .restoreFocusAfterSave(let enabled): setRestoreFocusAfterSave(enabled)
         }
     }
 }

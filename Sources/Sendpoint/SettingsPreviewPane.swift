@@ -24,14 +24,10 @@ struct SettingsPreviewPane: View {
                         canDecrement: voiceSettings.transcriptionPreviewLines > VoiceSettings.previewLinesMin,
                         canIncrement: voiceSettings.transcriptionPreviewLines < VoiceSettings.previewLinesMax,
                         decrement: {
-                            captureController.setTranscriptionPreviewLines(
-                                voiceSettings.transcriptionPreviewLines - 1
-                            )
+                            captureController.stepTranscriptionPreviewLines(bySteps: -1)
                         },
                         increment: {
-                            captureController.setTranscriptionPreviewLines(
-                                voiceSettings.transcriptionPreviewLines + 1
-                            )
+                            captureController.stepTranscriptionPreviewLines(bySteps: 1)
                         }
                     )
                     SettingsDivider()
@@ -41,14 +37,10 @@ struct SettingsPreviewPane: View {
                         canDecrement: voiceSettings.transcriptionPreviewFontSize > VoiceSettings.previewFontSizeMin,
                         canIncrement: voiceSettings.transcriptionPreviewFontSize < VoiceSettings.previewFontSizeMax,
                         decrement: {
-                            captureController.setTranscriptionPreviewFontSize(
-                                voiceSettings.transcriptionPreviewFontSize - 1
-                            )
+                            captureController.stepTranscriptionPreviewFontSize(bySteps: -1)
                         },
                         increment: {
-                            captureController.setTranscriptionPreviewFontSize(
-                                voiceSettings.transcriptionPreviewFontSize + 1
-                            )
+                            captureController.stepTranscriptionPreviewFontSize(bySteps: 1)
                         }
                     )
                     SettingsDivider()
@@ -58,14 +50,10 @@ struct SettingsPreviewPane: View {
                         canDecrement: voiceSettings.transcriptionPreviewOpacity > VoiceSettings.previewOpacityMin,
                         canIncrement: voiceSettings.transcriptionPreviewOpacity < VoiceSettings.previewOpacityMax,
                         decrement: {
-                            captureController.setTranscriptionPreviewOpacity(
-                                voiceSettings.transcriptionPreviewOpacity - VoiceSettings.previewOpacityStep
-                            )
+                            captureController.stepTranscriptionPreviewOpacity(bySteps: -1)
                         },
                         increment: {
-                            captureController.setTranscriptionPreviewOpacity(
-                                voiceSettings.transcriptionPreviewOpacity + VoiceSettings.previewOpacityStep
-                            )
+                            captureController.stepTranscriptionPreviewOpacity(bySteps: 1)
                         }
                     )
                 }

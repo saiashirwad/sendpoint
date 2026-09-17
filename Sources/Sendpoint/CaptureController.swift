@@ -154,7 +154,7 @@ final class CaptureController {
     }
 
     func setVoiceMode(_ mode: VoiceRecordingMode) {
-        voiceSettings.setVoiceMode(mode)
+        voiceSettings.send(.voiceMode(mode))
         send(.voiceModeChanged(mode))
     }
 
@@ -164,23 +164,42 @@ final class CaptureController {
     var transcriptionPreviewOpacity: Int { voiceSettings.transcriptionPreviewOpacity }
 
     func setTranscriptionPreview(_ on: Bool) {
-        voiceSettings.setTranscriptionPreview(on)
+        voiceSettings.send(.transcriptionPreview(on))
     }
 
     func setTranscriptionPreviewLines(_ lines: Int) {
-        voiceSettings.setTranscriptionPreviewLines(lines)
+        voiceSettings.send(.transcriptionPreviewLines(lines))
     }
 
     func setTranscriptionPreviewFontSize(_ size: Int) {
-        voiceSettings.setTranscriptionPreviewFontSize(size)
+        voiceSettings.send(.transcriptionPreviewFontSize(size))
     }
 
     func setTranscriptionPreviewOpacity(_ percent: Int) {
-        voiceSettings.setTranscriptionPreviewOpacity(percent)
+        voiceSettings.send(.transcriptionPreviewOpacity(percent))
     }
 
-    func chooseMicrophone(uid: String?, name: String?) {
-        voiceSettings.setInputDevice(uid: uid, name: name)
+    /// One settings intent per stepper tap. The read-modify-write lives here
+    /// instead of in the view; `VoiceSettings` still clamps the result.
+    func stepTranscriptionPreviewLines(bySteps steps: Int) {
+        voiceSettings.send(.transcriptionPreviewLines(transcriptionPreviewLines + steps))
+    }
+
+    func stepTranscriptionPreviewFontSize(bySteps steps: Int) {
+        voiceSettings.send(.transcriptionPreviewFontSize(transcriptionPreviewFontSize + steps))
+    }
+
+    func stepTranscriptionPreviewOpacity(bySteps steps: Int) {
+        voiceSettings.send(.transcriptionPreviewOpacity(
+            transcriptionPreviewOpacity + steps * VoiceSettings.previewOpacityStep
+        ))
+    }
+
+    /// One settings intent per microphone pick. The device-name lookup lives
+    /// here instead of in the view, next to the stored UID it describes.
+    func chooseMicrophone(uid: String?, devices: [AudioInputDevice]) {
+        let name = uid.flatMap { id in devices.first { $0.uid == id }?.name }
+        voiceSettings.send(.inputDevice(uid: uid, name: name))
         recorder.chooseMicrophone(uid)
     }
 

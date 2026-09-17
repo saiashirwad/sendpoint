@@ -318,7 +318,9 @@ struct PaletteUpdate {
             if state.overlay == overlay { closeOverlay() } else { openOverlay(overlay) }
         case .closeOverlay: closeOverlay()
         case let .overlayQuery(query): state.overlayQuery = query; state.overlayHighlight = 0
-        case let .overlayHighlight(index): state.overlayHighlight = index
+        case let .overlayHighlight(index):
+            guard index != state.overlayHighlight else { break }
+            state.overlayHighlight = index
         case let .selectTemplate(id):
             guard !finishEdit(before: event) else { break }
             closeOverlay()

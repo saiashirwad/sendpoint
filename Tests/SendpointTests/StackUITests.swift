@@ -324,3 +324,53 @@ final class NoteTimestampLabelTests: XCTestCase {
         XCTAssertFalse(label.contains(":"), label)
     }
 }
+
+final class NoteLabelStyleCacheTests: XCTestCase {
+    private func calendar(identifier: Calendar.Identifier, timeZone: String) -> Calendar {
+        var calendar = Calendar(identifier: identifier)
+        calendar.timeZone = TimeZone(identifier: timeZone)!
+        return calendar
+    }
+
+    private func fresh(
+        _ date: Date, calendar: Calendar,
+        _ derive: (Date.FormatStyle) -> Date.FormatStyle
+    ) -> String {
+        let base = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        return date.formatted(derive(base))
+    }
+
+    /// The shared styles must format byte-identically to a fresh
+    /// `Date.FormatStyle` for every calendar, on both miss and reuse.
+    func testCachedStylesMatchFreshFormatting() {
+        let calendars = [
+            calendar(identifier: .gregorian, timeZone: "UTC"),
+            calendar(identifier: .gregorian, timeZone: "America/New_York"),
+            calendar(identifier: .buddhist, timeZone: "Pacific/Auckland"),
+        ]
+        for calendar in calendars {
+            let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 21))!
+            let sameDay = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 20, minute: 7))!
+            let sameYear = calendar.date(from: DateComponents(year: 2026, month: 3, day: 2, hour: 9, minute: 5))!
+            let otherYear = calendar.date(from: DateComponents(year: 2024, month: 12, day: 31, hour: 9, minute: 5))!
+            for _ in 0..<2 {
+                XCTAssertEqual(
+                    noteTimeLabel(sameDay, calendar: calendar),
+                    fresh(sameDay, calendar: calendar) { $0.hour().minute() }
+                )
+                XCTAssertEqual(
+                    noteTimestampLabel(sameDay, now: now, calendar: calendar),
+                    fresh(sameDay, calendar: calendar) { $0.hour().minute() }
+                )
+                XCTAssertEqual(
+                    noteTimestampLabel(sameYear, now: now, calendar: calendar),
+                    fresh(sameYear, calendar: calendar) { $0.day().month(.abbreviated) }
+                )
+                XCTAssertEqual(
+                    noteTimestampLabel(otherYear, now: now, calendar: calendar),
+                    fresh(otherYear, calendar: calendar) { $0.day().month(.abbreviated).year() }
+                )
+            }
+        }
+    }
+}

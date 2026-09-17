@@ -8,7 +8,10 @@ struct SettingsCapturePane: View {
     let onSettingsChanged: () -> Void
 
     @State private var inputDevices = AudioInputDeviceList()
-    @State private var levelMonitor = InputLevelMonitor()
+    /// Owns the mic-preview engine and its one teardown path. Explicit
+    /// start/stop calls below replace the old `.task(id:)` + `.onDisappear`
+    /// dual teardown.
+    @State private var preview = MicrophonePreviewOwner()
     @State private var windowIsVisible = false
 
     var body: some View {
@@ -29,7 +32,7 @@ struct SettingsCapturePane: View {
                 SettingsStackedRow {
                     VStack(alignment: .leading, spacing: 12) {
                         microphoneMenu
-                        InputLevelBar(level: levelMonitor.level, isActive: levelMonitor.isRunning)
+                        InputLevelBar(level: preview.level, isActive: preview.isActive)
                             .frame(width: 300)
                     }
                 }
@@ -48,18 +51,21 @@ struct SettingsCapturePane: View {
             }
         }
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
-        .task(id: levelMonitorKey) {
-            guard windowIsVisible else {
-                levelMonitor.stop()
-                return
-            }
-            levelMonitor.start(preferredUID: voiceSettings.inputDeviceUID)
-        }
-        .onDisappear { levelMonitor.stop() }
+        .onAppear { syncPreview() }
+        .onDisappear { preview.stop() }
+        .onChange(of: voiceSettings.inputDeviceUID) { _, _ in syncPreview() }
+        .onChange(of: windowIsVisible) { _, _ in syncPreview() }
     }
 
-    private var levelMonitorKey: String {
-        "\(windowIsVisible)|\(voiceSettings.inputDeviceUID ?? "default")"
+    /// Runs the engine exactly while the pane is visible for the selected
+    /// device. The window-hide arm matters: ordering the Settings window out
+    /// does not remove the view, so onDisappear alone would leave the mic on.
+    private func syncPreview() {
+        if windowIsVisible {
+            preview.start(uid: voiceSettings.inputDeviceUID)
+        } else {
+            preview.stop()
+        }
     }
 
     private var microphoneFootnote: String? {
@@ -91,8 +97,7 @@ struct SettingsCapturePane: View {
             Picker("Microphone", selection: Binding<String?>(
                 get: { voiceSettings.inputDeviceUID },
                 set: { uid in
-                    let name = inputDevices.devices.first { $0.uid == uid }?.name
-                    captureController.chooseMicrophone(uid: uid, name: name)
+                    captureController.chooseMicrophone(uid: uid, devices: inputDevices.devices)
                 }
             )) {
                 Text(systemDefaultLabel).tag(String?.none)

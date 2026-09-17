@@ -24,6 +24,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onShowStack: () -> Void
     private var window: NSWindow?
     private(set) var templateEditor: TemplateEditorState?
+    /// Whether this window currently holds a wait on the shared voice-model
+    /// poll. Balances present/hide so the PermissionState waiter count stays
+    /// exact when both Setup and Settings are open.
+    private var voiceWatchActive = false
 
     init(
         settings: AppSettings,
@@ -56,7 +60,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         super.init()
         surfaces.register(.settings, transitions: .init(
             show: { [weak self] in self?.present() },
-            hide: { [weak self] in self?.window?.orderOut(nil) }
+            hide: { [weak self] in self?.hide() }
         ))
     }
 
@@ -89,6 +93,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func teardown() {
         surfaces.unregister(.settings)
+        stopVoiceWatch()
         window?.delegate = nil
         window?.close()
         window = nil
@@ -96,9 +101,27 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func present() {
+        startVoiceWatch()
         let window = self.window ?? makeWindow()
         window.presentActivated()
         window.makeFirstResponder(nil)
+    }
+
+    private func hide() {
+        stopVoiceWatch()
+        window?.orderOut(nil)
+    }
+
+    private func startVoiceWatch() {
+        guard !voiceWatchActive else { return }
+        voiceWatchActive = true
+        permissionState.startWatchingVoiceModel()
+    }
+
+    private func stopVoiceWatch() {
+        guard voiceWatchActive else { return }
+        voiceWatchActive = false
+        permissionState.stopWatchingVoiceModel()
     }
 
     private func makeWindow() -> NSWindow {
@@ -168,6 +191,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closed = notification.object as? NSWindow, closed === window else { return }
         surfaces.userClosed(.settings)
+        stopVoiceWatch()
         window = nil
         templateEditor = nil
     }

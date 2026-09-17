@@ -8,24 +8,71 @@ nonisolated func noteCountLabel(_ count: Int) -> String {
     "\(count) note\(count == 1 ? "" : "s")"
 }
 
+/// The three derived `Date.FormatStyle`s the note labels need for one
+/// calendar value, built once and shared across rows. `Date.FormatStyle` is
+/// a Sendable value type, so sharing is concurrency-safe; the `Calendar`
+/// snapshot bakes in the time zone. The locale is left at its
+/// `autoupdatingCurrent` default (exactly as the per-call construction did),
+/// so locale changes are still picked up on cache hits.
+nonisolated struct NoteLabelStyles: Sendable {
+    let time: Date.FormatStyle
+    let dayMonth: Date.FormatStyle
+    let dayMonthYear: Date.FormatStyle
+
+    init(calendar: Calendar) {
+        let base = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        time = base.hour().minute()
+        dayMonth = base.day().month(.abbreviated)
+        dayMonthYear = base.day().month(.abbreviated).year()
+    }
+}
+
+/// Small bounded table of `NoteLabelStyles` keyed by the full `Calendar`
+/// value (which includes the time zone). A time-zone or calendar change
+/// simply misses and builds fresh — a stale zone is never served — and
+/// eviction only costs a rebuild. Follows the `VoiceModelProgressRelay`
+/// lock idiom; the miss-path build happens outside the lock.
+nonisolated final class NoteLabelStyleCache: @unchecked Sendable {
+    static let shared = NoteLabelStyleCache()
+    private static let maxEntries = 8
+
+    private let lock = NSLock()
+    private var entries: [Calendar: NoteLabelStyles] = [:]
+
+    func styles(for calendar: Calendar) -> NoteLabelStyles {
+        lock.lock()
+        let hit = entries[calendar]
+        lock.unlock()
+        if let hit { return hit }
+        let made = NoteLabelStyles(calendar: calendar)
+        lock.lock()
+        entries[calendar] = made
+        if entries.count > Self.maxEntries {
+            entries = [calendar: made]
+        }
+        lock.unlock()
+        return made
+    }
+}
+
 /// When a note was captured, as short as the distance allows: the time
 /// today, the day this year, the date otherwise.
 nonisolated func noteTimestampLabel(
     _ date: Date, now: Date = Date(), calendar: Calendar = .current
 ) -> String {
-    let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+    let styles = NoteLabelStyleCache.shared.styles(for: calendar)
     if calendar.isDate(date, inSameDayAs: now) {
-        return date.formatted(style.hour().minute())
+        return date.formatted(styles.time)
     }
     if calendar.isDate(date, equalTo: now, toGranularity: .year) {
-        return date.formatted(style.day().month(.abbreviated))
+        return date.formatted(styles.dayMonth)
     }
-    return date.formatted(style.day().month(.abbreviated).year())
+    return date.formatted(styles.dayMonthYear)
 }
 
 /// The time a note was captured, for lists already grouped by day.
 nonisolated func noteTimeLabel(_ date: Date, calendar: Calendar = .current) -> String {
-    date.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute())
+    date.formatted(NoteLabelStyleCache.shared.styles(for: calendar).time)
 }
 
 /// One line on the state of a stack: how many notes it holds and when the

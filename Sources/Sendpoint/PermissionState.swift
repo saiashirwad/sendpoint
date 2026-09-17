@@ -109,6 +109,8 @@ final class PermissionState {
 
     @ObservationIgnored private var microphoneRequestTask: Task<Void, Never>?
     @ObservationIgnored private var modelDownloadTask: Task<Void, Never>?
+    @ObservationIgnored private var voiceModelWatchTask: Task<Void, Never>?
+    @ObservationIgnored private var voiceModelWatchers = 0
     @ObservationIgnored private var readinessObserver: NSObjectProtocol?
 
     var accessibilityAction: PermissionAction? {
@@ -211,6 +213,35 @@ final class PermissionState {
         }
     }
 
+    /// Whether the shared file-poll loop is currently retained.
+    var isWatchingVoiceModel: Bool { voiceModelWatchTask != nil }
+
+    /// Starts the file poll on behalf of one presented window. Redundant
+    /// starts only bump the waiter count: a single loop runs no matter how
+    /// many windows are open, so Setup and Settings share it. Each
+    /// controller balances its own starts with stops; the count keeps the
+    /// loop alive until the last window goes away.
+    func startWatchingVoiceModel(interval: Duration = .seconds(2)) {
+        guard !isTornDown else { return }
+        voiceModelWatchers += 1
+        guard voiceModelWatchTask == nil else { return }
+        voiceModelWatchTask = Task { [weak self] in
+            await self?.watchVoiceModel(interval: interval)
+        }
+    }
+
+    /// Releases one window's wait on the poll; the loop stops when the last
+    /// window goes away. Deliberately narrower than teardown: microphone
+    /// prompts and model downloads are untouched.
+    func stopWatchingVoiceModel() {
+        guard voiceModelWatchers > 0 else { return }
+        voiceModelWatchers -= 1
+        if voiceModelWatchers == 0 {
+            voiceModelWatchTask?.cancel()
+            voiceModelWatchTask = nil
+        }
+    }
+
     func requestAccessibility() {
         guard !isTornDown, accessibility == .notGranted else { return }
         if !hasRequestedAccessibility {
@@ -289,6 +320,9 @@ final class PermissionState {
     func teardown() {
         guard !isTornDown else { return }
         isTornDown = true
+        voiceModelWatchTask?.cancel()
+        voiceModelWatchTask = nil
+        voiceModelWatchers = 0
         microphoneRequestTask?.cancel()
         modelDownloadTask?.cancel()
         microphoneRequestTask = nil

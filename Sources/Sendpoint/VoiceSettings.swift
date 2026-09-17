@@ -1,6 +1,18 @@
 import Foundation
 import Observation
 
+/// Every mutation the settings pages (via `CaptureController`) can make to
+/// `VoiceSettings`. Views send one event per user action; each case delegates
+/// to its existing setter, so persistence writes and clamping are unchanged.
+enum VoiceSettingsEvent: Equatable {
+    case voiceMode(VoiceRecordingMode)
+    case inputDevice(uid: String?, name: String?)
+    case transcriptionPreview(Bool)
+    case transcriptionPreviewLines(Int)
+    case transcriptionPreviewFontSize(Int)
+    case transcriptionPreviewOpacity(Int)
+}
+
 @Observable
 final class VoiceSettings {
     private enum Key {
@@ -105,5 +117,17 @@ final class VoiceSettings {
         inputDeviceName = uid == nil ? nil : name
         defaults.set(inputDeviceUID, forKey: Key.inputDeviceUID)
         defaults.set(inputDeviceName, forKey: Key.inputDeviceName)
+    }
+
+    /// The single transition for settings-page mutations.
+    func send(_ event: VoiceSettingsEvent) {
+        switch event {
+        case .voiceMode(let mode): setVoiceMode(mode)
+        case .inputDevice(let uid, let name): setInputDevice(uid: uid, name: name)
+        case .transcriptionPreview(let on): setTranscriptionPreview(on)
+        case .transcriptionPreviewLines(let lines): setTranscriptionPreviewLines(lines)
+        case .transcriptionPreviewFontSize(let size): setTranscriptionPreviewFontSize(size)
+        case .transcriptionPreviewOpacity(let percent): setTranscriptionPreviewOpacity(percent)
+        }
     }
 }

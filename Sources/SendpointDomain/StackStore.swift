@@ -49,6 +49,10 @@ public final class StackStore {
 
     public private(set) var error: StackStoreError?
     public private(set) var state: State = .idle
+    /// Whether init committed a fresh Default after the persistence layer
+    /// quarantined a corrupt file. False on first launch and whenever an
+    /// existing document loads. Lets the app tell those fresh starts apart.
+    public private(set) var didQuarantineCorruptFile = false
 
     public var stacks: [Stack] {
         document.stacks
@@ -86,6 +90,9 @@ public final class StackStore {
 
     /// Loads the committed document. On first launch it commits `Default`
     /// before making the store available to its caller.
+    /// A load that throws (unsupported version, unavailable storage, or a
+    /// failed quarantine move) propagates without committing anything, so a
+    /// transient I/O error never looks like a wipe.
     public init(
         persistence: StorePersistence,
         defaultStack: Stack = Stack(name: "Default"),
@@ -95,10 +102,13 @@ public final class StackStore {
         let loaded = try await persistence.load()
         try Task.checkCancellation()
         let initialDocument: StackDocument
+        let quarantined: Bool
         if let loaded {
             try StackDocumentMutations.validate(loaded)
             initialDocument = loaded
+            quarantined = false
         } else {
+            quarantined = await persistence.didQuarantineCorruptFile()
             let candidate = StackDocument(
                 stacks: [defaultStack],
                 currentStackID: defaultStack.id
@@ -113,6 +123,7 @@ public final class StackStore {
         self.document = initialDocument
         self.persistence = persistence
         self.onChange = onChange
+        self.didQuarantineCorruptFile = quarantined
     }
 
     /// Enqueues one pure document transition. The next candidate always starts
