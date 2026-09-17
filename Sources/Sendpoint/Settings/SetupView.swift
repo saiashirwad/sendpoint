@@ -146,7 +146,6 @@ struct SetupView: View {
     @Bindable var voiceSettings: VoiceSettings
     let onComplete: () -> Void
     let onDismiss: () -> Void
-    let onOpenStack: () -> Void
     @State private var didFinish = false
     @State private var windowIsVisible = false
     @Environment(\.colorScheme) private var colorScheme
@@ -161,8 +160,7 @@ struct SetupView: View {
         shortcuts: ShortcutSettings,
         voiceSettings: VoiceSettings,
         onComplete: @escaping () -> Void,
-        onDismiss: @escaping () -> Void,
-        onOpenStack: @escaping () -> Void
+        onDismiss: @escaping () -> Void
     ) {
         _settings = Bindable(wrappedValue: settings)
         _permissionState = Bindable(wrappedValue: permissionState)
@@ -171,7 +169,6 @@ struct SetupView: View {
         _voiceSettings = Bindable(wrappedValue: voiceSettings)
         self.onComplete = onComplete
         self.onDismiss = onDismiss
-        self.onOpenStack = onOpenStack
     }
 
     var body: some View {
@@ -185,17 +182,15 @@ struct SetupView: View {
             if inTour, let passage = tour.step.passage {
                 SetupPassage(text: passage)
                     .id(tour.step)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Ink.raised(colorScheme))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
-                    )
-                    .padding(.top, 16)
+                    .modifier(SetupCard())
+            } else if inTour, let tip = tour.step.tip(keys: SetupTourKeys(shortcuts: shortcuts)) {
+                Text(tip)
+                    .font(.ui(SetupPassage.fontSize))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: SetupPassage.height, alignment: .topLeading)
+                    .modifier(SetupCard())
             }
             control
                 .padding(.top, inTour ? 20 : 24)
@@ -284,10 +279,7 @@ struct SetupView: View {
         case .voice, .text:
             QuietButton("Skip") { tour.send(.skip) }
                 .frame(height: 28)
-        case .stack:
-            InkButton("Open stack", keys: "↩") { onOpenStack(); tour.send(.openedStack) }
-                .keyboardShortcut(.defaultAction)
-        case .done:
+        case .send:
             InkButton("Done", keys: "↩") { finish() }
                 .keyboardShortcut(.defaultAction)
         }
@@ -615,6 +607,25 @@ struct CapabilityProgress: View {
     }
 }
 
+struct SetupCard: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Ink.raised(colorScheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
+            )
+            .padding(.top, 16)
+    }
+}
+
 struct SetupPassage: NSViewRepresentable {
     let text: String
 
@@ -678,8 +689,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         voiceSettings: VoiceSettings,
         surfaces: SurfaceCoordinator,
         noteCount: @escaping () -> Int?,
-        onComplete: @escaping () -> Void,
-        onOpenStack: @escaping () -> Void
+        onComplete: @escaping () -> Void
     ) {
         let window = Self.makeWindow()
         self.permissionState = permissionState
@@ -694,8 +704,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
             shortcuts: shortcuts,
             voiceSettings: voiceSettings,
             onComplete: onComplete,
-            onDismiss: { [weak self] in self?.window.close() },
-            onOpenStack: onOpenStack
+            onDismiss: { [weak self] in self?.window.close() }
         ))
         hosting.sizingOptions = []
         window.contentView = hosting
@@ -788,7 +797,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
                 let step = self.currentStep
                 if self.lastStep != step {
                     self.lastStep = step
-                    if self.tour.step != .done { self.revealAfterStepChange() }
+                    self.revealAfterStepChange()
                 }
                 do {
                     try await Task.sleep(for: .milliseconds(700))

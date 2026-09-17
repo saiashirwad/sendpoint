@@ -81,6 +81,18 @@ final class StackViewerRenderTests: XCTestCase {
         defer { window.contentView = nil; window.close() }
         try await Task.sleep(for: .milliseconds(500))
         try write(pane, to: directory, name: "settings-stacks.png")
+
+        let editor = TemplateEditorState(settings: TemplateSettings(defaults: defaults))
+        editor.send(.editPreamble("Summarise these notes."))
+        let templates = NSHostingView(rootView: SettingsTemplatesPane(
+            settings: AppSettings(defaults: defaults), editor: editor, onSelectTemplate: { _ in }
+        ).frame(width: 720, height: 620).background(Color.white))
+        window.contentView = templates
+        try await Task.sleep(for: .milliseconds(500))
+        try write(templates, to: directory, name: "settings-templates.png")
+        editor.revert()
+        try await Task.sleep(for: .milliseconds(400))
+        try write(templates, to: directory, name: "settings-templates-clean.png")
         store.teardown()
     }
 

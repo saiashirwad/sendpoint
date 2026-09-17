@@ -160,8 +160,7 @@ extension AppDelegate {
                     guard let self else { return }
                     self.surfaces.dismiss(.setup)
                     self.refreshStatusItem()
-                },
-                onOpenStack: { [weak self] in self?.showStack() }
+                }
             )
         }
         setupWindowController?.show()

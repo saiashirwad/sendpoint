@@ -8,17 +8,15 @@ final class SetupTour {
     enum Step: Int, CaseIterable, Equatable {
         case voice
         case text
-        case stack
-        case done
+        case send
 
-        static let railNames = [Step.voice, .text, .stack].map(\.label)
+        static let railNames = allCases.map(\.label)
 
         var label: String {
             switch self {
             case .voice: "Voice note"
             case .text: "Typed note"
-            case .stack: "Stack"
-            case .done: "Done"
+            case .send: "Send"
             }
         }
 
@@ -26,8 +24,7 @@ final class SetupTour {
             switch self {
             case .voice: "Say something about this"
             case .text: "Now type one"
-            case .stack: "They're in your stack"
-            case .done: "Enjoy Sendpoint"
+            case .send: "Now send them"
             }
         }
 
@@ -40,10 +37,8 @@ final class SetupTour {
                 }
             case .text:
                 "Select the line below, press \(keys.capture), type, then ⌘↩."
-            case .stack:
-                "\(keys.stack) opens it any time. \(keys.copy) copies everything."
-            case .done:
-                "It lives in the menu bar. Settings are there too."
+            case .send:
+                "\(keys.copy) puts your notes into any chat, at the cursor."
             }
         }
 
@@ -55,16 +50,21 @@ final class SetupTour {
             case .text:
                 "Type a thought instead when you would rather not speak. "
                     + "The same quote is kept under it."
-            case .stack, .done:
+            case .send:
                 nil
             }
+        }
+
+        func tip(keys: SetupTourKeys) -> String? {
+            guard self == .send else { return nil }
+            let show = "\(keys.stack) shows the current stack."
+            return keys.stacks.isEmpty ? show : "\(keys.stacks) switch between five stacks.\n\(show)"
         }
     }
 
     enum Event {
         case noteCount(Int)
         case skip
-        case openedStack
     }
 
     private(set) var step: Step = .voice
@@ -73,21 +73,17 @@ final class SetupTour {
     func send(_ event: Event) {
         switch event {
         case let .noteCount(count):
-            if let seen = seenNotes, count > seen, step == .voice || step == .text { advance() }
+            if let seen = seenNotes, count > seen { advance() }
             seenNotes = count
         case .skip:
             advance()
-        case .openedStack:
-            if step == .stack { step = .done }
         }
     }
 
     private func advance() {
         switch step {
         case .voice: step = .text
-        case .text: step = .stack
-        case .stack: step = .done
-        case .done: break
+        case .text, .send: step = .send
         }
     }
 
@@ -101,12 +97,14 @@ struct SetupTourKeys: Equatable {
     let capture: String
     let stack: String
     let copy: String
+    let stacks: String
 
-    init(voice: String, capture: String, stack: String, copy: String) {
+    init(voice: String, capture: String, stack: String, copy: String, stacks: String) {
         self.voice = voice
         self.capture = capture
         self.stack = stack
         self.copy = copy
+        self.stacks = stacks
     }
 
     @MainActor
@@ -115,7 +113,10 @@ struct SetupTourKeys: Equatable {
             voice: shortcuts.voiceCaptureCombo.displayString,
             capture: shortcuts.captureCombo.displayString,
             stack: shortcuts.stackCombo.displayString,
-            copy: shortcuts.copyCombo.displayString
+            copy: shortcuts.copyCombo.displayString,
+            stacks: (1...StackDocument.stackCount)
+                .compactMap { shortcuts.selectStackCombo($0)?.displayString }
+                .joined(separator: " ")
         )
     }
 }

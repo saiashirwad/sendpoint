@@ -50,14 +50,12 @@ struct Keycap: View {
 struct QuietButton: View {
     let title: String
     var keys: String? = nil
-    var hoverColor: Color = .primary
     let action: () -> Void
     @State private var hovering = false
 
-    init(_ title: String, keys: String? = nil, hoverColor: Color = .primary, action: @escaping () -> Void) {
+    init(_ title: String, keys: String? = nil, action: @escaping () -> Void) {
         self.title = title
         self.keys = keys
-        self.hoverColor = hoverColor
         self.action = action
     }
 
@@ -74,7 +72,7 @@ struct QuietButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(hovering ? hoverColor : Color.secondary)
+        .foregroundStyle(hovering ? Color.primary : Color.secondary)
         .onHover { hovering = $0 }
     }
 }
@@ -124,6 +122,7 @@ struct InkButton: View {
     var keys: String? = nil
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
 
     init(_ title: String, keys: String? = nil, action: @escaping () -> Void) {
         self.title = title
@@ -142,10 +141,10 @@ struct InkButton: View {
                         .opacity(0.55)
                 }
             }
-            .foregroundStyle(Ink.paper(scheme))
+            .foregroundStyle(isEnabled ? AnyShapeStyle(Ink.paper(scheme)) : AnyShapeStyle(.primary))
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .background(Capsule().fill(Color.primary))
+            .background(Capsule().fill(isEnabled ? Color.primary : Color.primary.opacity(0.12)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -157,6 +156,7 @@ struct PillButton: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
 
     init(_ title: String, action: @escaping () -> Void) {
         self.title = title
@@ -167,14 +167,79 @@ struct PillButton: View {
         Button(action: action) {
             Text(title)
                 .font(.ui(12, weight: .medium))
-                .padding(.horizontal, 11)
-                .frame(height: 26)
-                .background(Capsule().fill(hovering ? Ink.raised(scheme) : .clear))
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(hovering ? 0.22 : 0.14), lineWidth: 1))
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .foregroundStyle(.primary)
+                .background(Capsule().fill(hovering && isEnabled ? Ink.raised(scheme) : .clear))
+                .overlay(Capsule().strokeBorder(
+                    Color.primary.opacity(hovering && isEnabled ? 0.22 : 0.14), lineWidth: 1))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+struct GlyphButton<Glyph: View>: View {
+    let label: String
+    var isProminent = false
+    let action: () -> Void
+    @ViewBuilder let glyph: () -> Glyph
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        Button(action: action) {
+            glyph()
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(isProminent || hovering ? Color.primary : Color.secondary)
+                .opacity(isEnabled ? 1 : 0.35)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(label)
+    }
+}
+
+extension GlyphButton where Glyph == Image {
+    init(systemName: String, label: String, action: @escaping () -> Void) {
+        self.init(label: label, action: action) { Image(systemName: systemName) }
+    }
+}
+
+struct FloppyGlyph: View {
+    var body: some View {
+        FloppyOutline()
+            .stroke(style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+            .frame(width: 15, height: 15)
+    }
+}
+
+private struct FloppyOutline: Shape {
+    func path(in rect: CGRect) -> Path {
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + x * rect.width, y: rect.minY + y * rect.height)
+        }
+        let radius = 0.14 * rect.width
+        var path = Path()
+        path.move(to: point(0.14, 0))
+        path.addLine(to: point(0.74, 0))
+        path.addLine(to: point(1, 0.26))
+        path.addArc(tangent1End: point(1, 1), tangent2End: point(0, 1), radius: radius)
+        path.addArc(tangent1End: point(0, 1), tangent2End: point(0, 0), radius: radius)
+        path.addArc(tangent1End: point(0, 0), tangent2End: point(1, 0), radius: radius)
+        path.closeSubpath()
+        path.move(to: point(0.3, 0))
+        path.addLine(to: point(0.3, 0.3))
+        path.addLine(to: point(0.66, 0.3))
+        path.addLine(to: point(0.66, 0))
+        path.move(to: point(0.24, 1))
+        path.addLine(to: point(0.24, 0.58))
+        path.addLine(to: point(0.76, 0.58))
+        path.addLine(to: point(0.76, 1))
+        return path
     }
 }
 

@@ -16,22 +16,9 @@ final class SetupTourTests: XCTestCase {
         tour.send(.noteCount(8))
         XCTAssertEqual(tour.step, .text)
         tour.send(.noteCount(9))
-        XCTAssertEqual(tour.step, .stack)
+        XCTAssertEqual(tour.step, .send)
         tour.send(.noteCount(10))
-        XCTAssertEqual(tour.step, .stack, "the stack slide waits for the stack, not a note")
-    }
-
-    func testOpeningTheStackLeadsToTheLastWordOnlyFromTheStackSlide() {
-        let tour = SetupTour()
-        tour.send(.openedStack)
-        XCTAssertEqual(tour.step, .voice)
-        tour.send(.skip)
-        tour.send(.skip)
-        XCTAssertEqual(tour.step, .stack)
-        tour.send(.openedStack)
-        XCTAssertEqual(tour.step, .done)
-        tour.send(.openedStack)
-        XCTAssertEqual(tour.step, .done)
+        XCTAssertEqual(tour.step, .send, "the last slide waits for Done")
     }
 
     func testClearingNotesRebasesWithoutAdvancing() {
@@ -48,15 +35,13 @@ final class SetupTourTests: XCTestCase {
         tour.send(.skip)
         XCTAssertEqual(tour.step, .text)
         tour.send(.skip)
-        XCTAssertEqual(tour.step, .stack)
+        XCTAssertEqual(tour.step, .send)
         tour.send(.skip)
-        XCTAssertEqual(tour.step, .done)
-        tour.send(.skip)
-        XCTAssertEqual(tour.step, .done)
+        XCTAssertEqual(tour.step, .send)
     }
 
     func testCopyNamesTheUsersOwnShortcutsOnOneLine() throws {
-        let keys = SetupTourKeys(voice: "⌘E", capture: "⌘G", stack: "⌃⌘S", copy: "⌃⌘V")
+        let keys = SetupTourKeys(voice: "⌘E", capture: "⌘G", stack: "⌃⌘S", copy: "⌃⌘V", stacks: "⌥H ⌥J ⌥K ⌥L ⌥;")
         XCTAssertEqual(
             SetupTour.Step.voice.detail(keys: keys, voiceMode: .hold),
             "Select the line below, hold ⌘E, speak, let go."
@@ -70,24 +55,26 @@ final class SetupTourTests: XCTestCase {
             "Select the line below, press ⌘G, type, then ⌘↩."
         )
         XCTAssertEqual(
-            SetupTour.Step.stack.detail(keys: keys, voiceMode: .hold),
-            "⌃⌘S opens it any time. ⌃⌘V copies everything."
+            SetupTour.Step.send.detail(keys: keys, voiceMode: .hold),
+            "⌃⌘V puts your notes into any chat, at the cursor."
         )
         for step in SetupTour.Step.allCases {
             XCTAssertLessThan(step.detail(keys: keys, voiceMode: .tap).count, 64)
             XCTAssertLessThan(step.headline.count, 34)
         }
+        XCTAssertEqual(SetupTour.Step.railNames, ["Voice note", "Typed note", "Send"])
         XCTAssertEqual(
-            SetupTour.Step.done.detail(keys: keys, voiceMode: .hold),
-            "It lives in the menu bar. Settings are there too."
+            SetupTour.Step.send.tip(keys: keys),
+            "⌥H ⌥J ⌥K ⌥L ⌥; switch between five stacks.\n⌃⌘S shows the current stack."
         )
-        XCTAssertEqual(SetupTour.Step.railNames, ["Voice note", "Typed note", "Stack"])
+        let unbound = SetupTourKeys(voice: "⌘E", capture: "⌘G", stack: "⌃⌘S", copy: "⌃⌘V", stacks: "")
+        XCTAssertEqual(SetupTour.Step.send.tip(keys: unbound), "⌃⌘S shows the current stack.")
+        XCTAssertNil(SetupTour.Step.voice.tip(keys: keys))
 
         let voice = try XCTUnwrap(SetupTour.Step.voice.passage)
         let text = try XCTUnwrap(SetupTour.Step.text.passage)
         XCTAssertNotEqual(voice, text, "a fresh passage means a fresh selection")
-        XCTAssertNil(SetupTour.Step.stack.passage)
-        XCTAssertNil(SetupTour.Step.done.passage)
+        XCTAssertNil(SetupTour.Step.send.passage)
         for passage in [voice, text] { XCTAssertLessThan(passage.count, 125) }
     }
 

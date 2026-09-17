@@ -8,7 +8,6 @@ struct SettingsTemplatesPane: View {
     let onSelectTemplate: (UUID) -> Void
 
     @State private var newTemplate: NameDraft?
-    @Environment(\.colorScheme) private var scheme
 
     private struct NameDraft: Equatable {
         var name: String
@@ -22,38 +21,58 @@ struct SettingsTemplatesPane: View {
                     chips
                 }
             }
-            SettingsSection("Name") {
-                TextField("Template name", text: Binding(
-                    get: { editor.draft.name },
-                    set: { editor.send(.editName($0)) }
-                ))
+            VStack(alignment: .leading, spacing: 22) {
+                SettingsSection("Name") {
+                    HStack(alignment: .center, spacing: 0) {
+                        TextField("Template name", text: Binding(
+                            get: { editor.draft.name },
+                            set: { editor.send(.editName($0)) }
+                        ))
+                            .textFieldStyle(.plain)
+                            .font(.ui(14, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
+                            .accessibilityLabel("Template name")
+                            .padding(.trailing, 6)
+                        if editor.isDirty {
+                            GlyphButton(label: "Save", isProminent: true, action: save) { FloppyGlyph() }
+                                .keyboardShortcut("s", modifiers: .command)
+                                .help("Save  ⌘S")
+                                .transition(.opacity)
+                            GlyphButton(systemName: "arrow.counterclockwise", label: "Revert", action: editor.revert)
+                                .help("Revert changes")
+                                .transition(.opacity)
+                        }
+                        GlyphButton(systemName: "trash", label: "Delete") { TemplateDialogs.delete(editor) }
+                            .disabled(!editor.canDelete)
+                            .help(editor.canDelete ? "Delete this template" : "The last template cannot be deleted")
+                    }
+                    .padding(.top, 10)
+                    .padding(.trailing, -8)
+                    .animation(.easeOut(duration: 0.15), value: editor.isDirty)
+                }
+                SettingsSection("Prompt") {
+                    TextField(
+                        "Summarise these notes…",
+                        text: Binding(
+                            get: { editor.draft.preamble },
+                            set: { editor.send(.editPreamble($0)) }
+                        ),
+                        axis: .vertical
+                    )
                     .textFieldStyle(.plain)
-                    .font(.ui(14, weight: .medium))
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
+                    .font(.ui(13.5))
+                    .lineSpacing(4)
+                    .lineLimit(4...14)
+                    .padding(12)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
-                    .padding(.vertical, 10)
-                    .accessibilityLabel("Template name")
+                    .padding(.top, 10)
+                    .accessibilityLabel("Prompt")
+                }
             }
-            SettingsSection("Prompt") {
-                TextField(
-                    "Summarise these notes…",
-                    text: Binding(
-                        get: { editor.draft.preamble },
-                        set: { editor.send(.editPreamble($0)) }
-                    ),
-                    axis: .vertical
-                )
-                .textFieldStyle(.plain)
-                .font(.ui(13.5))
-                .lineSpacing(4)
-                .lineLimit(4...14)
-                .padding(12)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
-                .padding(.vertical, 10)
-                .accessibilityLabel("Prompt")
-            }
-            SettingsSection("Each note") {
+            VStack(spacing: 0) {
                 SettingsToggleRow("Number the notes", isOn: Binding(
                     get: { editor.draft.includeNoteNumbers },
                     set: { editor.send(.editIncludeNoteNumbers($0)) }
@@ -63,33 +82,17 @@ struct SettingsTemplatesPane: View {
                     get: { editor.draft.includeTimestamps },
                     set: { editor.send(.editIncludeTimestamps($0)) }
                 ))
-            }
-            SettingsSection(settings.stackExportMode.exportMomentCaption) {
+                SettingsDivider()
                 SettingsToggleRow("Date heading", isOn: Binding(
                     get: { editor.draft.includeHeading },
                     set: { editor.send(.editIncludeHeading($0)) }
                 ))
                 SettingsDivider()
-                SettingsToggleRow("Clear the stack afterwards", isOn: Binding(
+                SettingsToggleRow(settings.stackExportMode.clearAfterExportTitle, isOn: Binding(
                     get: { editor.draft.clearStackAfterExport },
                     set: { editor.send(.editClearStackAfterExport($0)) }
                 ))
             }
-            HStack(spacing: 16) {
-                if editor.isDirty {
-                    InkButton("Save", keys: "⌘S", action: save)
-                        .keyboardShortcut("s", modifiers: .command)
-                    QuietButton("Revert", action: editor.revert)
-                }
-                Spacer(minLength: 0)
-                if editor.canDelete {
-                    QuietButton("Delete template", hoverColor: Ink.accent(scheme)) {
-                        TemplateDialogs.delete(editor)
-                    }
-                }
-            }
-            .padding(.top, -8)
-            .animation(.easeOut(duration: 0.15), value: editor.isDirty)
         }
     }
 

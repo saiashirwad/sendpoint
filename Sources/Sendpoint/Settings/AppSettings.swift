@@ -22,10 +22,10 @@ enum StackExportMode: Equatable, Sendable {
         }
     }
 
-    var exportMomentCaption: String {
+    var clearAfterExportTitle: String {
         switch self {
-        case .paste: "When pasting"
-        case .copy: "When copying"
+        case .paste: "Clear the stack after pasting"
+        case .copy: "Clear the stack after copying"
         }
     }
 }
