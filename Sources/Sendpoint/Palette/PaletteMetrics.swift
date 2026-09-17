@@ -20,23 +20,3 @@ enum PaletteMetrics {
     /// Corner radius of the floating overlay panel.
     static let overlayRadius: CGFloat = 12
 }
-
-/// The floating menu surface, named once for the palette's overlay menus:
-/// one rounded fill, one rim, one shadow. Palette-local only; a shared
-/// cross-file modifier is follow-up work, so Theme.swift/SettingsChrome.swift are untouched.
-struct OverlaySurface: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
-                    .fill(Ink.raised(scheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
-                    .strokeBorder(Ink.rim(scheme), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14), radius: 24, y: 10)
-    }
-}

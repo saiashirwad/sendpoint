@@ -165,6 +165,25 @@ struct OverlayPanel<Rows: View>: View {
     }
 }
 
+/// The floating menu surface for the overlay menus: one rounded fill, one
+/// rim, one shadow. Lives here with its only caller.
+private struct OverlaySurface: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
+                    .fill(Ink.raised(scheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
+                    .strokeBorder(Ink.rim(scheme), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14), radius: 24, y: 10)
+    }
+}
+
 /// One ⌘K action row: title plus keys, red when destructive. The Button's
 /// native activate already performs the row, so VoiceOver needs nothing
 /// extra. Hover only reports outward so the reducer moves the highlight;
