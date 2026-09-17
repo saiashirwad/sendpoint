@@ -40,15 +40,9 @@ struct StackColumnView: View {
                     }
                     .padding(.vertical, 6)
                 }
-                // One focus section for the sidebar rows. While browsing with
-                // a row Button focused, the global monitor declines arrows so
-                // this section owns them via RowMoveCommands (the SAME .key
-                // events the monitor path sends); Tab, ↩, and Esc stay
-                // monitor-owned in every focus state. Disabled while editing
-                // so rename-field arrows reach their field exactly as today
-                // (a present-but-idle handler would still swallow them).
+                // Keep focus grouping stable across inline edits; keys are
+                // routed by the window monitor, not by this section.
                 .focusSection()
-                .modifier(RowMoveCommands(enabled: inlineEdit == nil, onEvent: onEvent))
                 .onChange(of: highlight) {
                     guard let highlight else { return }
                     withAnimation(StackPaletteView.travel) { proxy.scrollTo(highlight, anchor: nil) }

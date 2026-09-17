@@ -270,8 +270,8 @@ struct SetupView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-        .onChange(of: headline) { announcePolitely("\(headline). \(detail)") }
         .id(headline)
+        .onChange(of: headline) { announcePolitely("\(headline). \(detail)") }
         .transition(.blurReplace)
         .animation(.snappy(duration: 0.35), value: headline)
     }

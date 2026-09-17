@@ -102,6 +102,61 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
     }
 
+    func testMonitorArrowsAreConsumedAndMoveNotesOnce() {
+        var harness = makeHarness()
+        harness.send(.open(.notes, highlighting: firstStackID))
+
+        XCTAssertTrue(harness.send(.key(.up, textHasSelection: false)))
+        XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
+        XCTAssertTrue(harness.send(.key(.down, textHasSelection: false)))
+        XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
+        XCTAssertTrue(harness.send(.key(.left, textHasSelection: false)))
+        XCTAssertEqual(harness.state.focusedPane, .stacks)
+        XCTAssertTrue(harness.send(.key(.right, textHasSelection: false)))
+        XCTAssertEqual(harness.state.focusedPane, .notes)
+    }
+
+    func testInlineEditorsDeclineArrowsWithoutChangingDraftOrHighlight() {
+        for action: PaletteAction in [.editNote(secondNoteID), .renameStack(firstStackID), .newStack] {
+            var harness = makeHarness()
+            harness.send(.open(.notes, highlighting: firstStackID))
+            harness.send(.perform(action))
+            harness.send(.editText("Draft"))
+            let draft = harness.state.inlineEdit
+            let note = harness.state.noteState.highlight
+            let stack = harness.state.stackState.highlight
+            let pane = harness.state.focusedPane
+            XCTAssertNotNil(draft)
+
+            for key: PaletteKey in [.up, .down, .left, .right] {
+                XCTAssertFalse(harness.send(.key(key, textHasSelection: false)))
+                XCTAssertEqual(harness.state.inlineEdit, draft)
+                XCTAssertEqual(harness.state.noteState.highlight, note)
+                XCTAssertEqual(harness.state.stackState.highlight, stack)
+                XCTAssertEqual(harness.state.focusedPane, pane)
+                XCTAssertTrue(harness.effects.isEmpty)
+            }
+        }
+    }
+
+    func testOverlayConsumesVerticalArrowsWithoutMovingUnderlyingRows() {
+        var harness = makeHarness()
+        harness.send(.open(.notes, highlighting: firstStackID))
+        harness.send(.toggleOverlay(.actions))
+        let note = harness.state.noteState.highlight
+        let stack = harness.state.stackState.highlight
+
+        XCTAssertTrue(harness.send(.key(.down, textHasSelection: false)))
+        XCTAssertEqual(harness.state.overlayHighlight, 1)
+        XCTAssertTrue(harness.send(.key(.up, textHasSelection: false)))
+        XCTAssertEqual(harness.state.overlayHighlight, 0)
+        XCTAssertFalse(harness.send(.key(.left, textHasSelection: false)))
+        XCTAssertFalse(harness.send(.key(.right, textHasSelection: false)))
+        XCTAssertEqual(harness.state.noteState.highlight, note)
+        XCTAssertEqual(harness.state.stackState.highlight, stack)
+        XCTAssertEqual(harness.state.focusedPane, .notes)
+    }
+
     func testCommandDigitsSwitchStacksFromEitherPane() {
         var harness = makeHarness()
         harness.send(.open(.notes, highlighting: firstStackID))

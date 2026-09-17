@@ -3,20 +3,6 @@ import SwiftUI
 
 /// Shared row chrome for every concrete palette/overlay row.
 ///
-/// Single-fire arrow ownership: a row-section ScrollView applies
-/// `RowMoveCommands` (enabled only while browsing, i.e. `inlineEdit == nil`)
-/// so a declined arrow — the monitor lets arrows through solely for
-/// non-text focus with no edit and no overlay — is claimed by exactly one
-/// focused-section handler, which replays the SAME `.key` events the monitor
-/// path sends (the reducer keeps focused-pane and query-empty semantics, so
-/// the view mirrors them bit-for-bit). Editors are never descendants of an
-/// enabled handler: rename/note fields live in rows whose section disables
-/// itself while editing, the create field sits outside the stack ScrollView,
-/// and search/overlay fields sit outside both sections — so editing-field
-/// arrows always reach their field exactly as today. Overlays get no handler
-/// at all: overlay arrows stay monitor-owned. Tab, Return, and Escape get no
-/// handler anywhere: they stay monitor-owned in every focus state.
-///
 /// One tiny helper so the split does not duplicate the pill logic across
 /// the four concrete rows. It owns `@State hovering` itself (documented
 /// here): palette rows read it as a hover wash, overlay rows track it but
@@ -83,34 +69,6 @@ struct RowShell<Content: View>: View {
                 hovering = $0
                 if $0 { onHoverEnter?() }
             }
-    }
-}
-
-/// Arrow-key ownership for one row-section ScrollView. Conditionally
-/// attached: when `enabled` is false the modifier is absent (not a no-op
-/// handler), so editing-field arrows still reach their TextField instead of
-/// being swallowed by an ancestor. See the file header for the full
-/// single-fire contract.
-struct RowMoveCommands: ViewModifier {
-    let enabled: Bool
-    let onEvent: (PaletteEvent) -> Void
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.onMoveCommand { direction in
-                if direction == .up {
-                    onEvent(.key(.up, textHasSelection: false))
-                } else if direction == .down {
-                    onEvent(.key(.down, textHasSelection: false))
-                } else if direction == .left {
-                    onEvent(.key(.left, textHasSelection: false))
-                } else if direction == .right {
-                    onEvent(.key(.right, textHasSelection: false))
-                }
-            }
-        } else {
-            content
-        }
     }
 }
 

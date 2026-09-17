@@ -47,10 +47,10 @@ struct ShortcutRows: View {
                 // announced politely (macOS SwiftUI has no live-region
                 // modifier, so the announcement is posted explicitly).
                 .accessibilityElement(children: .combine)
-                .onChange(of: errorMessage ?? "") { _, message in
-                    announcePolitely(message)
-                }
             }
+        }
+        .onChange(of: errorMessage ?? "") { _, message in
+            announcePolitely(message)
         }
     }
 

@@ -67,15 +67,9 @@ struct NoteListView: View {
                     .padding(.vertical, 6)
                     .background(ScrollProbe(handle: noteFrames.scroll))
             }
-            // Same sectioning as the sidebar, with the same single-fire
-            // contract: declined arrows (row-Button focus, browsing, no edit)
-            // are owned here via RowMoveCommands replaying the SAME .key
-            // events; Tab, ↩, and Esc stay monitor-owned. Disabled while
-            // editing so note-field arrows reach their field exactly as
-            // today. No handler when an overlay is open is needed: overlay
-            // arrows never decline, so they never reach this handler.
+            // Keep focus grouping stable across inline edits; keys are
+            // routed by the window monitor, not by this section.
             .focusSection()
-            .modifier(RowMoveCommands(enabled: inlineEdit == nil, onEvent: onEvent))
             .coordinateSpace(name: StackPaletteView.notesSpace)
             .onPreferenceChange(NoteFramesKey.self) { frames in
                 noteFrames.frames.merge(frames) { $1 }
