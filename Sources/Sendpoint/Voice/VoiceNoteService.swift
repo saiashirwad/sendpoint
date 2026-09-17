@@ -36,9 +36,23 @@ nonisolated enum LocalVoiceModelFiles {
     }
 }
 
+nonisolated protocol VoiceTranscribing: Sendable {
+    func prepare(onProgress: @escaping @Sendable (Double) -> Void) async throws
+    func prepareIfNeeded() async
+    func begin(onPartial: @escaping @Sendable (String) -> Void) async -> Int?
+    func feed(_ frames: [PreviewAudioFrame], generation: Int) async
+    func finish(leftover: [PreviewAudioFrame], generation: Int?) async throws -> String
+    func abandon() async
+    func teardown() async
+}
+
 @MainActor
 final class VoiceNoteService {
-    private let transcriber = LocalStreamingPreview()
+    private enum Lifecycle { case active, terminated }
+    private var lifecycle = Lifecycle.active
+    private let transcriber: any VoiceTranscribing
+    private let makeSpareEngine: () -> AVAudioEngine?
+    private var teardownTask: Task<Void, Never>?
     let levelMeter = VoiceLevelMeter()
     private var engine: AVAudioEngine?
     private var spareEngine: AVAudioEngine?
@@ -55,40 +69,89 @@ final class VoiceNoteService {
     var preferredInputDeviceUID: String?
     var onPartialTranscript: (@Sendable (String) -> Void)?
 
-    init() {}
+    init(
+        transcriber: any VoiceTranscribing = LocalStreamingPreview(),
+        makeSpareEngine: @escaping () -> AVAudioEngine? = {
+            guard PermissionCheck.isMicrophoneAuthorized else { return nil }
+            let engine = AVAudioEngine()
+            _ = engine.inputNode
+            return engine
+        }
+    ) {
+        self.transcriber = transcriber
+        self.makeSpareEngine = makeSpareEngine
+    }
+
+    func teardown() {
+        guard lifecycle == .active else { return }
+        lifecycle = .terminated
+        let warmUp = warmUpTask
+        warmUp?.cancel()
+        warmUpTask = nil
+        _ = try? stopMicrophone()
+        invalidateTapDelivery()
+        levelMeter.reset()
+        spareEngine?.stop()
+        spareEngine = nil
+        let pump = streamTask
+        pump?.cancel()
+        streamTask = nil
+        let previous = abandonment?.task
+        previous?.cancel()
+        abandonment = nil
+        audioQueue = nil
+        streamGeneration = nil
+        recordingStartedAt = nil
+        onPartialTranscript = nil
+        let transcriber = transcriber
+        teardownTask = Task {
+            await transcriber.teardown()
+            await warmUp?.value
+            await pump?.value
+            await previous?.value
+        }
+    }
+
+    func waitForTeardown() async {
+        await teardownTask?.value
+    }
 
     var isRecording: Bool { engine?.isRunning == true }
 
     func downloadVoiceModel(
         onProgress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
+        guard lifecycle == .active else { throw CancellationError() }
+        try Task.checkCancellation()
         try await transcriber.prepare(onProgress: onProgress)
+        try Task.checkCancellation()
+        guard lifecycle == .active else { throw CancellationError() }
     }
 
     func requestMicrophoneAccess() async -> Bool {
+        guard lifecycle == .active, !Task.isCancelled else { return false }
         switch PermissionCheck.microphonePermissionState {
         case .granted:
             return true
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
+            let allowed = await withCheckedContinuation { continuation in
                 AVCaptureDevice.requestAccess(for: .audio) { @Sendable allowed in
                     continuation.resume(returning: allowed)
                 }
             }
+            return allowed && lifecycle == .active && !Task.isCancelled
         case .denied, .restricted:
             return false
         }
     }
 
     func warmUp() {
-        if spareEngine == nil, PermissionCheck.isMicrophoneAuthorized {
-            let engine = AVAudioEngine()
-            _ = engine.inputNode
-            spareEngine = engine
-        }
+        guard lifecycle == .active else { return }
+        if spareEngine == nil { spareEngine = makeSpareEngine() }
         guard warmUpTask == nil else { return }
         let transcriber = transcriber
         warmUpTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             await transcriber.prepareIfNeeded()
             self?.warmUpTask = nil
         }
@@ -97,6 +160,7 @@ final class VoiceNoteService {
     func startRecording() async throws {
         await finishPendingAbandonment()
         try Task.checkCancellation()
+        guard lifecycle == .active else { throw CancellationError() }
         guard !isRecording else { return }
 
         let engine = spareEngine ?? AVAudioEngine()
@@ -158,6 +222,8 @@ final class VoiceNoteService {
         try Task.checkCancellation()
         let duration = try stopMicrophone()
         let leftover = await stopStreamPump()
+        try Task.checkCancellation()
+        guard lifecycle == .active else { throw CancellationError() }
         guard duration >= Self.minimumClipDuration else {
             await transcriber.abandon()
             Diag.log("voice clip too short to hold speech; treating as silence")
@@ -169,10 +235,12 @@ final class VoiceNoteService {
         streamGeneration = nil
         let transcript = try await transcriber.finish(leftover: leftover, generation: generation)
         try Task.checkCancellation()
+        guard lifecycle == .active else { throw CancellationError() }
         return transcript.nonblank ?? ""
     }
 
     func discardRecording() {
+        guard lifecycle == .active else { return }
         let wasLive = isRecording || recordingStartedAt != nil || streamTask != nil
         _ = try? stopMicrophone()
         invalidateTapDelivery()
@@ -202,7 +270,7 @@ final class VoiceNoteService {
     }
 
     func applyTapLevel(_ level: Float, epoch: Int) {
-        guard epoch == recordingEpoch else { return }
+        guard lifecycle == .active, epoch == recordingEpoch else { return }
         levelMeter.push(level)
     }
 
@@ -333,8 +401,39 @@ nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
     }
 }
 
-actor LocalStreamingPreview {
-    private let preparation = SharedAsyncPreparation<StreamingUnifiedAsrManager>()
+actor LocalStreamingPreview: VoiceTranscribing {
+    private enum Preparation {
+        case idle
+        case loading(UUID, Task<StreamingUnifiedAsrManager, Error>)
+        case ready(StreamingUnifiedAsrManager)
+        case terminated
+    }
+    private var preparation = Preparation.idle
+
+    private var preparedManager: StreamingUnifiedAsrManager? {
+        guard case .ready(let manager) = preparation else { return nil }
+        return manager
+    }
+
+    func teardown() async {
+        let previous = preparation
+        guard case .terminated = previous else {
+            preparation = .terminated
+            generation += 1
+            sessionOpen = false
+            preparationAttemptID = nil
+            switch previous {
+            case .loading(_, let task):
+                task.cancel()
+            case .ready(let manager):
+                await manager.setPartialTranscriptCallback { _ in }
+                try? await manager.reset()
+            case .idle, .terminated:
+                break
+            }
+            return
+        }
+    }
     private let progress = VoiceModelProgressRelay()
     private var generation = 0
     private var sessionOpen = false
@@ -350,7 +449,7 @@ actor LocalStreamingPreview {
     }
 
     func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        let attemptID = await claimPreparationAttempt()
+        let attemptID = claimPreparationAttempt()
         let token = progress.subscribe(onProgress)
         defer { progress.unsubscribe(token) }
         _ = try await manager(attemptID: attemptID)
@@ -387,7 +486,7 @@ actor LocalStreamingPreview {
 
     func feed(_ frames: [PreviewAudioFrame], generation: Int) async {
         guard generation == self.generation, !frames.isEmpty else { return }
-        guard await preparation.isPrepared(), let manager = try? await manager() else { return }
+        guard let manager = preparedManager else { return }
         guard let buffer = Self.joinedBuffer(frames) else { return }
         if !loggedFirstFeed {
             loggedFirstFeed = true
@@ -430,7 +529,7 @@ actor LocalStreamingPreview {
         generation += 1
         let abandoned = generation
         sessionOpen = false
-        guard await preparation.isPrepared(), let manager = try? await manager() else { return }
+        guard let manager = preparedManager else { return }
         await manager.setPartialTranscriptCallback { _ in }
         guard abandoned == generation else { return }
         try? await manager.reset()
@@ -466,11 +565,10 @@ actor LocalStreamingPreview {
         return offset > 0 ? buffer : nil
     }
 
-    private func claimPreparationAttempt() async -> UUID? {
+    private func claimPreparationAttempt() -> UUID? {
+        if case .terminated = preparation { return nil }
         if let preparationAttemptID { return preparationAttemptID }
-        let isPrepared = await preparation.isPrepared()
-        guard !isPrepared else { return nil }
-        if let preparationAttemptID { return preparationAttemptID }
+        guard preparedManager == nil else { return nil }
         let id = UUID()
         preparationAttemptID = id
         progress.reset()
@@ -482,19 +580,51 @@ actor LocalStreamingPreview {
         if let claimedID {
             attemptID = claimedID
         } else {
-            attemptID = await claimPreparationAttempt()
+            attemptID = claimPreparationAttempt()
         }
         let progress = progress
         do {
-            let loaded = try await preparation.value {
-                let manager = StreamingUnifiedAsrManager(config: LocalVoiceModelFiles.streaming)
-                try await manager.loadModels(
-                    progressHandler: { @Sendable in progress.report($0.fractionCompleted) }
-                )
-                try await Self.prime(manager)
-                Diag.log("voice model loaded")
+            try Task.checkCancellation()
+            let id: UUID
+            let task: Task<StreamingUnifiedAsrManager, Error>
+            switch preparation {
+            case .terminated:
+                throw CancellationError()
+            case .ready(let manager):
                 return manager
+            case .loading(let activeID, let activeTask):
+                id = activeID
+                task = activeTask
+            case .idle:
+                id = UUID()
+                task = Task {
+                    try Task.checkCancellation()
+                    let manager = StreamingUnifiedAsrManager(config: LocalVoiceModelFiles.streaming)
+                    try await manager.loadModels(
+                        progressHandler: { @Sendable in progress.report($0.fractionCompleted) }
+                    )
+                    try Task.checkCancellation()
+                    try await Self.prime(manager)
+                    try Task.checkCancellation()
+                    Diag.log("voice model loaded")
+                    return manager
+                }
+                preparation = .loading(id, task)
             }
+            let loaded: StreamingUnifiedAsrManager
+            do {
+                loaded = try await task.value
+            } catch {
+                if case .loading(let activeID, _) = preparation, activeID == id {
+                    preparation = .idle
+                }
+                throw error
+            }
+            if case .terminated = preparation { throw CancellationError() }
+            if case .loading(let activeID, _) = preparation, activeID == id {
+                preparation = .ready(loaded)
+            }
+            try Task.checkCancellation()
             if preparationAttemptID == attemptID { preparationAttemptID = nil }
             await MainActor.run {
                 NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)

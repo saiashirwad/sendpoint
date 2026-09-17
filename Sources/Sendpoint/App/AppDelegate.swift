@@ -64,9 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if settingsWindowController?.canTerminate() == false { return .terminateCancel }
+        environment.voiceService.teardown()
         guard let store, store.state == .processing else { return .terminateNow }
+        guard terminationTask == nil else { return .terminateLater }
         terminationTask = Task {
+            // External model loading is cooperatively cancelled, not a barrier to quitting.
             await store.drain(timeout: .seconds(2))
+            guard !Task.isCancelled else { return }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
@@ -92,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DistributedNotificationCenter.default().removeObserver(userOpenedObserver)
             self.userOpenedObserver = nil
         }
+        environment.voiceService.teardown()
         captureController.teardown()
         permissionState.teardown()
         statusItemController.teardown()

@@ -27,7 +27,6 @@ enum PaletteEvent {
 
 struct PalettePending {
     let id: UUID
-    let mutation: StackDocumentMutation
     let stackID: UUID
     let draft: PaletteEdit?
     var continuation: PaletteEvent?
@@ -318,7 +317,7 @@ struct PaletteUpdate {
 
     private mutating func enqueue(_ mutation: StackDocumentMutation, draft: PaletteEdit? = nil,
                                  then continuation: PaletteEvent? = nil) {
-        state.interaction = .saving(PalettePending(id: operationID, mutation: mutation,
+        state.interaction = .saving(PalettePending(id: operationID,
             stackID: draft?.stackID ?? context.currentStackID, draft: draft, continuation: continuation))
         effects.append(.mutate(operationID, mutation))
     }

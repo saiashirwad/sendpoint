@@ -87,7 +87,7 @@ struct SettingsCapturePane: View {
     }
 
     private var microphoneMenu: some View {
-        ChoiceMenu<String?, _>(title: selectedTitle, width: 300) {
+        ChoiceMenu(title: selectedTitle, width: 300) {
             Picker("Microphone", selection: Binding<String?>(
                 get: { voiceSettings.inputDeviceUID },
                 set: { uid in

@@ -41,28 +41,6 @@ final class NoteFramesDisarmTests: XCTestCase {
 
 @MainActor
 final class VoiceModelWatchOwnershipTests: XCTestCase {
-    private final class BoolBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var storedValue: Bool
-
-        init(_ value: Bool) {
-            storedValue = value
-        }
-
-        var value: Bool {
-            get {
-                lock.lock()
-                defer { lock.unlock() }
-                return storedValue
-            }
-            set {
-                lock.lock()
-                storedValue = newValue
-                lock.unlock()
-            }
-        }
-    }
-
     private func services(
         modelFilesExist: (@Sendable () -> Bool)? = nil,
         downloadModel: @escaping @Sendable (
@@ -92,7 +70,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
     }
 
     func testRedundantStartsShareOneLoopUntilLastStop() async {
-        let files = BoolBox(false)
+        let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value }
         ))

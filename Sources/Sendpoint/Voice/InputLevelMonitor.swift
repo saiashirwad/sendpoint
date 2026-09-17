@@ -9,9 +9,9 @@ final class InputLevelMonitor {
     var isRunning: Bool { engine != nil }
 
     private var engine: AVAudioEngine?
-    private var meterTask: Task<Void, Never>?
-    private var tapContinuation: AsyncStream<Float>.Continuation?
-    private var tapEpoch = 0
+    @ObservationIgnored private var meterTask: Task<Void, Never>?
+    @ObservationIgnored private var tapContinuation: AsyncStream<Float>.Continuation?
+    @ObservationIgnored private var tapEpoch = 0
 
     func start(preferredUID: String?) {
         stop()

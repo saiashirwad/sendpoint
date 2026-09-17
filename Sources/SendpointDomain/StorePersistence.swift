@@ -127,12 +127,20 @@ private actor AtomicJSONStore {
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
+        if version == StackDocumentMigration.legacyVersion {
+            let backup = directory.appendingPathComponent("store.v\(version).json")
+            if !fileManager.fileExists(atPath: backup.path) {
+                do {
+                    try fileManager.copyItem(at: fileURL, to: backup)
+                } catch {
+                    // A backup failure says nothing about the document's validity.
+                    throw StorePersistenceError.unavailable
+                }
+            }
+        }
+
         do {
             if version == StackDocumentMigration.legacyVersion {
-                let backup = directory.appendingPathComponent("store.v\(version).json")
-                if !fileManager.fileExists(atPath: backup.path) {
-                    try fileManager.copyItem(at: fileURL, to: backup)
-                }
                 return try StackDocumentMigration.migrate(legacy: data, decoder: decoder)
             }
             let document = try decoder.decode(StackDocument.self, from: data)

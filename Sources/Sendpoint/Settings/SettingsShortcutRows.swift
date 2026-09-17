@@ -36,6 +36,11 @@ struct ShortcutRows<Label: View>: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let projection = ShortcutFeedback(
+            slots: specs.map(\.slot),
+            registrationIssues: shortcuts.shortcutRegistrationIssues,
+            feedback: feedback
+        )
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(specs.enumerated()), id: \.element.id) { index, spec in
                 if index > 0 { SettingsDivider() }
@@ -47,12 +52,12 @@ struct ShortcutRows<Label: View>: View {
                 }
                 .frame(minHeight: SettingsMetrics.rowHeight)
             }
-            if !issues.isEmpty || feedback != nil {
+            if projection.isVisible {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(issues) { issue in
-                        Text("\(issue.id.title): \(issue.message)")
+                    ForEach(projection.issues) { issue in
+                        Text(issue.text)
                     }
-                    if let feedback {
+                    if let feedback = projection.feedback {
                         Text(feedback)
                     }
                 }
@@ -63,19 +68,9 @@ struct ShortcutRows<Label: View>: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .onChange(of: errorMessage ?? "") { _, message in
+        .onChange(of: projection.announcement) { _, message in
             announcePolitely(message)
         }
-    }
-
-    private var issues: [ShortcutRegistrationIssue] {
-        let slots = Set(specs.map(\.slot))
-        return shortcuts.shortcutRegistrationIssues.filter { slots.contains($0.id) }
-    }
-
-    private var errorMessage: String? {
-        let parts = issues.map { "\($0.id.title): \($0.message)" } + (feedback.map { [$0] } ?? [])
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     private func binding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {

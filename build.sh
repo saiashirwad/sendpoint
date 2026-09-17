@@ -54,11 +54,11 @@ if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
     exit 1
 fi
 AIR_DIR=$(mktemp -d)
+trap 'rm -rf "$AIR_DIR"' EXIT
 for SHADER in Resources/Shaders/*.metal; do
     xcrun -sdk macosx metal -c "$SHADER" -o "${AIR_DIR}/$(basename "${SHADER%.metal}").air"
 done
 xcrun -sdk macosx metallib "${AIR_DIR}"/*.air -o "${DIST}/Contents/Resources/default.metallib"
-rm -rf "$AIR_DIR"
 
 # A stable signing identity keeps the Accessibility grant across rebuilds.
 IDENTITY="${CODESIGN_IDENTITY:-}"

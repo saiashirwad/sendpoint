@@ -157,12 +157,8 @@ public enum StackDocumentMutations {
             guard let index = stackIndex(stackID, in: document) else {
                 return .rejected("The target stack no longer exists.")
             }
-            let removed = document.stacks[index].notes.filter { note in
-                exported.contains { snapshot in
-                    snapshot.id == note.id && snapshot.body == note.body
-                        && snapshot.subject == note.subject && snapshot.createdAt == note.createdAt
-                }
-            }
+            let exportedNotes = Set(exported)
+            let removed = document.stacks[index].notes.filter { exportedNotes.contains($0) }
             guard !removed.isEmpty else { return .noOp }
             let ids = Set(removed.map(\.id))
             document.stacks[index].notes.removeAll { ids.contains($0.id) }

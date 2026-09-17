@@ -129,6 +129,75 @@ final class StorePersistenceTests: XCTestCase {
         XCTAssertFalse(didQuarantine)
     }
 
+    @MainActor
+    func testLegacyBackupCopyFailureIsUnavailableAndPreservesOriginalForRetry() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(StorePersistence.fileName)
+        let original = Data("""
+        {"version":\(StackDocumentMigration.legacyVersion),
+         "stacks":[{"id":"\(stackID)","notes":[]}],"currentStackID":"\(stackID)"}
+        """.utf8)
+        try original.write(to: file)
+        let backup = directory.appendingPathComponent("store.v\(StackDocumentMigration.legacyVersion).json")
+        // A dangling symlink passes fileExists's missing-target check but blocks copying.
+        // This produces a real I/O failure deterministically, even when running as root.
+        try fileManager.createSymbolicLink(
+            at: backup, withDestinationURL: directory.appendingPathComponent("missing-target")
+        )
+        let persistence = StorePersistence.live(directory: directory)
+
+        do {
+            _ = try await persistence.load()
+            XCTFail("Expected unavailable storage")
+        } catch let error as StorePersistenceError {
+            XCTAssertEqual(error, .unavailable)
+        }
+        do {
+            _ = try await StackStore(persistence: persistence)
+            XCTFail("Expected unavailable storage, not a fresh default")
+        } catch let error as StorePersistenceError {
+            XCTAssertEqual(error, .unavailable)
+        }
+
+        XCTAssertEqual(try Data(contentsOf: file), original)
+        let didQuarantine = await persistence.didQuarantineCorruptFile()
+        XCTAssertFalse(didQuarantine)
+        let names = try fileManager.contentsOfDirectory(atPath: directory.path)
+        XCTAssertFalse(names.contains(where: { $0.hasSuffix(".corrupt") }))
+
+        try fileManager.removeItem(at: backup)
+        let loaded = try await persistence.load()
+        XCTAssertEqual(loaded?.currentStackID, stackID)
+        XCTAssertEqual(loaded?.version, StackDocument.currentVersion)
+        XCTAssertEqual(try Data(contentsOf: backup), original)
+        XCTAssertEqual(try Data(contentsOf: file), original)
+    }
+
+    func testMalformedLegacyDocumentStillQuarantinesAfterBackup() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(StorePersistence.fileName)
+        let original = Data(#"{"version":\#(StackDocumentMigration.legacyVersion)}"#.utf8)
+        try original.write(to: file)
+        let persistence = StorePersistence.live(directory: directory)
+
+        let loaded = try await persistence.load()
+
+        XCTAssertNil(loaded)
+        let didQuarantine = await persistence.didQuarantineCorruptFile()
+        XCTAssertTrue(didQuarantine)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        let backup = directory.appendingPathComponent("store.v\(StackDocumentMigration.legacyVersion).json")
+        XCTAssertEqual(try Data(contentsOf: backup), original)
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        let quarantined = try XCTUnwrap(names.first(where: { $0.hasSuffix(".corrupt") }))
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent(quarantined)), original)
+    }
+
     func testNonJSONEnvelopeFailureIsQuarantinedWithOriginalBytes() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

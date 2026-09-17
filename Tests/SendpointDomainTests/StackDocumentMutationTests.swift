@@ -203,6 +203,33 @@ final class StackDocumentMutationTests: XCTestCase {
         XCTAssertEqual(document.lastCleared?.notes, [note])
     }
 
+    func testClearExportedNotesPreservesMixedNoteAndClearedBatchOrdering() {
+        let first = makeNote(id: UUID(), body: "first exported")
+        let stale = makeNote(id: UUID(), body: "exported before editing")
+        var edited = stale
+        edited.body = "edited after export"
+        let second = makeNote(id: UUID(), body: "second exported")
+        let added = makeNote(id: UUID(), body: "added after export")
+        let third = makeNote(id: UUID(), body: "third exported")
+        let missing = makeNote(id: UUID(), body: "removed after export")
+        let initial = StackDocument(
+            stacks: filled([Stack(id: firstID, notes: [first, edited, second, added, third])]),
+            currentStackID: firstID
+        )
+
+        let cleared = applied(
+            .clearExportedNotes(stackID: firstID, notes: [third, stale, missing, second, first, second]),
+            to: initial
+        )
+
+        XCTAssertEqual(cleared.stacks[0].notes, [edited, added])
+        XCTAssertEqual(cleared.lastCleared, ClearedBatch(stackID: firstID, notes: [first, second, third]))
+        XCTAssertEqual(
+            applied(.undoClear, to: cleared).stacks[0].notes,
+            [first, second, third, edited, added]
+        )
+    }
+
     func testValidationRejectsDuplicateStackNoteAndClearedBatchIDs() {
         let one = makeNote(id: UUID(), body: "one")
         let duplicateStackIDs = StackDocument(

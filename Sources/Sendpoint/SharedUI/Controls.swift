@@ -347,7 +347,7 @@ private struct SwitchTrack: View {
     }
 }
 
-struct ChoiceMenu<ID: Hashable, Choices: View>: View {
+struct ChoiceMenu<Choices: View>: View {
     let title: String
     let width: CGFloat
     @ViewBuilder let choices: () -> Choices

@@ -60,28 +60,6 @@ final class PermissionStateTests: XCTestCase {
         }
     }
 
-    private final class BoolBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var storedValue: Bool
-
-        init(_ value: Bool) {
-            storedValue = value
-        }
-
-        var value: Bool {
-            get {
-                lock.lock()
-                defer { lock.unlock() }
-                return storedValue
-            }
-            set {
-                lock.lock()
-                storedValue = newValue
-                lock.unlock()
-            }
-        }
-    }
-
     private func services(
         accessibility: AccessibilityPermissionState = .granted,
         requestAccessibility: Bool = true,
@@ -295,7 +273,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testVisibleWatcherPicksUpDiskChangesBothWays() async {
-        let files = BoolBox(false)
+        let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value }
         ))
@@ -314,7 +292,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testFailedDownloadSurvivesRefreshAndRecoversWhenFilesAppear() async {
-        let files = BoolBox(false)
+        let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value },
             downloadModel: { _ in throw TestError.failed }
