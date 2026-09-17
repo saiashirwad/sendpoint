@@ -83,7 +83,7 @@ final class CaptureWindows {
         panel?.presentActivated()
     }
 
-    func stopEscapeHandling() {
+    private func stopEscapeHandling() {
         hotKeyCenter.unregister(name: .voiceEscape)
         if let voiceEscapeMonitor { NSEvent.removeMonitor(voiceEscapeMonitor) }
         voiceEscapeMonitor = nil
@@ -147,7 +147,7 @@ final class CaptureWindows {
 
     static func makeEditorPanel(contentView: NSView = NSView()) -> CapturePanel {
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 290),
+            contentRect: NSRect(x: 0, y: 0, width: VoiceCaptureLayout.cardWidth, height: 150),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -162,7 +162,8 @@ final class CaptureWindows {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 380, height: 270)
+        panel.minSize = NSSize(width: 320, height: 110)
+        panel.appearance = NSAppearance(named: .darkAqua)
         panel.animationBehavior = .utilityWindow
 
         panel.isOpaque = false

@@ -155,6 +155,45 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         try composite([voice, picker], to: directory, name: "voice-capture-card-destination.png")
     }
 
+    func testRenderTextCaptureCard() async throws {
+        guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
+            throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
+        }
+        let stacks = [Stack(notes: [Note(subject: .standalone, body: "One")])]
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        let context = NoteCaptureContext(stackID: stacks[0].id)
+        controller.send(.begin(.text, context))
+        controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
+        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
+            rootView: CaptureView(model: controller)
+        ))
+        editor.setFrameOrigin(NSPoint(x: 400, y: 160))
+        defer {
+            controller.send(.teardown)
+            editor.contentView = nil
+            editor.close()
+        }
+        editor.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(400))
+        try screenshot(editor, to: directory, name: "text-capture-card-empty.png")
+        controller.note = "Follow up on this before the review."
+        try await Task.sleep(for: .milliseconds(300))
+        try screenshot(editor, to: directory, name: "text-capture-card.png")
+    }
+
+    private func screenshot(_ window: NSWindow, to directory: String, name: String) throws {
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l\(window.windowNumber)", directory + "/" + name]
+        try capture.run()
+        capture.waitUntilExit()
+        XCTAssertEqual(capture.terminationStatus, 0)
+    }
+
     private func composite(_ windows: [NSWindow], to directory: String, name: String) throws {
         let bounds = windows.map(\.frame).reduce(windows[0].frame) { $0.union($1) }
         let image = NSImage(size: bounds.size)
@@ -243,7 +282,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
                 start: {}, stopAndTranscribe: { "" }, discard: {}, levelMeter: VoiceLevelMeter()
             ),
             surfaces: { _ in CaptureSurfaces(
-                prepare: {}, show: { _ in }, focus: {}, stopEscapeHandling: {}, close: {}, discard: {}
+                prepare: {}, show: { _ in }, focus: {}, close: {}, discard: {}
             ) }
         )
         controller.configure(store: store)

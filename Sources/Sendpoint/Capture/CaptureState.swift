@@ -166,9 +166,6 @@ nonisolated struct CaptureState: Equatable {
         case .dictateToggled: return toggled(.dictate)
         case .voiceEscape:
             guard let session, session.mode != .text else { return [] }
-            if session.destinationPicker == .open {
-                return update(.dismissDestinations(session.context))
-            }
             if voice.keyHeld {
                 voice.keyHeld = false
                 voice.releasePending = true
@@ -233,7 +230,7 @@ nonisolated struct CaptureState: Equatable {
             }
         case .cancelVoice:
             switch session.phase {
-            case .selectingVoice, .startingVoice, .recording, .failed: return finish(session)
+            case .selectingVoice, .startingVoice, .recording, .transcribing, .failed: return finish(session)
             default: return []
             }
         case let .changeNote(note):
@@ -266,8 +263,9 @@ nonisolated struct CaptureState: Equatable {
                 note = text
             }
             if session.mode == .dictation {
-                guard let target = session.dictationTarget, let text = note.nonblank else {
-                    session.phase = .failed(note.nonblank == nil ? "No speech was found." : "Couldn’t paste.")
+                guard let text = note.nonblank else { return finish(session) }
+                guard let target = session.dictationTarget else {
+                    session.phase = .failed("Couldn’t paste.")
                     lifecycle = .active(session)
                     return [.failureTimer(session.context)]
                 }
@@ -278,11 +276,7 @@ nonisolated struct CaptureState: Equatable {
             guard let target = session.target,
                   let note = target.note(body: note)
             else {
-                if session.phase == .transcribing {
-                    session.phase = .failed("No speech was found.")
-                    lifecycle = .active(session)
-                    return [.failureTimer(session.context)]
-                }
+                if session.phase == .transcribing { return finish(session) }
                 if session.target == nil, note.nonblank != nil {
                     session.saveAwaitsSelection = true
                     session.destinationPicker = .closed

@@ -5,57 +5,34 @@ import SwiftUI
 struct CaptureView: View {
     @Bindable var model: CaptureController
 
-    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var noteFocused: Bool
-    @State private var quoteHeight: CGFloat = 0
 
-    private let quoteMaxHeight: CGFloat = 80
-
-    private var quote: String {
-        model.captured?.text.nonblank ?? ""
-    }
+    private let palette = OverlayPalette.dark
+    private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if model.state.session != nil {
-                HStack {
-                    CaptureDestinationButton(model: model, mode: .text, showsIcon: true)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 40)
-                Hairline()
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                if !quote.isEmpty {
-                    quoteBlock
-                }
-                noteEditor
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Hairline()
-            if case .editing = model.state.session?.phase, !model.isNoteFrozen {
-                footer
-            } else {
+        let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+        VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
+            noteEditor
+                .padding(.top, -2)
+            HStack(spacing: 10) {
+                CaptureStackLabel(model: model, mode: .text, ink: palette.ink)
+                CaptureTether(text: tether, ink: palette.ink)
+                Spacer(minLength: 8)
                 saveStatus
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
             }
+            .font(.uiBody)
+            .frame(height: VoiceCaptureLayout.cardFooterHeight)
         }
+        .padding(.horizontal, VoiceCaptureLayout.cardPaddingX)
+        .padding(.top, VoiceCaptureLayout.cardPaddingTop)
+        .padding(.bottom, VoiceCaptureLayout.cardPaddingBottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Ink.paper(colorScheme))
-        .font(.uiBody)
-        .clipShape(RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
-                .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
-        }
+        .background(shape.fill(palette.paper.opacity(paperOpacity)))
+        .overlay(shape.strokeBorder(palette.rim, lineWidth: 0.5))
+        .environment(\.colorScheme, .dark)
         .ignoresSafeArea()
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
         .onAppear {
             DispatchQueue.main.async { noteFocused = true }
         }
@@ -70,56 +47,31 @@ struct CaptureView: View {
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: 12) {
-            Spacer()
-            QuietButton("Discard", keys: "esc") {
-                model.send(.dismiss)
-            }
-
-            Hairline(axis: .vertical)
-                .frame(height: 14)
-
-            InkButton("Save", keys: "⌘↩") {
-                model.send(.save)
-            }
-            .disabled(model.note.nonblank == nil)
-        }
-        .padding(.horizontal, 16)
-        .frame(height: 36)
-    }
-
-    private var quoteBlock: some View {
-        ScrollView {
-            QuotedPassage(text: quote)
-                .textSelection(.enabled)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: HeightKey.self, value: proxy.size.height)
-                    }
-                }
-        }
-        .frame(height: min(max(quoteHeight, 16), quoteMaxHeight))
-        .onPreferenceChange(HeightKey.self) { quoteHeight = $0 }
+    private var tether: String? {
+        guard let text = model.captured?.text else { return nil }
+        return VoiceOverlayCopy.tether(for: text)
     }
 
     private var noteEditor: some View {
         ZStack(alignment: .topLeading) {
             TextEditor(text: $model.note)
                 .font(.uiBody)
-                .lineSpacing(2)
+                .lineSpacing(VoiceCaptureLayout.transcriptLineSpacing)
+                .foregroundStyle(palette.ink.opacity(0.92))
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, -5)
                 .accessibilityLabel("Note")
+                .accessibilityAction(named: "Save") { model.send(.save) }
+                .accessibilityAction(named: "Discard") { model.send(.dismiss) }
                 .focused($noteFocused)
-                .frame(minHeight: 72, idealHeight: 108, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .disabled(model.isNoteFrozen)
 
             if model.note.isEmpty {
                 Text("Add a note…")
                     .font(.uiBody)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 1)
+                    .foregroundStyle(palette.ink.opacity(0.35))
+                    .padding(.top, 6)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -130,40 +82,21 @@ struct CaptureView: View {
     private var saveStatus: some View {
         switch model.state.session?.phase {
         case .editing where model.state.session?.saveAwaitsSelection == true, .saving:
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Saving…")
-                    .font(.uiCallout)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-        case .editing, .none:
-            EmptyView()
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel("Saving")
         case let .saveFailed(_, message, retryable):
-            statusRow(message: message) {
-                HStack(spacing: 8) {
-                    if retryable {
-                        InkButton("Retry") { model.send(.retry) }
-                    } else {
-                        QuietButton("Discard") { model.send(.dismiss) }
-                    }
-                }
+            Text(message)
+                .font(.ui(11.5, weight: .medium))
+                .foregroundStyle(palette.amber)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if retryable {
+                QuietButton("Retry") { model.send(.retry) }
+            } else {
+                QuietButton("Discard") { model.send(.dismiss) }
             }
         default: EmptyView()
-        }
-    }
-
-    private func statusRow<Actions: View>(
-        message: String,
-        @ViewBuilder actions: () -> Actions
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(message)
-                .font(.uiCallout)
-                .foregroundStyle(Ink.amber(colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-            actions()
         }
     }
 }

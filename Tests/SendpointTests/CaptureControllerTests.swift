@@ -17,7 +17,6 @@ final class CaptureControllerTests: XCTestCase {
                 prepare: { self.events.append("prepare") },
                 show: { self.events.append("show \($0)") },
                 focus: { self.events.append("focus") },
-                stopEscapeHandling: { self.events.append("stopEscape") },
                 close: { self.events.append("close") },
                 discard: { self.events.append("discard") }
             )
@@ -260,7 +259,6 @@ final class CaptureControllerTests: XCTestCase {
         await waitUntil { f.controller.state.session?.phase == .recording }
 
         f.controller.send(.voiceReleased)
-        XCTAssertEqual(f.surfaces.events.last, "stopEscape")
         await f.store.waitForIdle()
         await waitUntil { !f.controller.isOpen }
 
@@ -279,7 +277,6 @@ final class CaptureControllerTests: XCTestCase {
         await waitUntil { f.controller.state.session?.phase == .recording }
 
         f.controller.send(.dictateReleased)
-        XCTAssertEqual(f.surfaces.events.last, "stopEscape")
         await waitUntil { !f.controller.isOpen }
 
         XCTAssertEqual(f.pasteboard.inserted.map(\.0), ["hello there"])
@@ -348,7 +345,7 @@ final class CaptureControllerTests: XCTestCase {
         await f.selectionGate.open(selection)
     }
 
-    func testRecordingAndTranscriptionFailuresShowAMessageAndKeepTheStore() async throws {
+    func testRecordingFailureShowsAMessageAndSilenceClosesQuietly() async throws {
         let failing = try await makeFixture()
         failing.recorder.startFails = true
         failing.controller.send(.voicePressed)
@@ -366,7 +363,8 @@ final class CaptureControllerTests: XCTestCase {
         await silent.selectionGate.open(selection)
         await waitUntil { silent.controller.state.session?.phase == .recording }
         silent.controller.send(.voiceReleased)
-        await waitUntil { silent.controller.state.session?.phase == .failed("No speech was found.") }
+        await waitUntil { !silent.controller.isOpen }
+        XCTAssertEqual(silent.surfaces.events.last, "close")
         XCTAssertTrue(silent.store.currentNotes.isEmpty)
     }
 

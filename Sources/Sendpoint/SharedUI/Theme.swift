@@ -136,27 +136,20 @@ struct OverlayPalette {
     let paper: Color
     let amber: Color
     let accent: Color
-    let contentScheme: ColorScheme
 
-    static func against(_ system: ColorScheme) -> OverlayPalette {
-        switch system {
-        case .dark:
-            OverlayPalette(
-                ink: .black,
-                paper: Color(white: 0.98).opacity(0.9),
-                amber: Ink.amber(.light),
-                accent: Ink.accent(.light),
-                contentScheme: .light
-            )
-        default:
-            OverlayPalette(
-                ink: .white,
-                paper: Color(white: 0.06).opacity(0.94),
-                amber: Ink.amber(.dark),
-                accent: Ink.accent(.dark),
-                contentScheme: .dark
-            )
-        }
+    static let dark = OverlayPalette(
+        ink: .white,
+        paper: Color(white: 0.06).opacity(0.94),
+        amber: Ink.amber(.dark),
+        accent: Ink.accent(.dark)
+    )
+
+    var rim: LinearGradient {
+        LinearGradient(
+            colors: [ink.opacity(0.14), ink.opacity(0.03)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 
@@ -194,10 +187,9 @@ struct Backdrop: View {
 struct WordmarkPill: View {
     var mode: VoiceOrb.Mode = .idle
     var animates = false
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let palette = OverlayPalette.against(colorScheme)
+        let palette = OverlayPalette.dark
         HStack(spacing: 10) {
             Text("Sendpoint")
                 .font(.ui(12.5, weight: .semibold))
@@ -209,18 +201,9 @@ struct WordmarkPill: View {
         .padding(.trailing, 9)
         .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
-        .overlay(
-            Capsule().strokeBorder(
-                LinearGradient(
-                    colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 0.5
-            )
-        )
+        .overlay(Capsule().strokeBorder(palette.rim, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.22), radius: 14, y: 7)
-        .environment(\.colorScheme, palette.contentScheme)
+        .environment(\.colorScheme, .dark)
         .contentShape(Capsule())
     }
 }

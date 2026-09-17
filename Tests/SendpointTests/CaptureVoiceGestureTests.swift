@@ -103,6 +103,29 @@ final class CaptureVoiceGestureTests: XCTestCase {
         }
     }
 
+    func testEscapeDuringTranscriptionAbortsAndDropsTheLateTranscript() {
+        var state = recording(mode: .hold)
+        XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])
+        XCTAssertEqual(state.update(.voiceEscape), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
+        XCTAssertEqual(state.update(.transcript(context, "too late")), [], "stale")
+    }
+
+    func testEscapeWithTheDestinationPickerOpenAbortsInOnePress() {
+        var state = recording(mode: .hold)
+        _ = state.update(.toggleDestinations(context))
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+        XCTAssertEqual(state.update(.voiceEscape), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
+    }
+
+    func testAnEmptyTranscriptClosesQuietlyAndSavesNothing() {
+        var state = recording(mode: .hold)
+        XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])
+        XCTAssertEqual(state.update(.transcript(context, " \n")), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
+    }
+
     func testEscapeCancelsATapRecordingOnce() {
         var state = CaptureState()
         _ = state.update(.voiceModeChanged(.tap))
@@ -211,12 +234,11 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.voice, VoiceGesture(mode: .tap))
     }
 
-    func testDictationWithNothingSaidOrNothingPastedShowsAMessageThenCloses() {
+    func testDictationWithNothingSaidClosesQuietlyAndNothingPastedShowsAMessage() {
         var state = dictating()
         _ = state.update(.dictateReleased)
-        XCTAssertEqual(state.update(.transcript(context, "  ")), [.failureTimer(context)])
-        XCTAssertEqual(state.session?.phase, .failed("No speech was found."))
-        XCTAssertEqual(state.update(.failureTimeout(context)), [.close])
+        XCTAssertEqual(state.update(.transcript(context, "  ")), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
 
         state = dictating()
         _ = state.update(.dictateReleased)

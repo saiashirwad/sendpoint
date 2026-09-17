@@ -45,7 +45,6 @@ struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
 
-    @Environment(\.colorScheme) private var systemScheme
     @State private var windowIsVisible = false
 
     private var appeared: Bool {
@@ -54,7 +53,7 @@ struct VoiceCaptureView: View {
     }
     private var animates: Bool { windowIsVisible && appeared }
 
-    private var palette: OverlayPalette { .against(systemScheme) }
+    private let palette = OverlayPalette.dark
     private var showsCard: Bool { model.transcriptionPreview }
     private var lineCount: Int { model.transcriptionPreviewLines }
     private var fontSize: CGFloat { CGFloat(model.transcriptionPreviewFontSize) }
@@ -73,7 +72,7 @@ struct VoiceCaptureView: View {
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: appeared)
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
         .animation(.easeOut(duration: 0.18), value: failureMessage)
-        .environment(\.colorScheme, palette.contentScheme)
+        .environment(\.colorScheme, .dark)
         .padding(VoiceCaptureLayout.shadowPadding)
         .frame(maxWidth: .infinity)
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
@@ -86,10 +85,7 @@ struct VoiceCaptureView: View {
     private var pill: some View {
         HStack(spacing: 10) {
             leading(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
-            if let tether {
-                divider
-                tetherText(tether)
-            }
+            CaptureTether(text: tether, ink: palette.ink)
             orb
                 .padding(.leading, 2)
             failure
@@ -99,7 +95,7 @@ struct VoiceCaptureView: View {
         .font(.uiBody)
         .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
-        .overlay(Capsule().strokeBorder(rim, lineWidth: 0.5))
+        .overlay(Capsule().strokeBorder(palette.rim, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
     }
 
@@ -120,10 +116,7 @@ struct VoiceCaptureView: View {
                     rowHeight: VoiceCaptureLayout.cardFooterHeight,
                     anchorHeight: VoiceCaptureLayout.cardAnchorHeight(lines: lineCount, fontSize: fontSize)
                 )
-                if let tether {
-                    divider
-                    tetherText(tether)
-                }
+                CaptureTether(text: tether, ink: palette.ink)
                 Spacer(minLength: 8)
                 failure
                 orb
@@ -136,7 +129,7 @@ struct VoiceCaptureView: View {
         .padding(.bottom, VoiceCaptureLayout.cardPaddingBottom)
         .frame(width: VoiceCaptureLayout.cardWidth)
         .background(shape.fill(palette.paper.opacity(paperOpacity)))
-        .overlay(shape.strokeBorder(rim, lineWidth: 0.5))
+        .overlay(shape.strokeBorder(palette.rim, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
         .animation(.easeOut(duration: 0.22), value: transcript.rows.map(\.id))
     }
@@ -178,38 +171,11 @@ struct VoiceCaptureView: View {
                 .frame(maxWidth: 180, alignment: .leading)
                 .fixedSize(horizontal: true, vertical: false)
         } else {
-            destination(rowHeight: rowHeight, anchorHeight: anchorHeight)
-            noteCount
+            CaptureStackLabel(
+                model: model, mode: .voice, ink: palette.ink,
+                rowHeight: rowHeight, anchorHeight: anchorHeight
+            )
         }
-    }
-
-    private func destination(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
-        CaptureDestinationButton(
-            model: model, mode: .voice, fontSize: 11.5,
-            rowHeight: rowHeight, anchorHeight: anchorHeight
-        )
-        .foregroundStyle(palette.ink.opacity(0.9))
-        .frame(maxWidth: 180, alignment: .leading)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    @ViewBuilder
-    private var noteCount: some View {
-        if let stack = model.targetStack {
-            Text("\(stack.noteCount)")
-                .font(.mono(11))
-                .foregroundStyle(palette.ink.opacity(0.5))
-                .padding(.leading, -4)
-        }
-    }
-
-    private func tetherText(_ tether: String) -> some View {
-        Text(tether)
-            .font(.mono(11))
-            .foregroundStyle(palette.ink.opacity(0.55))
-            .lineLimit(1)
-            .fixedSize()
-            .transition(.opacity.combined(with: .offset(x: 6)))
     }
 
     private var orb: some View {
@@ -229,21 +195,6 @@ struct VoiceCaptureView: View {
                 .truncationMode(.tail)
                 .transition(.opacity.combined(with: .offset(x: -6)))
         }
-    }
-
-    private var divider: some View {
-        Rectangle()
-            .fill(palette.ink.opacity(0.12))
-            .frame(width: 1, height: 12)
-            .transition(.opacity)
-    }
-
-    private var rim: LinearGradient {
-        LinearGradient(
-            colors: [palette.ink.opacity(0.14), palette.ink.opacity(0.03)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 
     // MARK: - Copy

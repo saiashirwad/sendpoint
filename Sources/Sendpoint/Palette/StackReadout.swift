@@ -15,12 +15,11 @@ final class StackReadoutModel {
 
 struct StackReadoutView: View {
     let model: StackReadoutModel
-    @Environment(\.colorScheme) private var scheme
 
     static let size = CGSize(width: 260, height: 96)
 
     var body: some View {
-        let palette = OverlayPalette.against(scheme)
+        let palette = OverlayPalette.dark
         let facts = StackUIFacts(store: model.store)
         HStack(spacing: 18) {
             if let stack = facts.stack(number: model.number) {
@@ -36,7 +35,7 @@ struct StackReadoutView: View {
         .frame(width: Self.size.width - 32, height: Self.size.height - 40)
         .foregroundStyle(palette.ink)
         .background(palette.paper, in: RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
-        .environment(\.colorScheme, palette.contentScheme)
+        .environment(\.colorScheme, .dark)
         .frame(width: Self.size.width, height: Self.size.height)
     }
 }

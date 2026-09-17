@@ -4,7 +4,6 @@ import SwiftUI
 struct CaptureDestinationButton: View {
     @Bindable var model: CaptureController
     let mode: CaptureMode
-    var showsIcon = false
     var fontSize: CGFloat = 12
     var arrowEdge: Edge = .bottom
     var rowHeight: CGFloat = VoiceCaptureLayout.pillHeight
@@ -57,11 +56,6 @@ struct CaptureDestinationButton: View {
             model.send(.toggleDestinations(context))
         } label: {
             HStack(spacing: 6) {
-                if showsIcon {
-                    Image(systemName: "square.stack.3d.up")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                }
                 Text(name)
                     .lineLimit(1)
                     .truncationMode(.tail)

@@ -15,9 +15,8 @@ struct SettingsPreviewPane: View {
                         set: { captureController.setTranscriptionPreview($0) }
                     )
                 )
-            }
-            if voiceSettings.transcriptionPreview {
-                SettingsSection("Look") {
+                if voiceSettings.transcriptionPreview {
+                    SettingsDivider()
                     SettingsStepperRow(
                         "Lines",
                         valueText: "\(voiceSettings.transcriptionPreviewLines)",
@@ -43,20 +42,21 @@ struct SettingsPreviewPane: View {
                             captureController.stepTranscriptionPreviewFontSize(bySteps: 1)
                         }
                     )
-                    SettingsDivider()
-                    SettingsStepperRow(
-                        "Opacity",
-                        valueText: "\(voiceSettings.transcriptionPreviewOpacity)%",
-                        canDecrement: voiceSettings.transcriptionPreviewOpacity > VoiceSettings.previewOpacityMin,
-                        canIncrement: voiceSettings.transcriptionPreviewOpacity < VoiceSettings.previewOpacityMax,
-                        decrement: {
-                            captureController.stepTranscriptionPreviewOpacity(bySteps: -1)
-                        },
-                        increment: {
-                            captureController.stepTranscriptionPreviewOpacity(bySteps: 1)
-                        }
-                    )
                 }
+            }
+            SettingsSection("Look", footnote: "Sets how see-through the voice card and the text note panel are.") {
+                SettingsStepperRow(
+                    "Opacity",
+                    valueText: "\(voiceSettings.transcriptionPreviewOpacity)%",
+                    canDecrement: voiceSettings.transcriptionPreviewOpacity > VoiceSettings.previewOpacityMin,
+                    canIncrement: voiceSettings.transcriptionPreviewOpacity < VoiceSettings.previewOpacityMax,
+                    decrement: {
+                        captureController.stepTranscriptionPreviewOpacity(bySteps: -1)
+                    },
+                    increment: {
+                        captureController.stepTranscriptionPreviewOpacity(bySteps: 1)
+                    }
+                )
             }
         }
     }

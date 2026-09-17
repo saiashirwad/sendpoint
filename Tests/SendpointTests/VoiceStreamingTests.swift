@@ -18,7 +18,6 @@ final class VoiceStreamingTests: XCTestCase {
                 prepare: { self.events.append("prepare") },
                 show: { self.events.append("show \($0)") },
                 focus: { self.events.append("focus") },
-                stopEscapeHandling: { self.events.append("stopEscape") },
                 close: { self.events.append("close") },
                 discard: { self.events.append("discard") }
             )

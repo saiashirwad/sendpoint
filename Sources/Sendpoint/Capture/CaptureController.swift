@@ -39,7 +39,6 @@ struct CaptureSurfaces {
     var prepare: () -> Void
     var show: (CaptureSurface) -> Void
     var focus: () -> Void
-    var stopEscapeHandling: () -> Void
     var close: () -> Void
     var discard: () -> Void
 
@@ -48,7 +47,6 @@ struct CaptureSurfaces {
             prepare: { windows.prepareSurfaces() },
             show: { windows.show($0) },
             focus: { windows.focus() },
-            stopEscapeHandling: { windows.stopEscapeHandling() },
             close: { windows.close() },
             discard: { windows.discardSurfaces() }
         )
@@ -245,7 +243,6 @@ final class CaptureController {
                 return .recordingStarted(context)
             }
         case let .transcribe(context):
-            surfaces.stopEscapeHandling()
             launch(.transcription, context: context) { [recorder] in
                 .transcript(context, try await recorder.stopAndTranscribe())
             }

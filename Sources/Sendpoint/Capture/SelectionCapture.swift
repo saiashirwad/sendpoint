@@ -38,7 +38,7 @@ struct SelectionCapture {
         case patient
         case brief
 
-        var waitsForModifierRelease: Bool { self == .patient }
+        var modifierReleaseTimeout: TimeInterval? { self == .patient ? 0.7 : nil }
         var clipboardTimeout: TimeInterval { self == .patient ? 0.3 : 0.15 }
     }
 
@@ -155,8 +155,9 @@ struct SelectionCapture {
         let changeCountBeforeCopy = pasteboard.changeCount
 
         if fallback == .patient { editorMayOpen() }
-        if fallback.waitsForModifierRelease { try await waitForModifierRelease() }
+        try await waitForModifierRelease(timeout: fallback.modifierReleaseTimeout)
         try Task.checkCancellation()
+        Diag.log("selection: posting copy keystroke")
         postCommandKey(
             CGKeyCode(kVK_ANSI_C),
             processIdentifier: processIdentifier > 0 ? processIdentifier : nil
@@ -184,16 +185,16 @@ struct SelectionCapture {
     private static func paste(into processIdentifier: pid_t, expectedRevision: Int,
                               pasteboard: NSPasteboard) async throws -> Bool {
         guard processIdentifier > 0 else { return false }
-        try await waitForModifierRelease()
+        try await waitForModifierRelease(timeout: 0.7)
         try Task.checkCancellation()
         guard pasteboard.changeCount == expectedRevision else { return false }
         postCommandKey(CGKeyCode(kVK_ANSI_V), processIdentifier: processIdentifier)
         return true
     }
 
-    private static func waitForModifierRelease(timeout: TimeInterval = 0.7) async throws {
+    private static func waitForModifierRelease(timeout: TimeInterval?) async throws {
         let watched: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = timeout.map { Date().addingTimeInterval($0) } ?? .distantFuture
         while Date() < deadline {
             if NSEvent.modifierFlags.intersection(watched).isEmpty { return }
             try await Task.sleep(for: .milliseconds(20))
