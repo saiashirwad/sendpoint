@@ -205,7 +205,6 @@ final class TemplateSettingsTests: XCTestCase {
         case invalidData
     }
 
-    /// Editor flows below edit Coherent; a fresh store opens on Plain.
     private func makeSettingsOnCoherent(_ defaults: UserDefaults) throws -> TemplateSettings {
         let settings = TemplateSettings(defaults: defaults)
         try settings.selectTemplate(id: Template.coherent.id)

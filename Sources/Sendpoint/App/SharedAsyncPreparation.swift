@@ -1,9 +1,5 @@
 import Foundation
 
-/// Shares one asynchronous preparation operation across all concurrent callers.
-/// A failed operation is cleared so a later call can retry. The shared task
-/// intentionally survives one caller's cancellation so later capture and
-/// Settings callers can use the completed preparation.
 actor SharedAsyncPreparation<Value: Sendable> {
     private var preparedValue: Value?
     private var inFlight: (id: UUID, task: Task<Value, Error>)?

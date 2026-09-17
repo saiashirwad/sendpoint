@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
@@ -83,53 +84,30 @@ final class HotKeyRegistrarTests: XCTestCase {
         XCTAssertEqual(attempts, expected.count)
     }
 
-    func testReverseSwitchIsClaimedOnlyAfterThePrimarySwitchSucceeds() throws {
+    func testEveryStackShortcutIsRegisteredAndReportsItsNumber() throws {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = ShortcutSettings(defaults: defaults)
-
-        var calls: [(keyCode: UInt32, modifiers: UInt32)] = []
-        let succeeding = HotKeyCenter(
-            registerEvent: { keyCode, carbonModifiers, _ in
-                calls.append((keyCode, carbonModifiers))
+        var ids: [UInt32: UInt32] = [:]
+        let center = HotKeyCenter(
+            registerEvent: { keyCode, _, hotKeyID in
+                ids[keyCode] = hotKeyID.id
                 return (noErr, EventHotKeyRef(bitPattern: 1))
             },
             unregisterEvent: { _ in }
         )
-        let registrar = HotKeyRegistrar(settings: settings, center: succeeding)
+        let registrar = HotKeyRegistrar(settings: settings, center: center)
+        var selected: [Int] = []
+        var actions = makeActions()
+        actions.selectStack = { selected.append($0) }
 
-        let issues = registrar.register(makeActions())
+        XCTAssertTrue(registrar.register(actions).isEmpty)
 
-        XCTAssertTrue(issues.isEmpty)
-        let reverse = try XCTUnwrap(settings.switchStackReverseCombo)
-        let shiftCalls = calls.filter { $0.modifiers & UInt32(shiftKey) != 0 }
-        XCTAssertEqual(shiftCalls.count, 1)
-        XCTAssertEqual(shiftCalls.first?.keyCode, UInt32(reverse.keyCode))
-        XCTAssertEqual(shiftCalls.first?.modifiers, reverse.carbonModifiers)
-        let primaryIndex = try XCTUnwrap(calls.firstIndex {
-            $0.keyCode == UInt32(settings.switchStackCombo.keyCode)
-                && $0.modifiers == settings.switchStackCombo.carbonModifiers
-        })
-        let reverseIndex = try XCTUnwrap(calls.firstIndex { $0.modifiers & UInt32(shiftKey) != 0 })
-        XCTAssertGreaterThan(reverseIndex, primaryIndex)
-
-        var failingModifiers: [UInt32] = []
-        let failing = HotKeyCenter(
-            registerEvent: { _, carbonModifiers, _ in
-                failingModifiers.append(carbonModifiers)
-                guard carbonModifiers & UInt32(shiftKey) == 0 else {
-                    return (noErr, EventHotKeyRef(bitPattern: 1))
-                }
-                return (OSStatus(-1), nil)
-            },
-            unregisterEvent: { _ in }
-        )
-        let secondRegistrar = HotKeyRegistrar(settings: settings, center: failing)
-
-        _ = secondRegistrar.register(makeActions())
-
-        XCTAssertTrue(failingModifiers.contains { $0 == settings.switchStackCombo.carbonModifiers })
-        XCTAssertEqual(failingModifiers.filter { $0 & UInt32(shiftKey) != 0 }.count, 0)
+        for number in 1...StackDocument.stackCount {
+            let combo = try XCTUnwrap(settings.selectStackCombo(number))
+            center.fire(id: try XCTUnwrap(ids[UInt32(combo.keyCode)]), released: false)
+        }
+        XCTAssertEqual(selected, Array(1...StackDocument.stackCount))
     }
 
     func testUnregisterAllReleasesEveryRegisteredName() {
@@ -148,13 +126,7 @@ final class HotKeyRegistrarTests: XCTestCase {
         let registrar = HotKeyRegistrar(settings: settings, center: center)
         registrar.register(makeActions())
 
-        // Temporary cycle keys owned by the switcher and the capture panel.
         center.registerRaw(name: .voiceEscape, keyCode: UInt16(kVK_Escape), carbonModifiers: 0, pressed: {})
-        center.registerRaw(name: .switchEscape, keyCode: UInt16(kVK_Escape), carbonModifiers: 0, pressed: {})
-        center.registerRaw(name: .switchPinUp, keyCode: UInt16(kVK_UpArrow),
-                           carbonModifiers: UInt32(optionKey), pressed: {})
-        center.registerRaw(name: .switchPinDown, keyCode: UInt16(kVK_DownArrow),
-                           carbonModifiers: UInt32(optionKey), pressed: {})
 
         registrar.unregisterAll()
 
@@ -181,10 +153,10 @@ final class HotKeyRegistrarTests: XCTestCase {
             modifiers: [.control, .option]
         )
 
-        try registrar.rebind(replacement, for: .nextStack)
+        try registrar.rebind(replacement, for: .selectStack(2))
 
-        XCTAssertEqual(settings.nextStackCombo, replacement)
-        XCTAssertEqual(ShortcutSettings(defaults: defaults).nextStackCombo, replacement)
+        XCTAssertEqual(settings.selectStackCombo(2), replacement)
+        XCTAssertEqual(ShortcutSettings(defaults: defaults).selectStackCombo(2), replacement)
         XCTAssertTrue(attempts.contains {
             $0.0 == UInt32(replacement.keyCode) && $0.1 == replacement.carbonModifiers
         })
@@ -199,9 +171,7 @@ final class HotKeyRegistrarTests: XCTestCase {
             dictateReleased: {},
             copy: {},
             showStack: {},
-            switchStack: { _ in },
-            nextStack: {},
-            previousStack: {},
+            selectStack: { _ in },
             clear: {}
         )
     }

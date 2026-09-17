@@ -7,92 +7,37 @@ final class StackDocumentMutationTests: XCTestCase {
     private let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
 
-    func testCreateRenameSwitchAndDeletePreserveDocumentRules() {
-        let initial = document()
-        let second = Stack(id: secondID, name: "  Second  ", createdAt: now)
-        let created = applied(.createStack(second), to: initial)
-        XCTAssertEqual(created.stacks.map(\.name), ["First", "Second"])
-        XCTAssertEqual(created.currentStackID, secondID)
-
-        let renamed = applied(
-            .renameStack(stackID: firstID, name: "  Renamed  "),
-            to: created
-        )
-        XCTAssertEqual(renamed.stacks[0].name, "Renamed")
-        let switched = applied(.switchStack(stackID: firstID), to: renamed)
-        XCTAssertEqual(switched.currentStackID, firstID)
-
-        let deleted = applied(.deleteStack(stackID: firstID), to: switched)
-        XCTAssertEqual(deleted.stacks.map(\.id), [secondID])
-        XCTAssertEqual(deleted.currentStackID, secondID)
-        XCTAssertEqual(
-            StackDocumentMutations.applying(.deleteStack(stackID: secondID), to: deleted),
-            .rejected("The last stack cannot be deleted.")
-        )
-    }
-
-    func testDeletingCurrentSelectsFollowingStackThenPreviousStack() {
-        let thirdID = UUID(uuidString: "00000000-0000-0000-0000-000000000030")!
+    func testSwitchMovesTheCurrentStackAndRejectsUnknownStacks() {
         let initial = StackDocument(
-            stacks: [
-                Stack(id: firstID, name: "First", createdAt: now),
-                Stack(id: secondID, name: "Second", createdAt: now),
-                Stack(id: thirdID, name: "Third", createdAt: now),
-            ],
-            currentStackID: secondID
+            stacks: filled([Stack(id: firstID), Stack(id: secondID)]),
+            currentStackID: firstID
         )
 
-        let deletedMiddle = applied(.deleteStack(stackID: secondID), to: initial)
-        XCTAssertEqual(deletedMiddle.stacks.map(\.id), [firstID, thirdID])
-        XCTAssertEqual(deletedMiddle.currentStackID, thirdID)
-
-        let deletedLast = applied(.deleteStack(stackID: thirdID), to: deletedMiddle)
-        XCTAssertEqual(deletedLast.stacks.map(\.id), [firstID])
-        XCTAssertEqual(deletedLast.currentStackID, firstID)
-    }
-
-    func testDeletingStackThatOriginatedLastClearDiscardsUndoBatch() {
-        let cleared = makeNote(id: UUID(), body: "cleared")
-        let initial = StackDocument(
-            stacks: [
-                Stack(id: firstID, name: "First", createdAt: now),
-                Stack(id: secondID, name: "Second", createdAt: now),
-            ],
-            currentStackID: secondID,
-            lastCleared: ClearedBatch(stackID: firstID, notes: [cleared])
-        )
-
-        let deleted = applied(.deleteStack(stackID: firstID), to: initial)
-
-        XCTAssertNil(deleted.lastCleared)
-        XCTAssertEqual(deleted.currentStackID, secondID)
-    }
-
-    func testNamesAreCaseDiacriticAndWidthInsensitive() {
-        let initial = document(name: "Résumé")
-        let conflictingNames = ["résumé", "RESUME", "ＲＥＳＵＭＥ"]
-
-        for name in conflictingNames {
-            XCTAssertEqual(
-                StackDocumentMutations.applying(
-                    .createStack(Stack(id: UUID(), name: name, createdAt: now)),
-                    to: initial
-                ),
-                .rejected("Stack names must be unique.")
-            )
-        }
-
-        let second = applied(
-            .createStack(Stack(id: secondID, name: "Other", createdAt: now)),
-            to: initial
-        )
+        let switched = applied(.switchStack(stackID: secondID), to: initial)
+        XCTAssertEqual(switched.currentStackID, secondID)
+        XCTAssertEqual(switched.stacks, initial.stacks)
+        XCTAssertEqual(StackDocumentMutations.applying(.switchStack(stackID: secondID), to: switched), .noOp)
         XCTAssertEqual(
-            StackDocumentMutations.applying(
-                .renameStack(stackID: secondID, name: " ＲＥＳＵＭＥ "),
-                to: second
-            ),
-            .rejected("Stack names must be unique.")
+            StackDocumentMutations.applying(.switchStack(stackID: UUID()), to: switched),
+            .rejected("The stack no longer exists.")
         )
+    }
+
+    func testStacksAreNumberedByPlace() {
+        let stacks = StackDocument.empty().stacks
+        XCTAssertEqual(stacks.count, StackDocument.stackCount)
+        XCTAssertEqual(stacks.map { stacks.number(of: $0.id) }, [1, 2, 3, 4, 5])
+        XCTAssertEqual(stacks.stack(number: 3), stacks[2])
+        XCTAssertNil(stacks.stack(number: 0))
+        XCTAssertNil(stacks.stack(number: 6))
+        XCTAssertNil(stacks.number(of: UUID()))
+    }
+
+    func testStartedAtIsTheEarliestNote() {
+        XCTAssertNil(Stack().startedAt)
+        let late = Note(subject: .standalone, body: "late", createdAt: now.addingTimeInterval(60))
+        let early = Note(subject: .standalone, body: "early", createdAt: now)
+        XCTAssertEqual(Stack(notes: [late, early]).startedAt, now)
     }
 
     func testNoteAddEditMoveAndRemoveUseStableIDs() {
@@ -128,13 +73,8 @@ final class StackDocumentMutationTests: XCTestCase {
         let one = makeNote(id: UUID(), body: "one")
         let two = makeNote(id: UUID(), body: "two")
         let three = makeNote(id: UUID(), body: "three")
-        let stack = Stack(
-            id: firstID,
-            name: "First",
-            notes: [one, two, three],
-            createdAt: now
-        )
-        let initial = StackDocument(stacks: [stack], currentStackID: firstID)
+        let stack = Stack(id: firstID, notes: [one, two, three])
+        let initial = StackDocument(stacks: filled([stack]), currentStackID: firstID)
 
         let movedDown = applied(
             .moveNote(stackID: firstID, noteID: one.id, destinationIndex: 2),
@@ -162,9 +102,9 @@ final class StackDocumentMutationTests: XCTestCase {
 
     func testClearCanBeUndoneAfterSwitchingStacks() {
         let old = makeNote(id: UUID(), body: "old")
-        let first = Stack(id: firstID, name: "First", notes: [old], createdAt: now)
-        let second = Stack(id: secondID, name: "Second", createdAt: now)
-        let initial = StackDocument(stacks: [first, second], currentStackID: firstID)
+        let first = Stack(id: firstID, notes: [old])
+        let second = Stack(id: secondID)
+        let initial = StackDocument(stacks: filled([first, second]), currentStackID: firstID)
 
         let cleared = applied(.clearStack(stackID: firstID), to: initial)
         XCTAssertTrue(cleared.stacks[0].notes.isEmpty)
@@ -179,8 +119,8 @@ final class StackDocumentMutationTests: XCTestCase {
     func testUndoPlacesClearedBatchBeforeLaterEntriesAndReplacesDuplicateIDs() {
         let old = makeNote(id: UUID(), body: "old")
         let later = makeNote(id: UUID(), body: "later")
-        let first = Stack(id: firstID, name: "First", notes: [old], createdAt: now)
-        let initial = StackDocument(stacks: [first], currentStackID: firstID)
+        let first = Stack(id: firstID, notes: [old])
+        let initial = StackDocument(stacks: filled([first]), currentStackID: firstID)
         let cleared = applied(.clearStack(stackID: firstID), to: initial)
         let withLater = applied(.addNote(stackID: firstID, note: later), to: cleared)
         var replacement = old
@@ -197,7 +137,7 @@ final class StackDocumentMutationTests: XCTestCase {
     func testClearExportedNotesRejectsSnapshotsOlderThanAnyNoteField() {
         let note = makeNote(id: UUID(), body: "original")
         let initial = StackDocument(
-            stacks: [Stack(id: firstID, name: "First", notes: [note], createdAt: now)],
+            stacks: filled([Stack(id: firstID, notes: [note])]),
             currentStackID: firstID
         )
 
@@ -237,10 +177,7 @@ final class StackDocumentMutationTests: XCTestCase {
     func testValidationRejectsDuplicateStackNoteAndClearedBatchIDs() {
         let one = makeNote(id: UUID(), body: "one")
         let duplicateStackIDs = StackDocument(
-            stacks: [
-                Stack(id: firstID, name: "First", createdAt: now),
-                Stack(id: firstID, name: "Second", createdAt: now),
-            ],
+            stacks: filled([Stack(id: firstID), Stack(id: firstID)]),
             currentStackID: firstID
         )
         XCTAssertThrowsError(try StackDocumentMutations.validate(duplicateStackIDs)) {
@@ -251,9 +188,7 @@ final class StackDocumentMutationTests: XCTestCase {
         }
 
         let duplicateNoteIDs = StackDocument(
-            stacks: [
-                Stack(id: firstID, name: "First", notes: [one, one], createdAt: now)
-            ],
+            stacks: filled([Stack(id: firstID, notes: [one, one])]),
             currentStackID: firstID
         )
         XCTAssertThrowsError(try StackDocumentMutations.validate(duplicateNoteIDs)) {
@@ -264,7 +199,7 @@ final class StackDocumentMutationTests: XCTestCase {
         }
 
         let duplicateClearedIDs = StackDocument(
-            stacks: [Stack(id: firstID, name: "First", createdAt: now)],
+            stacks: filled([Stack(id: firstID)]),
             currentStackID: firstID,
             lastCleared: ClearedBatch(stackID: firstID, notes: [one, one])
         )
@@ -276,28 +211,26 @@ final class StackDocumentMutationTests: XCTestCase {
         }
     }
 
-    func testValidationRejectsInvalidCurrentStackAndDuplicateFoldedNames() {
+    func testValidationRejectsInvalidCurrentStackAndWrongStackCounts() {
         XCTAssertThrowsError(
             try StackDocumentMutations.validate(
-                StackDocument(stacks: [Stack(name: "First")], currentStackID: UUID())
+                StackDocument(stacks: filled([]), currentStackID: UUID())
             )
         )
-        XCTAssertThrowsError(
-            try StackDocumentMutations.validate(
-                StackDocument(
-                    stacks: [
-                        Stack(id: firstID, name: "Café"),
-                        Stack(id: secondID, name: "ＣＡＦＥ"),
-                    ],
-                    currentStackID: firstID
-                )
+        for count in [0, 1, StackDocument.stackCount - 1, StackDocument.stackCount + 1] {
+            let stacks = (0..<count).map { _ in Stack() }
+            XCTAssertThrowsError(
+                try StackDocumentMutations.validate(
+                    StackDocument(stacks: stacks, currentStackID: stacks.first?.id ?? UUID())
+                ),
+                "\(count) stacks"
             )
-        )
+        }
     }
 
-    private func document(name: String = "First") -> StackDocument {
+    private func document() -> StackDocument {
         StackDocument(
-            stacks: [Stack(id: firstID, name: name, createdAt: now)],
+            stacks: filled([Stack(id: firstID)]),
             currentStackID: firstID
         )
     }

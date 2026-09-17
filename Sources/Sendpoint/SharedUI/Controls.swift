@@ -2,7 +2,6 @@ import SwiftUI
 
 // MARK: - Lines and small controls
 
-/// One device pixel of rule.
 struct Hairline: View {
     var axis: Axis = .horizontal
     @Environment(\.displayScale) private var scale
@@ -17,7 +16,6 @@ struct Hairline: View {
     }
 }
 
-/// A key drawn as a key: raised, edged, mono.
 struct Keycap: View {
     let text: String
     var size: CGFloat = 11
@@ -49,7 +47,6 @@ struct Keycap: View {
     }
 }
 
-/// A verb, optionally a key. Secondary until the pointer arrives.
 struct QuietButton: View {
     let title: String
     var keys: String? = nil
@@ -82,8 +79,6 @@ struct QuietButton: View {
     }
 }
 
-/// Lays children out left to right, wrapping to a new line when the width
-/// runs out. Chips live in one of these.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
@@ -124,7 +119,6 @@ struct FlowLayout: Layout {
     }
 }
 
-/// The one filled button: ink on paper, the same shape as a selected chip.
 struct InkButton: View {
     let title: String
     var keys: String? = nil
@@ -158,7 +152,6 @@ struct InkButton: View {
     }
 }
 
-/// A small outlined verb, for a row's trailing action.
 struct PillButton: View {
     let title: String
     let action: () -> Void
@@ -185,36 +178,8 @@ struct PillButton: View {
     }
 }
 
-/// Footer-weight icon: secondary until the pointer is on it.
-struct QuietIconButton: View {
-    let systemName: String
-    var hoverColor: Color = .primary
-    let action: () -> Void
-    @State private var hovering = false
-
-    init(_ systemName: String, hoverColor: Color = .primary, action: @escaping () -> Void) {
-        self.systemName = systemName
-        self.hoverColor = hoverColor
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(hovering ? hoverColor : Color.secondary)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// One option in a row of chips. The chosen one is set in ink.
 struct Chip: View {
     let title: String
-    var count: Int? = nil
     let isSelected: Bool
     var isDirty = false
     let action: () -> Void
@@ -227,11 +192,6 @@ struct Chip: View {
                 Text(title)
                     .font(.ui(13, weight: .medium))
                     .lineLimit(1)
-                if let count {
-                    Text("\(count)")
-                        .font(.mono(11))
-                        .opacity(0.55)
-                }
                 if isDirty {
                     Circle()
                         .fill(Ink.accent(scheme))
@@ -250,7 +210,6 @@ struct Chip: View {
     }
 }
 
-/// The "+" at the end of a chip row.
 struct AddChip: View {
     let label: String
     let action: () -> Void
@@ -271,7 +230,6 @@ struct AddChip: View {
     }
 }
 
-/// Chips for a closed set of values.
 struct ChoiceChips<Value: Hashable>: View {
     let values: [Value]
     @Binding var selection: Value
@@ -288,7 +246,6 @@ struct ChoiceChips<Value: Hashable>: View {
     }
 }
 
-/// An ink switch: solid when on, a hairline track when off.
 struct InkToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button {
@@ -325,8 +282,6 @@ private struct SwitchTrack: View {
     }
 }
 
-/// A pill that opens a menu of choices, for a set too long or too
-/// changeable for chips.
 struct ChoiceMenu<ID: Hashable, Choices: View>: View {
     let title: String
     let width: CGFloat
@@ -363,8 +318,8 @@ struct ChoiceMenu<ID: Hashable, Choices: View>: View {
 
 #Preview("Chip") {
     HStack(spacing: 8) {
-        Chip(title: "Reading", count: 3, isSelected: true) {}
-        Chip(title: "Writing", count: 12, isSelected: false) {}
+        Chip(title: "Reading", isSelected: true) {}
+        Chip(title: "Writing", isSelected: false) {}
         Chip(title: "Draft", isSelected: false, isDirty: true) {}
     }
     .padding()

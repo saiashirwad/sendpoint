@@ -1,10 +1,7 @@
 import AppKit
 import SendpointDomain
 
-/// Owns the menu-bar status item: its glyph, its title and flash, and the
-/// status menu rendered from `StatusMenuModel`.
 final class StatusItemController {
-    /// The action a menu item performs, boxed for `representedObject`.
     private final class MenuActionBox {
         let action: StatusMenuAction
 
@@ -16,7 +13,6 @@ final class StatusItemController {
     private let statusItem: NSStatusItem
     private var baseTitle = ""
     private var baseTooltip = ""
-    /// Non-nil exactly while a flash is showing.
     private var flashTask: Task<Void, Never>?
     private var renderedItems: [StatusMenuItem]?
 
@@ -38,8 +34,6 @@ final class StatusItemController {
         applyBaseTitle()
     }
 
-    /// Shows `text` in place of the count for 1.4 seconds. A newer flash
-    /// cancels the older one, whose restore then never runs.
     func flash(_ text: String) {
         statusItem.button?.title = " \(text)"
         flashTask?.cancel()
@@ -69,8 +63,6 @@ final class StatusItemController {
             shortcuts: shortcuts,
             templates: templates
         )
-        // Refresh requests arrive on every keystroke and store change; only
-        // rebuild the NSMenu when something it shows has changed.
         guard items != renderedItems else { return }
         renderedItems = items
         let menu = NSMenu()
@@ -87,8 +79,6 @@ final class StatusItemController {
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
-    /// The count and tooltip are held back while a flash is showing, exactly
-    /// as the delegate used to skip its title update.
     private func applyBaseTitle() {
         guard flashTask == nil else { return }
         statusItem.button?.title = baseTitle

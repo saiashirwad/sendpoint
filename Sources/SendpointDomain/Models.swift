@@ -26,20 +26,15 @@ public struct Note: Codable, Hashable, Sendable, Identifiable {
 
 public struct Stack: Codable, Hashable, Sendable, Identifiable {
     public let id: UUID
-    public var name: String
     public var notes: [Note]
-    public let createdAt: Date
 
-    public init(
-        id: UUID = UUID(),
-        name: String,
-        notes: [Note] = [],
-        createdAt: Date = Date()
-    ) {
+    public init(id: UUID = UUID(), notes: [Note] = []) {
         self.id = id
-        self.name = name
         self.notes = notes
-        self.createdAt = createdAt
+    }
+
+    public var startedAt: Date? {
+        notes.map(\.createdAt).min()
     }
 }
 
@@ -54,55 +49,42 @@ public struct ClearedBatch: Codable, Hashable, Sendable {
 }
 
 public struct StackDocument: Codable, Hashable, Sendable {
-    public static let currentVersion = 3
+    public static let currentVersion = 4
+    public static let stackCount = 5
 
     public var version: Int
     public var stacks: [Stack]
     public var currentStackID: UUID
     public var lastCleared: ClearedBatch?
-    /// Stacks in the order they were last made current or written to,
-    /// most recent first.
-    public var recentStackIDs: [UUID]
 
     public init(
         version: Int = StackDocument.currentVersion,
         stacks: [Stack],
         currentStackID: UUID,
-        lastCleared: ClearedBatch? = nil,
-        recentStackIDs: [UUID] = []
+        lastCleared: ClearedBatch? = nil
     ) {
         self.version = version
         self.stacks = stacks
         self.currentStackID = currentStackID
         self.lastCleared = lastCleared
-        self.recentStackIDs = recentStackIDs
     }
 
-    /// Every stack, the current one first, then the rest by how recently
-    /// they were used, then any never-used stacks in list order. This is the
-    /// order a ⌘Tab-style switcher cycles through: one step always reaches
-    /// the stack used just before this one.
-    public var stacksByRecency: [Stack] {
-        var seen: Set<UUID> = [currentStackID]
-        var ordered: [Stack] = stacks.filter { $0.id == currentStackID }
-        for id in recentStackIDs where !seen.contains(id) {
-            guard let stack = stacks.stack(id: id) else { continue }
-            seen.insert(id)
-            ordered.append(stack)
-        }
-        ordered += stacks.filter { !seen.contains($0.id) }
-        return ordered
-    }
-
-    /// Moves a stack to the front of the recency list.
-    mutating func touchStack(_ id: UUID) {
-        recentStackIDs.removeAll { $0 == id }
-        recentStackIDs.insert(id, at: 0)
+    public static func empty() -> StackDocument {
+        let stacks = (0..<stackCount).map { _ in Stack() }
+        return StackDocument(stacks: stacks, currentStackID: stacks[0].id)
     }
 }
 
 public extension Array where Element == Stack {
     func stack(id: UUID) -> Stack? {
         first { $0.id == id }
+    }
+
+    func number(of id: UUID) -> Int? {
+        firstIndex { $0.id == id }.map { $0 + 1 }
+    }
+
+    func stack(number: Int) -> Stack? {
+        indices.contains(number - 1) ? self[number - 1] : nil
     }
 }

@@ -10,14 +10,9 @@ final class StorePersistenceTests: XCTestCase {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let persistence = StorePersistence.live(directory: directory)
-        let first = document(name: "Round trip").stacks[0]
-        let second = Stack(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!,
-            name: "Second",
-            createdAt: now
-        )
+        let second = Stack(id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!)
         let expected = StackDocument(
-            stacks: [first, second],
+            stacks: filled([Stack(id: stackID), second]),
             currentStackID: second.id
         )
 
@@ -49,7 +44,7 @@ final class StorePersistenceTests: XCTestCase {
     }
 
     func testUnsupportedVersionsAreRejectedWithoutQuarantine() async throws {
-        for version in [StackDocument.currentVersion - 1, StackDocument.currentVersion + 1] {
+        for version in [StackDocumentMigration.legacyVersion - 1, StackDocument.currentVersion + 1] {
             let directory = temporaryDirectory()
             defer { try? FileManager.default.removeItem(at: directory) }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -114,8 +109,6 @@ final class StorePersistenceTests: XCTestCase {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // A directory where store.json belongs makes Data(contentsOf:) throw
-        // a raw I/O error: the deterministic stand-in for unreadable storage.
         let file = directory.appendingPathComponent(StorePersistence.fileName)
         try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
         let persistence = StorePersistence.live(directory: directory)
@@ -222,8 +215,6 @@ final class StorePersistenceTests: XCTestCase {
 
         var isDirectory: ObjCBool = false
         XCTAssertTrue(FileManager.default.fileExists(atPath: file.path, isDirectory: &isDirectory))
-        // Still a directory: init threw before committing a fresh Default,
-        // which would have failed (or replaced the entry with a file).
         XCTAssertTrue(isDirectory.boolValue)
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertFalse(names.contains(where: { $0.hasSuffix(".corrupt") }))
@@ -247,7 +238,7 @@ final class StorePersistenceTests: XCTestCase {
         )
 
         XCTAssertTrue(quarantinedStore.didQuarantineCorruptFile)
-        XCTAssertEqual(quarantinedStore.currentStack.name, "Default")
+        XCTAssertEqual(quarantinedStore.stacks.count, StackDocument.stackCount)
         XCTAssertTrue(
             FileManager.default.fileExists(
                 atPath: corruptDirectory.appendingPathComponent(StorePersistence.fileName).path
@@ -261,12 +252,12 @@ final class StorePersistenceTests: XCTestCase {
         )
 
         XCTAssertFalse(freshStore.didQuarantineCorruptFile)
-        XCTAssertEqual(freshStore.currentStack.name, "Default")
+        XCTAssertEqual(freshStore.stacks.count, StackDocument.stackCount)
     }
 
-    private func document(name: String = "First") -> StackDocument {
+    private func document() -> StackDocument {
         StackDocument(
-            stacks: [Stack(id: stackID, name: name, createdAt: now)],
+            stacks: filled([Stack(id: stackID)]),
             currentStackID: stackID
         )
     }

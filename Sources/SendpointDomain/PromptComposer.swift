@@ -28,8 +28,8 @@ public enum PromptComposer {
             blocks.append(template.preamble)
         }
 
-        if template.includeHeading {
-            blocks.append("# Reading notes — \(stack.createdAt.formatted(longDateStyle))")
+        if template.includeHeading, let startedAt = stack.startedAt {
+            blocks.append("# Reading notes — \(startedAt.formatted(longDateStyle))")
         }
 
         for (offset, note) in stack.notes.enumerated() {

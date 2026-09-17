@@ -2,8 +2,6 @@ import ApplicationServices
 import Foundation
 import Observation
 
-/// Stable values shown by setup and Settings. Accessibility and microphone
-/// status are instant system reads, so neither has an "unknown" case.
 enum AccessibilityPermissionState: Equatable, Sendable {
     case notGranted
     case granted
@@ -24,7 +22,6 @@ enum LocalVoiceModelState: Equatable, Sendable {
 }
 
 enum VoiceModelDownloadFailure: Equatable, Sendable {
-    /// The Mac had no usable network path to the model host.
     case offline
     case other
 
@@ -48,9 +45,6 @@ enum PermissionAction: Equatable, Sendable {
     case downloadVoiceModel
 }
 
-/// A small closure boundary around macOS permission and model APIs.
-/// Tests replace it with deterministic closures and never touch TCC.
-/// Only the microphone prompt and the model download take time.
 struct PermissionServices: Sendable {
     var accessibilityStatus: @MainActor @Sendable () -> AccessibilityPermissionState
     var requestAccessibility: @MainActor @Sendable () -> Bool
@@ -96,7 +90,6 @@ struct PermissionServices: Sendable {
     }
 }
 
-/// App-owned permission readiness. One instance lives as long as AppDelegate.
 @Observable
 final class PermissionState {
     private let services: PermissionServices
@@ -168,9 +161,6 @@ final class PermissionState {
         }
     }
 
-    /// Re-read everything the system can answer instantly. A microphone
-    /// prompt that is still on screen keeps its pre-prompt value until the
-    /// user answers it.
     func refresh() {
         guard !isTornDown else { return }
         refreshAccessibility()
@@ -181,15 +171,12 @@ final class PermissionState {
         refreshVoiceModel()
     }
 
-    /// Refresh only Accessibility. Polls that find no change leave the
-    /// property alone so observers are not woken.
     func refreshAccessibility() {
         guard !isTornDown else { return }
         let status = services.accessibilityStatus()
         if accessibility != status { accessibility = status }
     }
 
-    /// Re-read the model files without hiding a download or its last failure.
     func refreshVoiceModel() {
         guard !isTornDown, modelDownloadTask == nil else { return }
         if services.voiceModelFilesExist() {
@@ -201,7 +188,6 @@ final class PermissionState {
         }
     }
 
-    /// Watch the files only while Setup or Settings shows this state.
     func watchVoiceModel(interval: Duration = .seconds(2)) async {
         while !isTornDown, !Task.isCancelled {
             refreshVoiceModel()
@@ -213,14 +199,8 @@ final class PermissionState {
         }
     }
 
-    /// Whether the shared file-poll loop is currently retained.
     var isWatchingVoiceModel: Bool { voiceModelWatchTask != nil }
 
-    /// Starts the file poll on behalf of one presented window. Redundant
-    /// starts only bump the waiter count: a single loop runs no matter how
-    /// many windows are open, so Setup and Settings share it. Each
-    /// controller balances its own starts with stops; the count keeps the
-    /// loop alive until the last window goes away.
     func startWatchingVoiceModel(interval: Duration = .seconds(2)) {
         guard !isTornDown else { return }
         voiceModelWatchers += 1
@@ -230,9 +210,6 @@ final class PermissionState {
         }
     }
 
-    /// Releases one window's wait on the poll; the loop stops when the last
-    /// window goes away. Deliberately narrower than teardown: microphone
-    /// prompts and model downloads are untouched.
     func stopWatchingVoiceModel() {
         guard voiceModelWatchers > 0 else { return }
         voiceModelWatchers -= 1
@@ -247,8 +224,6 @@ final class PermissionState {
         if !hasRequestedAccessibility {
             hasRequestedAccessibility = true
             accessibility = services.requestAccessibility() ? .granted : .notGranted
-            // The system dialog already offers "Open System Settings".
-            // Opening Settings ourselves would stack both on screen.
             return
         }
         services.openAccessibilitySettings()
@@ -286,8 +261,6 @@ final class PermissionState {
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.modelDownloadTask = nil
-                // A capture-time preparation can publish readiness before
-                // this caller fails; the ready state stays.
                 if case .downloading = self.localVoiceModel {
                     self.localVoiceModel = .failed(VoiceModelDownloadFailure(error))
                 }
@@ -310,13 +283,11 @@ final class PermissionState {
         services.openMicrophoneSettings()
     }
 
-    /// Test support. Waits for the microphone prompt and model download.
     func waitForIdle() async {
         await microphoneRequestTask?.value
         await modelDownloadTask?.value
     }
 
-    /// The sole teardown path. Repeated calls do nothing.
     func teardown() {
         guard !isTornDown else { return }
         isTornDown = true

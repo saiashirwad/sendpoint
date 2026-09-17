@@ -12,13 +12,9 @@ final class PaletteKeyTests: XCTestCase {
             keyCode: UInt16(keyCode))!
     }
 
-    func testArrowTabReturnAndEscapeDecoding() {
+    func testArrowReturnAndEscapeDecoding() {
         XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_UpArrow)), .up)
         XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_DownArrow)), .down)
-        XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_LeftArrow)), .left)
-        XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_RightArrow)), .right)
-        XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_Tab)), .tab)
-        XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_Tab, modifiers: .shift)), .backTab)
         XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_Return)), .activate)
         XCTAssertEqual(PaletteKey(event: keyEvent(keyCode: kVK_Escape)), .escape)
         XCTAssertEqual(
@@ -33,8 +29,10 @@ final class PaletteKeyTests: XCTestCase {
                 XCTAssertNil(PaletteKey(event: keyEvent(keyCode: keyCode, modifiers: modifiers)))
             }
         }
-        for keyCode in [kVK_LeftArrow, kVK_RightArrow] {
+        for keyCode in [kVK_LeftArrow, kVK_RightArrow, kVK_Tab] {
+            XCTAssertNil(PaletteKey(event: keyEvent(keyCode: keyCode)))
             XCTAssertNil(PaletteKey(event: keyEvent(keyCode: keyCode, modifiers: .option)))
         }
+        XCTAssertNil(PaletteKey(event: keyEvent(keyCode: kVK_Return, modifiers: .command)))
     }
 }

@@ -54,7 +54,6 @@ final class SharedAsyncPreparationTests: XCTestCase {
             _ = try await preparation.value(prepare: factory)
             XCTFail("The first preparation should fail")
         } catch TestError.failed {
-            // Expected. A later caller must be able to start a new task.
         }
 
         let isPreparedAfterFailure = await preparation.isPrepared()

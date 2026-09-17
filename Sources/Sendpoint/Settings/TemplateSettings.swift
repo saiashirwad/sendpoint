@@ -32,7 +32,6 @@ final class TemplateSettings {
     func updateTemplate(_ template: Template) throws { try change { try $0.update(template) } }
     func addTemplate(_ template: Template) throws { try change { try $0.add(template) } }
 
-    /// Removes a template and returns the ID that is active afterwards.
     func deleteTemplate(id: UUID) throws -> UUID {
         try change { try $0.delete(id: id) }
         return activeTemplateID

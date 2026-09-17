@@ -3,8 +3,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// The capture controller against fakes: no microphone, no Accessibility,
-/// no windows. Tests observe what it asked its boundaries to do.
 @MainActor
 final class CaptureControllerTests: XCTestCase {
     private enum Fail: LocalizedError {
@@ -151,10 +149,7 @@ final class CaptureControllerTests: XCTestCase {
     func testTypedNoteSavesToTheChosenDestinationAndSwitchesTheCurrentStack() async throws {
         let f = try await makeFixture()
         let sourceID = f.store.currentStackID
-        let destination = Stack(name: "Research")
-        f.store.mutate(.createStack(destination))
-        f.store.mutate(.switchStack(stackID: sourceID))
-        await f.store.waitForIdle()
+        let destination = f.store.stacks[1]
         XCTAssertEqual(f.store.currentStackID, sourceID)
 
         f.controller.beginCapture()
@@ -184,10 +179,7 @@ final class CaptureControllerTests: XCTestCase {
         for mode in [CaptureMode.text, .voice] {
             let f = try await makeFixture()
             let sourceID = f.store.currentStackID
-            let destination = Stack(name: "Research")
-            f.store.mutate(.createStack(destination))
-            f.store.mutate(.switchStack(stackID: sourceID))
-            await f.store.waitForIdle()
+            let destination = f.store.stacks[1]
             await f.selectionGate.open(selection)
             await f.recorder.started.open(true)
 
@@ -201,7 +193,6 @@ final class CaptureControllerTests: XCTestCase {
             XCTAssertEqual(f.store.currentStackID, destination.id)
             XCTAssertEqual(StackUIFacts(store: f.store).currentStackID, destination.id)
 
-            // Choosing a stack takes effect even if this note is discarded.
             f.controller.send(mode == .text ? .dismiss : .cancelVoice)
             f.controller.beginCapture()
             XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
@@ -212,13 +203,39 @@ final class CaptureControllerTests: XCTestCase {
         }
     }
 
+    func testACaptureStillChoosingFollowsAStackShortcutButASaveInFlightDoesNot() async throws {
+        let f = try await makeFixture()
+        let sourceID = f.store.currentStackID
+        let destination = f.store.stacks[2]
+        await f.selectionGate.open(selection)
+
+        f.controller.send(.stackSelected(destination.id))
+        XCTAssertNil(f.controller.state.session, "no capture, nothing to follow")
+
+        f.controller.beginCapture()
+        await waitUntil { f.controller.captured == self.selection }
+        let context = try XCTUnwrap(f.controller.state.session?.context)
+        f.controller.send(.toggleDestinations(context))
+        f.controller.send(.stackSelected(destination.id))
+
+        XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
+        XCTAssertEqual(f.controller.state.session?.destinationPicker, .closed)
+        XCTAssertEqual(f.store.currentStackID, sourceID, "the shortcut's owner does the switch, not the capture")
+
+        f.controller.note = "Lands in the third stack"
+        f.controller.send(.save)
+        f.controller.send(.stackSelected(sourceID))
+        await f.store.waitForIdle()
+        await waitUntil { !f.controller.isOpen }
+
+        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.map(\.body), ["Lands in the third stack"])
+        XCTAssertTrue(f.store.stack(id: sourceID)?.notes.isEmpty == true)
+    }
+
     func testRejectedDestinationChoicesDoNotChangeTheCurrentStack() async throws {
         let f = try await makeFixture()
         let sourceID = f.store.currentStackID
-        let destination = Stack(name: "Research")
-        f.store.mutate(.createStack(destination))
-        f.store.mutate(.switchStack(stackID: sourceID))
-        await f.store.waitForIdle()
+        let destination = f.store.stacks[1]
         await f.selectionGate.open(selection)
         f.controller.beginCapture()
         let context = try XCTUnwrap(f.controller.state.session?.context)

@@ -1,23 +1,17 @@
 import Foundation
 
-/// Every supported change to a stack document.
 public enum StackDocumentMutation: Equatable, Sendable {
-    case createStack(Stack)
-    case renameStack(stackID: UUID, name: String)
     case switchStack(stackID: UUID)
-    case deleteStack(stackID: UUID)
     case addNote(stackID: UUID, note: Note)
     case updateNoteBody(stackID: UUID, noteID: UUID, body: String)
     case removeNote(stackID: UUID, noteID: UUID)
 
-    /// Moves an note to a final zero-based index in its stack.
     case moveNote(stackID: UUID, noteID: UUID, destinationIndex: Int)
     case clearStack(stackID: UUID)
     case clearExportedNotes(stackID: UUID, notes: [Note])
     case undoClear
 }
 
-/// The result of applying a pure document mutation.
 public enum StackDocumentMutationResult: Equatable, Sendable {
     case applied(StackDocument)
     case noOp
@@ -34,14 +28,13 @@ public struct StackDocumentValidationError: Error, Equatable, Sendable, CustomSt
     public var description: String { message }
 }
 
-/// Pure stack document rules. This type has no UI or persistence dependency.
 public enum StackDocumentMutations {
     public static func validate(_ document: StackDocument) throws {
         guard document.version == StackDocument.currentVersion else {
             throw StackDocumentValidationError("unsupported document version: \(document.version)")
         }
-        guard !document.stacks.isEmpty else {
-            throw StackDocumentValidationError("stacks must not be empty")
+        guard document.stacks.count == StackDocument.stackCount else {
+            throw StackDocumentValidationError("a document holds exactly \(StackDocument.stackCount) stacks")
         }
         guard Set(document.stacks.map(\.id)).count == document.stacks.count else {
             throw StackDocumentValidationError("stack IDs must be unique")
@@ -50,25 +43,10 @@ public enum StackDocumentMutations {
             throw StackDocumentValidationError("currentStackID must identify a stack")
         }
 
-        var names = Set<String>()
         for stack in document.stacks {
-            let trimmed = stack.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard stack.name == trimmed, let nameKey = stack.name.normalizedName else {
-                throw StackDocumentValidationError("stack names must be trimmed and nonempty")
-            }
-            guard names.insert(nameKey).inserted else {
-                throw StackDocumentValidationError("stack names must be unique")
-            }
             guard Set(stack.notes.map(\.id)).count == stack.notes.count else {
                 throw StackDocumentValidationError("note IDs must be unique within a stack")
             }
-        }
-
-        guard Set(document.recentStackIDs).count == document.recentStackIDs.count else {
-            throw StackDocumentValidationError("recentStackIDs must be unique")
-        }
-        for id in document.recentStackIDs where !document.stacks.contains(where: { $0.id == id }) {
-            throw StackDocumentValidationError("recentStackIDs must identify stacks")
         }
 
         if let batch = document.lastCleared {
@@ -96,63 +74,12 @@ public enum StackDocumentMutations {
 
         var document = source
         switch mutation {
-        case var .createStack(stack):
-            stack.name = stack.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard stack.name.normalizedName != nil else {
-                return .rejected("Stack names must not be empty.")
-            }
-            guard !document.stacks.contains(where: { $0.id == stack.id }) else {
-                return .rejected("A stack with that identifier already exists.")
-            }
-            guard isUnique(stack.name, in: document.stacks) else {
-                return .rejected("Stack names must be unique.")
-            }
-            guard Set(stack.notes.map(\.id)).count == stack.notes.count else {
-                return .rejected("Note identifiers must be unique within a stack.")
-            }
-            document.stacks.append(stack)
-            document.currentStackID = stack.id
-            document.touchStack(stack.id)
-
-        case let .renameStack(stackID, name):
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.normalizedName != nil else {
-                return .rejected("Stack names must not be empty.")
-            }
-            guard let index = stackIndex(stackID, in: document) else {
-                return .rejected("The stack no longer exists.")
-            }
-            guard isUnique(trimmed, in: document.stacks, excluding: stackID) else {
-                return .rejected("Stack names must be unique.")
-            }
-            guard document.stacks[index].name != trimmed else { return .noOp }
-            document.stacks[index].name = trimmed
-
         case let .switchStack(stackID):
             guard stackIndex(stackID, in: document) != nil else {
                 return .rejected("The stack no longer exists.")
             }
             guard document.currentStackID != stackID else { return .noOp }
-            // The stack being left is the one a single switch should bring back.
-            document.touchStack(document.currentStackID)
             document.currentStackID = stackID
-            document.touchStack(stackID)
-
-        case let .deleteStack(stackID):
-            guard let index = stackIndex(stackID, in: document) else {
-                return .rejected("The stack no longer exists.")
-            }
-            guard document.stacks.count > 1 else {
-                return .rejected("The last stack cannot be deleted.")
-            }
-            document.stacks.remove(at: index)
-            document.recentStackIDs.removeAll { $0 == stackID }
-            if document.currentStackID == stackID {
-                document.currentStackID = document.stacks[min(index, document.stacks.count - 1)].id
-            }
-            if document.lastCleared?.stackID == stackID {
-                document.lastCleared = nil
-            }
 
         case let .addNote(stackID, note):
             guard let stackIndex = stackIndex(stackID, in: document) else {
@@ -162,7 +89,6 @@ public enum StackDocumentMutations {
                 return .rejected("The note already exists.")
             }
             document.stacks[stackIndex].notes.append(note)
-            document.touchStack(stackID)
 
         case let .updateNoteBody(stackID, noteID, note):
             guard let stackIndex = stackIndex(stackID, in: document),
@@ -215,7 +141,6 @@ public enum StackDocumentMutations {
             guard let index = stackIndex(stackID, in: document) else {
                 return .rejected("The target stack no longer exists.")
             }
-            // User edits and new notes must survive cleanup of an older export snapshot.
             let removed = document.stacks[index].notes.filter { note in
                 exported.contains { snapshot in
                     snapshot.id == note.id && snapshot.body == note.body
@@ -250,18 +175,5 @@ public enum StackDocumentMutations {
 
     private static func stackIndex(_ id: UUID, in document: StackDocument) -> Int? {
         document.stacks.firstIndex(where: { $0.id == id })
-    }
-
-    /// Whether `name` is usable for a stack other than `excludedID`: it is
-    /// nonblank and no other stack has the same normalized name.
-    public static func isUnique(
-        _ name: String,
-        in stacks: [Stack],
-        excluding excludedID: UUID? = nil
-    ) -> Bool {
-        guard let normalized = name.normalizedName else { return false }
-        return !stacks.contains {
-            $0.id != excludedID && $0.name.normalizedName == normalized
-        }
     }
 }

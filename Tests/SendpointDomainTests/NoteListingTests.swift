@@ -36,7 +36,6 @@ final class NoteListingTests: XCTestCase {
         XCTAssertTrue(NoteListing(notes: notes, query: "zzz").isEmpty)
     }
 
-
     func testSearchFoldsCaseDiacriticsAndWidthWithoutReordering() {
         let matching = Note(subject: .standalone, body: "Ｃａｆé")
         let listing = NoteListing(notes: [notes[0], matching, notes[1]], query: "  CAFE  ")

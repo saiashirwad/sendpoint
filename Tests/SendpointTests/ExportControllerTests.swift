@@ -11,9 +11,10 @@ final class ExportControllerTests: XCTestCase {
     )
 
     func testClipboardWriteFailureDoesNotClear() async throws {
-        let stack = Stack(name: "Default", notes: [note])
+        let stack = Stack(notes: [note])
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultStack: stack
+            persistence: StorePersistence(load: { document }, commit: { _ in })
         )
         var template = Template.plain
         template.clearStackAfterExport = true
@@ -33,9 +34,10 @@ final class ExportControllerTests: XCTestCase {
     }
 
     func testSuccessfulWriteUsesTheTemplateAndClearsTheStack() async throws {
-        let stack = Stack(name: "Default", notes: [note])
+        let stack = Stack(notes: [note])
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in }), defaultStack: stack
+            persistence: StorePersistence(load: { document }, commit: { _ in })
         )
         var template = Template.plain
         template.preamble = "Use this template"

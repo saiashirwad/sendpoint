@@ -3,8 +3,6 @@ import SwiftUI
 import XCTest
 @testable import Sendpoint
 
-/// Manual review images of every setup stage, so the one-line copy can be
-/// checked against the real window width.
 @MainActor
 final class SetupRenderTests: XCTestCase {
     func testRenderEverySetupStage() async throws {

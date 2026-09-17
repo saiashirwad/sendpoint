@@ -2,9 +2,27 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 import Observation
+import SendpointDomain
 
-nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
-    case voiceCapture, capture, dictate, copy, stack, switchStack, nextStack, previousStack, clear
+nonisolated enum ShortcutSlot: Hashable, Sendable {
+    case voiceCapture, capture, dictate, copy, stack, clear
+    case selectStack(Int)
+
+    static let allCases: [ShortcutSlot] =
+        [.voiceCapture, .capture, .dictate, .copy, .stack, .clear] + selectStackCases
+    static let selectStackCases: [ShortcutSlot] = (1...StackDocument.stackCount).map(ShortcutSlot.selectStack)
+
+    var rawValue: String {
+        switch self {
+        case .voiceCapture: "voiceCapture"
+        case .capture: "capture"
+        case .dictate: "dictate"
+        case .copy: "copy"
+        case .stack: "stack"
+        case .clear: "clear"
+        case let .selectStack(number): "selectStack\(number)"
+        }
+    }
 
     var title: String {
         switch self {
@@ -13,17 +31,14 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         case .dictate: "Dictate"
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
-        case .switchStack: "Switch stack"
-        case .nextStack: "Next stack"
-        case .previousStack: "Previous stack"
         case .clear: "Clear stack"
+        case let .selectStack(number): stackTitle(number)
         }
     }
 
-    /// An optional slot can be unbound; for dictation, unbound means off.
     var isOptional: Bool {
         switch self {
-        case .dictate, .nextStack, .previousStack: true
+        case .dictate, .selectStack: true
         default: false
         }
     }
@@ -35,10 +50,8 @@ nonisolated enum ShortcutSlot: String, CaseIterable, Hashable, Sendable {
         case .dictate: .dictate
         case .copy: .copy
         case .stack: .stack
-        case .switchStack: .switchStack
-        case .nextStack: .nextStack
-        case .previousStack: .previousStack
         case .clear: .clear
+        case let .selectStack(number): .selectStack(number)
         }
     }
 }
@@ -86,13 +99,21 @@ final class ShortcutSettings {
         static func combo(_ slot: ShortcutSlot) -> String { slot.rawValue + "Combo" }
     }
 
-    private static let defaultCombos: [ShortcutSlot: KeyCombo] = [
+    private static let homeRow = [kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_Semicolon]
+
+    private static let defaultCombos: [ShortcutSlot: KeyCombo] = fixedDefaultCombos.merging(
+        zip(ShortcutSlot.selectStackCases, homeRow).map { slot, key in
+            (slot, KeyCombo(keyCode: UInt16(key), modifiers: [.option]))
+        },
+        uniquingKeysWith: { fixed, _ in fixed }
+    )
+
+    private static let fixedDefaultCombos: [ShortcutSlot: KeyCombo] = [
         .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.command]),
         .capture: KeyCombo(keyCode: UInt16(kVK_ANSI_G), modifiers: [.command]),
         .dictate: KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option]),
         .copy: KeyCombo(keyCode: UInt16(kVK_ANSI_V), modifiers: [.control, .command]),
         .stack: KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command]),
-        .switchStack: KeyCombo(keyCode: UInt16(kVK_ANSI_U), modifiers: [.command]),
         .clear: KeyCombo(keyCode: UInt16(kVK_Delete), modifiers: [.control, .command]),
     ]
     private static let unboundMarker = Data()
@@ -105,12 +126,8 @@ final class ShortcutSettings {
     var captureCombo: KeyCombo { requiredCombo(.capture) }
     var copyCombo: KeyCombo { requiredCombo(.copy) }
     var stackCombo: KeyCombo { requiredCombo(.stack) }
-    var switchStackCombo: KeyCombo { requiredCombo(.switchStack) }
     var clearCombo: KeyCombo { requiredCombo(.clear) }
-    var switchStackReverseCombo: KeyCombo? { switchStackCombo.addingShift }
-    var nextStackCombo: KeyCombo? { combos[.nextStack] }
-    var previousStackCombo: KeyCombo? { combos[.previousStack] }
-    /// `nil` means dictation is off.
+    func selectStackCombo(_ number: Int) -> KeyCombo? { combos[.selectStack(number)] }
     var dictateCombo: KeyCombo? { combos[.dictate] }
 
     init(defaults: UserDefaults = .standard) {
@@ -140,12 +157,8 @@ final class ShortcutSettings {
             (KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command]), "Close Window (⌘W)"),
             (KeyCombo(keyCode: UInt16(kVK_ANSI_Z), modifiers: [.command]), "Undo (⌘Z)"),
         ]
-        let claimed = Self.claimedCombos(proposed, for: slot)
-        if let (_, name) = fixed.first(where: { claimed.contains($0.0) }) { return .reserved(name) }
-        if let duplicate = ShortcutSlot.allCases.first(where: { other in
-            guard other != slot, let combo = combo(for: other) else { return false }
-            return !Set(Self.claimedCombos(combo, for: other)).isDisjoint(with: claimed)
-        }) {
+        if let (_, name) = fixed.first(where: { $0.0 == proposed }) { return .reserved(name) }
+        if let duplicate = ShortcutSlot.allCases.first(where: { $0 != slot && combo(for: $0) == proposed }) {
             return .duplicate(duplicate)
         }
         return nil
@@ -176,18 +189,11 @@ final class ShortcutSettings {
         return fallback
     }
 
-    private static func claimedCombos(_ combo: KeyCombo, for slot: ShortcutSlot) -> [KeyCombo] {
-        guard slot == .switchStack, let reverse = combo.addingShift else { return [combo] }
-        return [combo, reverse]
-    }
-
     private func persist(_ combo: KeyCombo, key: String) {
         guard let data = try? JSONEncoder().encode(combo) else { return }
         defaults.set(data, forKey: key)
     }
 
-    /// A cleared optional slot is stored as a marker so it stays clear
-    /// across launches even when the slot has a default.
     private enum Stored {
         case absent, unbound, combo(KeyCombo)
     }

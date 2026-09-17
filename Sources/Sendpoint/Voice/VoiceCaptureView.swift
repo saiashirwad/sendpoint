@@ -1,21 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// Geometry shared by the capsule, the card, and the one panel that hosts
-/// whichever of them is showing.
 enum VoiceCaptureLayout {
     static let pillHeight: CGFloat = 32
     static let shadowPadding: CGFloat = 24
-    /// Wide enough for the capsule plus a one-line failure message; the
-    /// transparent margin gives the anchored destination popover room.
     static let panelWidth: CGFloat = 680
 
     static let cardWidth: CGFloat = 420
     static let cardPaddingX: CGFloat = 14
     static let cardPaddingTop: CGFloat = 10
     static let cardPaddingBottom: CGFloat = 8
-    /// The destination row under the transcript: tall enough for the orb's
-    /// loudest bloom, no taller.
     static let cardFooterHeight: CGFloat = 24
     static let cardFooterGap: CGFloat = 6
     static let transcriptLineSpacing: CGFloat = 2
@@ -37,8 +31,6 @@ enum VoiceCaptureLayout {
             + cardFooterGap + cardFooterHeight + cardPaddingBottom
     }
 
-    /// From the footer's bottom edge to the card's top edge. The destination
-    /// picker hangs off the footer but must clear the whole card.
     static func cardAnchorHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
         cardHeight(lines: lines, fontSize: fontSize) - cardPaddingBottom
     }
@@ -49,8 +41,6 @@ enum VoiceCaptureLayout {
     }
 }
 
-/// The recording overlay: a compact capsule, or, when live captions are on,
-/// one card carrying the transcript with the same controls along its foot.
 struct VoiceCaptureView: View {
     @Bindable var model: CaptureController
     let meter: VoiceLevelMeter
@@ -58,8 +48,6 @@ struct VoiceCaptureView: View {
     @Environment(\.colorScheme) private var systemScheme
     @State private var windowIsVisible = false
 
-    /// The overlay window is built once at launch and kept, so the entrance
-    /// animation keys off the stack rather than the view's first appearance.
     private var appeared: Bool {
         guard let mode = model.state.session?.mode else { return false }
         return mode != .text
@@ -87,8 +75,6 @@ struct VoiceCaptureView: View {
         .animation(.easeOut(duration: 0.18), value: failureMessage)
         .environment(\.colorScheme, palette.contentScheme)
         .padding(VoiceCaptureLayout.shadowPadding)
-        // The hosting panel is wider than the overlay so the tether and a
-        // failure message can appear later without the window resizing.
         .frame(maxWidth: .infinity)
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
         .accessibilityElement(children: .contain)
@@ -182,7 +168,6 @@ struct VoiceCaptureView: View {
 
     // MARK: - Shared controls
 
-    /// A note says which stack it is going to; dictation says which app.
     @ViewBuilder
     private func leading(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
         if let target = model.state.session?.dictationTarget {
@@ -263,8 +248,6 @@ struct VoiceCaptureView: View {
 
     // MARK: - Copy
 
-    // Reading the selection happens while the microphone is already open, so
-    // the overlay never mentions it: from the user's side it is all listening.
     private var orbMode: VoiceOrb.Mode {
         switch model.state.session?.phase {
         case .recording, .selectingVoice(recording: true, finishRequested: _): .live
@@ -310,7 +293,6 @@ struct VoiceTranscriptRow: Identifiable, Equatable {
     let text: String
 }
 
-/// Owns a snapshot of rows so a disappearing card cannot subscript a live array.
 private struct VoiceTranscriptLines: View {
     let rows: [VoiceTranscriptRow]
     let overflow: Bool
@@ -393,8 +375,6 @@ private struct VoiceTranscriptLineText: View {
     }
 }
 
-/// The only view that reads the meter, so its tap-rate updates re-render the
-/// orb alone rather than the whole overlay.
 private struct MeteredOrb: View {
     let mode: VoiceOrb.Mode
     let meter: VoiceLevelMeter
@@ -409,10 +389,7 @@ private struct MeteredOrb: View {
     }
 }
 
-/// Pure text shaping for the overlay.
 enum VoiceOverlayCopy {
-    /// How much is selected, without repeating it. `nil` when nothing is.
-    /// Named as the selection so it never reads as a count of spoken words.
     static func tether(for text: String) -> String? {
         let words = text.split(whereSeparator: \.isWhitespace).count
         guard words > 0 else { return nil }
@@ -420,8 +397,6 @@ enum VoiceOverlayCopy {
     }
 }
 
-/// Greedy word-wrap for the live card. Appending text only changes the last
-/// line until it overflows, so completed lines stay put and shift up as a block.
 enum LiveTranscriptPreview {
     static let fontSize: CGFloat = CGFloat(VoiceSettings.defaultPreviewFontSize)
     static let maxVisibleLines = VoiceSettings.defaultPreviewLines
@@ -452,8 +427,6 @@ enum LiveTranscriptPreview {
         window(lines, max: max).rows.map(\.text)
     }
 
-    /// The last `max` lines, keyed by their index in the whole transcript so a
-    /// line keeps its identity while earlier ones scroll off the top.
     static func window(_ lines: [String], max: Int) -> (rows: [VoiceTranscriptRow], overflow: Bool) {
         let start = Swift.max(0, lines.count - max)
         let rows = (start..<lines.count).map { VoiceTranscriptRow(id: $0, text: lines[$0]) }

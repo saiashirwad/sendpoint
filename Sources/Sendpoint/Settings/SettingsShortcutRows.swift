@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// One shortcut row: what it does, how, and the key that does it.
 struct ShortcutSpec: Identifiable {
     let title: String
     var hint: String? = nil
@@ -9,13 +8,29 @@ struct ShortcutSpec: Identifiable {
     var id: ShortcutSlot { slot }
 }
 
-/// Shortcut rows for one page, with the recorder wired to the registrar.
-/// A rebind that fails leaves the old keys and says why underneath.
-struct ShortcutRows: View {
+struct ShortcutTitle: View {
+    let spec: ShortcutSpec
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(spec.title)
+                .font(.ui(14, weight: .medium))
+            if let hint = spec.hint {
+                Text(hint)
+                    .font(.ui(13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+struct ShortcutRows<Label: View>: View {
     let specs: [ShortcutSpec]
     @Bindable var shortcuts: ShortcutSettings
     let hotKeyRegistrar: HotKeyRegistrar
     let onSettingsChanged: () -> Void
+    @ViewBuilder let label: (ShortcutSpec) -> Label
 
     @State private var feedback: String?
     @Environment(\.colorScheme) private var scheme
@@ -24,10 +39,13 @@ struct ShortcutRows: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(specs.enumerated()), id: \.element.id) { index, spec in
                 if index > 0 { SettingsDivider() }
-                SettingsRow(spec.title, hint: spec.hint) {
+                HStack(alignment: .center, spacing: 12) {
+                    label(spec)
+                    Spacer(minLength: 12)
                     KeyRecorder(combo: binding(for: spec.slot), clearable: spec.slot.isOptional)
                         .fixedSize()
                 }
+                .frame(minHeight: SettingsMetrics.rowHeight)
             }
             if !issues.isEmpty || feedback != nil {
                 VStack(alignment: .leading, spacing: 4) {
@@ -42,10 +60,6 @@ struct ShortcutRows: View {
                 .foregroundStyle(Ink.amber(scheme))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 10)
-                // A failed rebind leaves the old keys and explains why here.
-                // The block reads as one element, and a new message is
-                // announced politely (macOS SwiftUI has no live-region
-                // modifier, so the announcement is posted explicitly).
                 .accessibilityElement(children: .combine)
             }
         }
@@ -59,7 +73,6 @@ struct ShortcutRows: View {
         return shortcuts.shortcutRegistrationIssues.filter { slots.contains($0.id) }
     }
 
-    /// The error block's text as one string, so a change can be announced.
     private var errorMessage: String? {
         let parts = issues.map { "\($0.id.title): \($0.message)" } + (feedback.map { [$0] } ?? [])
         return parts.isEmpty ? nil : parts.joined(separator: " ")
@@ -77,5 +90,13 @@ struct ShortcutRows: View {
                 }
             }
         )
+    }
+}
+
+extension ShortcutRows where Label == ShortcutTitle {
+    init(specs: [ShortcutSpec], shortcuts: ShortcutSettings, hotKeyRegistrar: HotKeyRegistrar,
+         onSettingsChanged: @escaping () -> Void) {
+        self.init(specs: specs, shortcuts: shortcuts, hotKeyRegistrar: hotKeyRegistrar,
+            onSettingsChanged: onSettingsChanged) { ShortcutTitle(spec: $0) }
     }
 }

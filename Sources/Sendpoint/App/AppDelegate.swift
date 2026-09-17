@@ -16,7 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindowController: SettingsWindowController?
     var setupWindowController: SetupWindowController?
     var palette: StackPaletteWindowController?
-    var switcher: StackSwitcherController?
+    var stackSelector: StackSelector?
+    var stackReadout: StackReadoutController?
     enum StoreState {
         case loading
         case available(StackStore)
@@ -64,7 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if settingsWindowController?.canTerminate() == false { return .terminateCancel }
         guard let store, store.state == .processing else { return .terminateNow }
-        // A save queued just before ⌘Q must reach disk before teardown cancels it.
         terminationTask = Task {
             await store.drain(timeout: .seconds(2))
             NSApp.reply(toApplicationShouldTerminate: true)
@@ -78,8 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bootstrapTask?.cancel()
         bootstrapTask = nil
         exportController.teardown()
-        switcher?.teardown()
-        switcher = nil
+        stackSelector?.teardown()
+        stackSelector = nil
+        stackReadout?.teardown()
+        stackReadout = nil
         palette?.teardown()
         palette = nil
         setupWindowController?.teardown()

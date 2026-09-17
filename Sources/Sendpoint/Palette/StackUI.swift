@@ -3,17 +3,10 @@ import SendpointDomain
 import Foundation
 import SwiftUI
 
-/// "1 note", "2 notes": the one spelling of a note count shown to the user.
 nonisolated func noteCountLabel(_ count: Int) -> String {
     "\(count) note\(count == 1 ? "" : "s")"
 }
 
-/// The three derived `Date.FormatStyle`s the note labels need for one
-/// calendar value, built once and shared across rows. `Date.FormatStyle` is
-/// a Sendable value type, so sharing is concurrency-safe; the `Calendar`
-/// snapshot bakes in the time zone. The locale is left at its
-/// `autoupdatingCurrent` default (exactly as the per-call construction did),
-/// so locale changes are still picked up on cache hits.
 nonisolated struct NoteLabelStyles: Sendable {
     let time: Date.FormatStyle
     let dayMonth: Date.FormatStyle
@@ -27,11 +20,6 @@ nonisolated struct NoteLabelStyles: Sendable {
     }
 }
 
-/// Small bounded table of `NoteLabelStyles` keyed by the full `Calendar`
-/// value (which includes the time zone). A time-zone or calendar change
-/// simply misses and builds fresh — a stale zone is never served — and
-/// eviction only costs a rebuild. Follows the `VoiceModelProgressRelay`
-/// lock idiom; the miss-path build happens outside the lock.
 nonisolated final class NoteLabelStyleCache: @unchecked Sendable {
     static let shared = NoteLabelStyleCache()
     private static let maxEntries = 8
@@ -55,8 +43,6 @@ nonisolated final class NoteLabelStyleCache: @unchecked Sendable {
     }
 }
 
-/// When a note was captured, as short as the distance allows: the time
-/// today, the day this year, the date otherwise.
 nonisolated func noteTimestampLabel(
     _ date: Date, now: Date = Date(), calendar: Calendar = .current
 ) -> String {
@@ -70,13 +56,10 @@ nonisolated func noteTimestampLabel(
     return date.formatted(styles.dayMonthYear)
 }
 
-/// The time a note was captured, for lists already grouped by day.
 nonisolated func noteTimeLabel(_ date: Date, calendar: Calendar = .current) -> String {
     date.formatted(NoteLabelStyleCache.shared.styles(for: calendar).time)
 }
 
-/// One line on the state of a stack: how many notes it holds and when the
-/// last one landed, or that nothing has landed yet.
 nonisolated func stackStatusDetail(
     noteCount: Int, latest: Date?, now: Date = Date(), calendar: Calendar = .current
 ) -> String {
@@ -84,18 +67,12 @@ nonisolated func stackStatusDetail(
     return "\(noteCountLabel(noteCount)) · \(noteTimestampLabel(latest, now: now, calendar: calendar))"
 }
 
-/// Which edge to bring a note to so it is fully in view, or nil when it
-/// already is. `frame` is the note in the viewport's coordinates.
 nonisolated func noteRevealAnchor(frame: CGRect, viewportHeight: CGFloat) -> UnitPoint? {
     if frame.minY < 0 { return .top }
     if frame.maxY > viewportHeight { return .bottom }
     return nil
 }
 
-/// The scroll offset (distance from the top of the content) that brings a
-/// note to the edge named by `anchor`, with a little margin so it does not
-/// touch the edge. `frame` is the note in the viewport's coordinates at
-/// `currentTop`. Clamped to what the content allows.
 nonisolated func revealedScrollOffset(
     currentTop: CGFloat, frame: CGRect, viewportHeight: CGFloat, contentHeight: CGFloat,
     anchor: UnitPoint, margin: CGFloat = 6
@@ -106,19 +83,24 @@ nonisolated func revealedScrollOffset(
     return min(max(wanted, 0), max(0, contentHeight - viewportHeight))
 }
 
-/// `index + offset` wrapped into `0..<count`, so stepping past either end of
-/// a list continues from the other.
 nonisolated func wrappedIndex(_ index: Int, by offset: Int, count: Int) -> Int {
     ((index + offset) % count + count) % count
 }
 
+nonisolated func stackTitle(_ number: Int) -> String {
+    "Stack \(number)"
+}
+
 nonisolated struct StackItemFacts: Equatable, Identifiable {
     let id: UUID
-    let name: String
+    let number: Int
     let noteCount: Int
     let isCurrent: Bool
+    let startedAt: Date?
 
+    var name: String { stackTitle(number) }
     var countLabel: String { noteCountLabel(noteCount) }
+    var isEmpty: Bool { noteCount == 0 }
 }
 
 nonisolated struct StackUndoFacts: Equatable {
@@ -139,22 +121,6 @@ nonisolated struct StackUndoFacts: Equatable {
     }
 }
 
-nonisolated struct StackDeletionFacts: Equatable {
-    let liveNoteCount: Int
-    let clearedNoteCount: Int
-
-    init(stackID: UUID, stacks: [Stack], lastCleared: ClearedBatch?) {
-        liveNoteCount = stacks.stack(id: stackID)?.notes.count ?? 0
-        clearedNoteCount = lastCleared?.stackID == stackID
-            ? lastCleared?.notes.count ?? 0
-            : 0
-    }
-
-    var noteCount: Int { liveNoteCount + clearedNoteCount }
-    var includesUndoBatch: Bool { clearedNoteCount > 0 }
-    var requiresConfirmation: Bool { noteCount > 0 }
-}
-
 nonisolated struct StackUIFacts: Equatable {
     let stacks: [StackItemFacts]
     let currentStackID: UUID
@@ -165,22 +131,23 @@ nonisolated struct StackUIFacts: Equatable {
     }
 
     init(stacks: [Stack], currentStackID: UUID, lastCleared: ClearedBatch?) {
-        self.stacks = stacks.map {
+        self.stacks = stacks.enumerated().map { index, stack in
             StackItemFacts(
-                id: $0.id,
-                name: $0.name,
-                noteCount: $0.notes.count,
-                isCurrent: $0.id == currentStackID
+                id: stack.id,
+                number: index + 1,
+                noteCount: stack.notes.count,
+                isCurrent: stack.id == currentStackID,
+                startedAt: stack.startedAt
             )
         }
         self.currentStackID = currentStackID
 
-        if let lastCleared, let stack = stacks.stack(id: lastCleared.stackID) {
+        if let lastCleared, let number = stacks.number(of: lastCleared.stackID) {
             undo = StackUndoFacts(
-                stackID: stack.id,
-                stackName: stack.name,
+                stackID: lastCleared.stackID,
+                stackName: stackTitle(number),
                 noteCount: lastCleared.notes.count,
-                isCurrentStack: stack.id == currentStackID
+                isCurrentStack: lastCleared.stackID == currentStackID
             )
         } else {
             undo = nil
@@ -191,158 +158,16 @@ nonisolated struct StackUIFacts: Equatable {
         stacks.first(where: { $0.id == currentStackID })
     }
 
-    var currentTitle: String {
-        guard let current else { return "Stack Unavailable" }
-        return "\(current.name) — \(current.countLabel)"
-    }
-
-    var canDelete: Bool { stacks.count > 1 }
-
     func stack(id: UUID) -> StackItemFacts? {
         stacks.first(where: { $0.id == id })
     }
-}
 
-nonisolated enum StackNameValidation: Equatable {
-    case valid(String)
-    case invalid(String)
-}
-
-nonisolated struct StackNameDraft: Equatable {
-    var text: String
-    let excludedStackID: UUID?
-
-    func validation(stacks: [Stack]) -> StackNameValidation {
-        guard let trimmed = text.nonblank else {
-            return .invalid("Enter a stack name.")
-        }
-        guard StackDocumentMutations.isUnique(trimmed, in: stacks, excluding: excludedStackID) else {
-            return .invalid("A stack with that name already exists.")
-        }
-        return .valid(trimmed)
+    func stack(number: Int) -> StackItemFacts? {
+        stacks.first(where: { $0.number == number })
     }
 }
 
-/// One row in the stack palette: an existing stack, or the offer to
-/// create one named after the current query.
-nonisolated enum QuickSwitchRow: Equatable, Hashable {
-    case stack(UUID)
-    case create(String)
-}
-
-/// What the palette lists for a query. Matching is case- and diacritic-
-/// insensitive on any part of the name; an empty query lists everything.
-nonisolated struct QuickSwitchListing: Equatable {
-    let stacks: [StackItemFacts]
-    let creatableName: String?
-
-    init(facts: StackUIFacts, query: String) {
-        let trimmed = query.nonblank
-        let normalizedQuery = query.normalizedName
-        stacks = facts.stacks.matching(query, text: \.name)
-        let taken = facts.stacks.contains { $0.name.normalizedName == normalizedQuery }
-        creatableName = normalizedQuery != nil && !taken ? trimmed : nil
-    }
-
-    var rows: [QuickSwitchRow] {
-        var rows = stacks.map { QuickSwitchRow.stack($0.id) }
-        if let creatableName { rows.append(.create(creatableName)) }
-        return rows
-    }
-
-    var isEmpty: Bool { rows.isEmpty }
-}
-
-nonisolated struct QuickSwitchState: Equatable {
-    private(set) var highlight: QuickSwitchRow?
-
-    var selectedStackID: UUID? {
-        if case let .stack(id) = highlight { return id }
-        return nil
-    }
-
-    /// Keeps an explicit stack choice while that stack exists, and
-    /// otherwise falls back to the current stack.
-    mutating func synchronize(with facts: StackUIFacts) {
-        switch highlight {
-        case let .stack(id) where facts.stack(id: id) != nil:
-            return
-        case .create:
-            return
-        default:
-            highlight = .stack(facts.currentStackID)
-        }
-    }
-
-    mutating func choose(_ stackID: UUID, from facts: StackUIFacts) -> UUID? {
-        guard facts.stack(id: stackID) != nil else { return nil }
-        highlight = .stack(stackID)
-        return stackID
-    }
-
-    mutating func selectCurrent(from facts: StackUIFacts) {
-        highlight = .stack(facts.currentStackID)
-    }
-
-    mutating func highlight(_ row: QuickSwitchRow) {
-        highlight = row
-    }
-
-    /// Moves the highlight through the listed rows, wrapping at both ends.
-    mutating func move(by offset: Int, in rows: [QuickSwitchRow]) {
-        guard !rows.isEmpty else { return }
-        guard let highlight, let index = rows.firstIndex(of: highlight) else {
-            self.highlight = offset < 0 ? rows[rows.count - 1] : rows[0]
-            return
-        }
-        self.highlight = rows[wrappedIndex(index, by: offset, count: rows.count)]
-    }
-
-    /// Ensures the highlight names a listed row after the query changes.
-    mutating func confine(to rows: [QuickSwitchRow], preferring currentStackID: UUID) {
-        if let highlight, rows.contains(highlight) { return }
-        if rows.contains(.stack(currentStackID)) {
-            highlight = .stack(currentStackID)
-        } else {
-            highlight = rows.first
-        }
-    }
-}
 enum StackDialogs {
-    static func confirmsDelete(
-        stackID: UUID,
-        stacks: [Stack],
-        lastCleared: ClearedBatch?
-    ) -> Bool {
-        guard stacks.count > 1 else {
-            showMessage("The last stack cannot be deleted.")
-            return false
-        }
-        guard let stack = stacks.stack(id: stackID) else {
-            showMessage("That stack no longer exists.")
-            return false
-        }
-        let deletion = StackDeletionFacts(
-            stackID: stackID,
-            stacks: stacks,
-            lastCleared: lastCleared
-        )
-        guard deletion.requiresConfirmation else { return true }
-
-        let undoWarning = deletion.includesUndoBatch
-            ? " Cleared notes waiting to be undone are deleted too."
-            : ""
-        return confirmsDeletion(
-            of: stack.name,
-            informative: "This deletes \(noteCountLabel(deletion.noteCount)).\(undoWarning) This cannot be undone."
-        )
-    }
-
-    static func showMessage(_ message: String) {
-        inform(title: "Couldn't Change Stack", message: message)
-    }
-
-    /// A Delete/Cancel warning for `name`; true when Delete was chosen.
     static func confirmsDeletion(of name: String, informative: String) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning

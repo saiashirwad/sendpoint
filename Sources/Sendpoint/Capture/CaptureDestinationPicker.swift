@@ -1,23 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// The capture destination is an explicit click selection. Both presentations
-/// keep the normal event loop running while the recording shortcut is held.
 struct CaptureDestinationButton: View {
     @Bindable var model: CaptureController
     let mode: CaptureMode
     var showsIcon = false
     var fontSize: CGFloat = 12
     var arrowEdge: Edge = .bottom
-    /// Voice only. The row the button sits in, and how far above that row's
-    /// bottom edge the picker must clear: the capsule, or the whole card.
     var rowHeight: CGFloat = VoiceCaptureLayout.pillHeight
     var anchorHeight: CGFloat = VoiceCaptureLayout.pillHeight
 
     @ViewBuilder
     var body: some View {
-        // Both hosting windows are retained. Only the active capture's button
-        // may own a picker, even when the other window is ordered out.
         if let session = model.state.session, session.mode == mode {
             let context = session.context
             let name = model.targetStack?.name ?? "Choose stack"
@@ -88,7 +82,6 @@ struct CaptureDestinationButton: View {
     }
 }
 
-/// The visible list sits above the anchor's full height, excluding shadow margins.
 enum CaptureDestinationPanelLayout {
     static let bodyWidth: CGFloat = 250
     static let rowHeight: CGFloat = 32
@@ -116,14 +109,11 @@ enum CaptureDestinationPanelLayout {
         let idealX = anchor.midX - size.width / 2
         return NSPoint(
             x: min(max(idealX, visibleFrame.minX), visibleFrame.maxX - size.width),
-            // The anchor spans the overlay; the margin is outside the visible list.
             y: anchor.maxY + anchorGap - shadowPadding
         )
     }
 }
 
-/// An AppKit anchor spanning the destination button and the overlay above it.
-/// Owns a nonmodal panel so recording shortcuts keep receiving events.
 private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
     @Binding var isPresented: Bool
     let rows: [StackItemFacts]
@@ -266,8 +256,6 @@ private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
             panel.orderOut(nil)
         }
 
-        /// The only terminal cleanup path. It is safe if SwiftUI dismantles
-        /// the anchor after the model has already hidden the surface.
         func teardown() {
             guard !tornDown else { return }
             tornDown = true
@@ -311,8 +299,6 @@ struct CaptureDestinationPanelSurface: View {
     }
 }
 
-/// Mouse hover only changes the row's background. The checkmark always
-/// reflects the destination already chosen for this capture.
 struct CaptureDestinationList: View {
     let rows: [StackItemFacts]
     let selectedID: UUID
@@ -357,8 +343,6 @@ private struct CaptureDestinationRow: View, Equatable {
     let onSelect: () -> Void
     @State private var hovering = false
 
-    /// Rendered inputs only: the row facts and the selected mark. The
-    /// select closure is an identity, and hover is transient @State.
     static func == (lhs: CaptureDestinationRow, rhs: CaptureDestinationRow) -> Bool {
         lhs.row == rhs.row && lhs.selected == rhs.selected
     }

@@ -1,12 +1,10 @@
 import AppKit
 
-/// What a process start or reopen should put on screen.
 enum LaunchPresentation: Equatable {
     case setup
     case settings
     case none
 
-    /// Posted by a second copy so the running instance can show a window.
     static let userOpenedNotification = Notification.Name("app.sendpoint.userOpened")
 
     static func decide(hasCompletedSetup: Bool, kind: Kind) -> LaunchPresentation {
@@ -17,7 +15,6 @@ enum LaunchPresentation: Equatable {
         }
     }
 
-    /// `exit` follows immediately; without `deliverImmediately` the post is lost.
     static func notifyRunningInstance(bundleIdentifier: String) {
         DistributedNotificationCenter.default().postNotificationName(
             userOpenedNotification,
@@ -31,9 +28,9 @@ enum LaunchPresentation: Equatable {
         case login
         case userOpen
 
-        static let openApplicationEventID: AEEventID = 0x6F617070 // 'oapp'
-        static let propDataKeyword: AEKeyword = 0x70726474 // 'prdt'
-        static let launchedAsLoginItem: OSType = 0x6C676974 // 'lgit'
+        static let openApplicationEventID: AEEventID = 0x6F617070
+        static let propDataKeyword: AEKeyword = 0x70726474
+        static let launchedAsLoginItem: OSType = 0x6C676974
 
         static func from(eventID: AEEventID?, loginItemProperty: OSType?) -> Kind {
             if eventID == openApplicationEventID, loginItemProperty == launchedAsLoginItem {
@@ -42,7 +39,6 @@ enum LaunchPresentation: Equatable {
             return .userOpen
         }
 
-        /// Only valid during `applicationDidFinishLaunching`.
         static func fromCurrentAppleEvent(
             _ event: NSAppleEventDescriptor? = NSAppleEventManager.shared().currentAppleEvent
         ) -> Kind {

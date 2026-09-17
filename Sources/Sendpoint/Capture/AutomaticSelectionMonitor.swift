@@ -1,13 +1,6 @@
 import AppKit
 import SendpointDomain
 
-/// Remembers selections copied by apps that own terminal mouse input.
-///
-/// Full-screen terminal UIs can draw their own selection and copy it directly
-/// to the pasteboard. In that case Accessibility has no selected text and a
-/// later synthetic Command-C has nothing to copy. This monitor ties a
-/// pasteboard value to the mouse drag that produced it, rather than treating
-/// arbitrary clipboard text as a selection.
 final class AutomaticSelectionMonitor {
     private var tracker = AutomaticSelectionTracker()
     private var eventMonitor: Any?
@@ -72,8 +65,6 @@ final class AutomaticSelectionMonitor {
             guard let request = tracker.mouseUp() else { return }
             settlementTask?.cancel()
             settlementTask = Task { [weak self] in
-                // Native clipboard writes are usually immediate, but some
-                // terminal paths finish asynchronously after mouse-up.
                 for _ in 0..<10 {
                     do {
                         try await Task.sleep(for: .milliseconds(25))
@@ -102,7 +93,6 @@ final class AutomaticSelectionMonitor {
     }
 }
 
-/// Pure transition state for `AutomaticSelectionMonitor`.
 nonisolated struct AutomaticSelectionTracker {
     struct SettlementRequest: Equatable {
         fileprivate var token: Int

@@ -7,8 +7,6 @@ extension Notification.Name {
     static let voiceModelDidBecomeReady = Notification.Name("Sendpoint.voiceModelDidBecomeReady")
 }
 
-/// On-disk Parakeet Unified 0.6B streaming (320ms look-ahead). Setup, Settings,
-/// and the recogniser all use this one tree.
 nonisolated enum LocalVoiceModelFiles {
     static let streaming = UnifiedConfig(leftFrames: 70, chunkFrames: 2, rightFrames: 2)
 
@@ -38,24 +36,6 @@ nonisolated enum LocalVoiceModelFiles {
     }
 }
 
-/// Records from the microphone and transcribes with Parakeet Unified 0.6B
-/// streaming. The same decoder drives the live card and the saved note.
-/// Nothing leaves the Mac.
-///
-/// Isolation: explicitly `@MainActor`. (The target's default isolation
-/// already implied this; the annotation locks it in.) Every caller is
-/// MainActor-bound — `CaptureController`'s `@MainActor` launch operations
-/// and UI callbacks, plus `PermissionServices`' async hops — so serializing
-/// all mutable state (`engine`/`spareEngine`/`audioQueue`/`streamTask`/
-/// `warmUpTask`/`abandonment`/`streamGeneration`/`recordingStartedAt`, the
-/// meter, `recordingEpoch`) on the MainActor removes the cross-task races
-/// with no locks. An actor was rejected: the service is driven through
-/// synchronous test-seam closures (`discard`, `warmUp`, device/partial
-/// setters) that cannot await, so actor isolation would force signature
-/// churn for no gain. The one closure that truly leaves the actor — the
-/// realtime audio tap — captures only `Sendable` values (the frame queue and
-/// an `AsyncStream` continuation) and re-enters via the ordered,
-/// epoch-guarded meter pump below; it never blocks the tap thread.
 @MainActor
 final class VoiceNoteService {
     private let transcriber = LocalStreamingPreview()
@@ -65,24 +45,14 @@ final class VoiceNoteService {
     private var audioQueue: PreviewAudioQueue?
     private var streamTask: Task<Void, Never>?
     private var warmUpTask: Task<Void, Never>?
-    /// Retained consumer for the live recording's tap levels; cancelled on
-    /// every stop path. One owner, never detached.
     private var meterTask: Task<Void, Never>?
-    /// Yield end of the tap-level stream. The tap holds its own copy, so the
-    /// realtime thread never touches actor state.
     private var tapContinuation: AsyncStream<Float>.Continuation?
     private var abandonment: (id: UUID, task: Task<Void, Never>)?
     private var streamGeneration: Int?
     private var recordingStartedAt: Date?
     private(set) var recordingEpoch = 0
-    /// Current recording generation. Bumped on every start and every stop
-    /// path; tap levels and pump writes presented with an older epoch are
-    /// stale and dropped, so a late flush can never corrupt post-stop state.
 
-    /// UID of the microphone to record from; `nil` follows the system default.
-    /// If the device is not connected when recording starts, the default is used.
     var preferredInputDeviceUID: String?
-    /// Set once by the capture controller; receives cumulative hypotheses.
     var onPartialTranscript: (@Sendable (String) -> Void)?
 
     init() {}
@@ -110,11 +80,6 @@ final class VoiceNoteService {
         }
     }
 
-    /// Call once at launch and after every recording, when nobody is waiting.
-    /// MainActor-serialized, so the `warmUpTask == nil` check-and-set is
-    /// atomic — no second caller can interleave between the check and the
-    /// assignment, and the completion write-back runs on the same actor.
-    /// No generation counter needed.
     func warmUp() {
         if spareEngine == nil, PermissionCheck.isMicrophoneAuthorized {
             let engine = AVAudioEngine()
@@ -147,16 +112,8 @@ final class VoiceNoteService {
         meter.reset()
         let queue = PreviewAudioQueue()
         audioQueue = queue
-        // A new recording opens a new delivery generation: taps or pump
-        // iterations left over from an older recording go stale on arrival.
         recordingEpoch += 1
         let epoch = recordingEpoch
-        // Latest-value coalescing for the level meter. The tap captures only
-        // Sendable values (the frame queue, the continuation), so the
-        // realtime thread never blocks and schedules no hop of its own;
-        // `.bufferingNewest(1)` keeps only the newest level when the consumer
-        // lags, replacing the old unordered per-tap `Task { @MainActor }`
-        // fan-out (~40/s) with one ordered stream.
         let (levels, continuation) = AsyncStream<Float>.makeStream(bufferingPolicy: .bufferingNewest(1))
         tapContinuation = continuation
         Diag.log("voice tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
@@ -184,12 +141,6 @@ final class VoiceNoteService {
         Diag.log("voice recording started")
     }
 
-    /// Points the input unit at the chosen microphone before the engine
-    /// reads its format. Must run before anything else touches the node.
-    ///
-    /// The unit is always pinned to a concrete device. Left to follow the
-    /// system default on its own, the input unit takes around half a second
-    /// to start; pinned to that same default device it starts in about 50ms.
     private func selectInputDevice(on input: AVAudioInputNode) {
         let device = InputDeviceChoice.resolve(
             preferredUID: preferredInputDeviceUID,
@@ -242,10 +193,6 @@ final class VoiceNoteService {
         if wasLive { Diag.log("voice recording discarded") }
     }
 
-    /// Ends meter delivery for the current recording. The epoch bump comes
-    /// first, so levels already yielded but not yet delivered go stale and
-    /// cannot undo the reset below or leak into the next recording.
-    /// Idempotent; safe on every stop path, live or not.
     private func invalidateTapDelivery() {
         recordingEpoch += 1
         meterTask?.cancel()
@@ -254,19 +201,11 @@ final class VoiceNoteService {
         tapContinuation = nil
     }
 
-    /// Applies one delivered tap level iff `epoch` is still the live
-    /// recording. Internal as a deterministic test seam for the
-    /// stale-delivery guard (no microphone needed).
     func applyTapLevel(_ level: Float, epoch: Int) {
         guard epoch == recordingEpoch else { return }
         levelMeter.push(level)
     }
 
-    /// The single retained consumer for the live recording's tap levels. One
-    /// owner, never detached; cancelled by `invalidateTapDelivery`. Values
-    /// apply in yield order; `AsyncStream` termination or task cancellation
-    /// ends the loop, and the epoch check drops anything yielded before a
-    /// stop that only gets delivered after it.
     private func startMeterPump(_ levels: AsyncStream<Float>, epoch: Int) {
         meterTask?.cancel()
         meterTask = Task { [weak self] in
@@ -278,18 +217,11 @@ final class VoiceNoteService {
         }
     }
 
-    /// Records the pump's generation only while its queue is still the live
-    /// one. A pump cancelled by stop/discard/restart must not revive a
-    /// generation after teardown cleared it: stop and discard nil the queue
-    /// synchronously on this actor, and a restart installs a new queue, so
-    /// identity precisely marks the write stale.
     private func applyStreamGeneration(_ generation: Int, for queue: PreviewAudioQueue) {
         guard audioQueue === queue else { return }
         streamGeneration = generation
     }
 
-    /// A discarded stream must finish invalidating and resetting its decoder
-    /// before a later recording is allowed to open one.
     private func finishPendingAbandonment() async {
         while let pending = abandonment {
             await pending.task.value
@@ -362,18 +294,12 @@ private enum VoiceNoteError: LocalizedError {
     }
 }
 
-/// Fan-out for model preparation progress. Preparation is shared, so the
-/// caller that started it is not always the one watching: launch warm-up
-/// begins the download, then Setup asks to see it. Whoever subscribes gets
-/// the latest fraction at once and every one after.
 nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
     private let lock = NSLock()
     private var observers: [Int: @Sendable (Double) -> Void] = [:]
     private var nextID = 0
     private var latest: Double?
 
-    /// Registers `observer`, replaying the latest fraction if one exists.
-    /// Returns a token for `unsubscribe`.
     @discardableResult
     func subscribe(_ observer: @escaping @Sendable (Double) -> Void) -> Int {
         lock.lock()
@@ -400,7 +326,6 @@ nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
         for observer in current { observer(fraction) }
     }
 
-    /// A new attempt starts from nothing; a stale fraction must not replay.
     func reset() {
         lock.lock()
         latest = nil
@@ -408,7 +333,6 @@ nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
     }
 }
 
-/// Parakeet Unified 0.6B streaming (320ms tier). One decoder for the card and the note.
 actor LocalStreamingPreview {
     private let preparation = SharedAsyncPreparation<StreamingUnifiedAsrManager>()
     private let progress = VoiceModelProgressRelay()
@@ -426,9 +350,6 @@ actor LocalStreamingPreview {
     }
 
     func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        // Claiming a retry resets stale progress before this observer is
-        // registered. A subscriber joining an in-flight attempt still gets
-        // that attempt's latest fraction replayed.
         let attemptID = await claimPreparationAttempt()
         let token = progress.subscribe(onProgress)
         defer { progress.unsubscribe(token) }
@@ -481,7 +402,6 @@ actor LocalStreamingPreview {
         }
     }
 
-    /// Drain leftover audio, flush the decoder, return the note text.
     func finish(leftover: [PreviewAudioFrame], generation: Int?) async throws -> String {
         var active = generation
         if active == nil, sessionOpen { active = self.generation }
@@ -546,8 +466,6 @@ actor LocalStreamingPreview {
         return offset > 0 ? buffer : nil
     }
 
-    /// Returns the ID of the preparation attempt this caller joins. Only the
-    /// first caller creates the ID and clears progress for that attempt.
     private func claimPreparationAttempt() async -> UUID? {
         if let preparationAttemptID { return preparationAttemptID }
         let isPrepared = await preparation.isPrepared()
@@ -605,7 +523,6 @@ actor LocalStreamingPreview {
     }
 }
 
-/// Mono float frames copied off the tap so the streaming actor can resample them.
 nonisolated struct PreviewAudioFrame: Sendable {
     let samples: [Float]
     let sampleRate: Double

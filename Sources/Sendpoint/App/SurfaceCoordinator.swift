@@ -1,24 +1,6 @@
 import AppKit
 
 extension NSWindow {
-    /// Paper dialog: hidden title, content under the traffic lights, not resizable.
-    static func paperDialog(_ title: String, size: NSSize) -> NSWindow {
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = title
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        return window
-    }
-
-    /// Brings the app forward and makes this window key, the way every
-    /// surface the coordinator shows comes to the front.
     func presentActivated() {
         NSApp.activate(ignoringOtherApps: true)
         makeKeyAndOrderFront(nil)
@@ -29,12 +11,10 @@ enum Surface: CaseIterable, Hashable {
     case palette
     case settings
     case setup
-    case switcher
     case captureEditor
     case captureVoice
 }
 
-/// Applies window transitions and records only what has reached AppKit.
 final class SurfaceCoordinator {
     struct Transitions {
         var show: () -> Void
@@ -70,15 +50,10 @@ final class SurfaceCoordinator {
     func present(_ surface: Surface) {
         switch surface {
         case .captureEditor:
-            // Setup stays: its tour asks for a typed note and waits for it.
-            for hidden in [Surface.palette, .switcher, .settings] {
+            for hidden in [Surface.palette, .settings] {
                 dismiss(hidden)
             }
-        case .switcher:
-            dismiss(.palette)
-        case .palette:
-            guard !visible.contains(.switcher) else { return }
-        case .settings, .setup, .captureVoice:
+        case .palette, .settings, .setup, .captureVoice:
             break
         }
         guard let transition = transitions[surface] else { return }
@@ -120,7 +95,7 @@ final class SurfaceCoordinator {
             switch surface {
             case .settings:
                 true
-            case .palette, .setup, .switcher, .captureEditor, .captureVoice:
+            case .palette, .setup, .captureEditor, .captureVoice:
                 false
             }
         }

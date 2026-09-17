@@ -1,10 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Click it, press a shortcut, done.
 struct KeyRecorder: NSViewRepresentable {
     @Binding var combo: KeyCombo?
-    /// Whether ⌫ while recording removes the shortcut instead of setting one.
     var clearable = false
 
     init(combo: Binding<KeyCombo?>, clearable: Bool = false) {
@@ -26,9 +24,6 @@ struct KeyRecorder: NSViewRepresentable {
     }
 }
 
-/// Drawn as a keycap: raised off the paper with a hairline edge. An unset
-/// slot is a flat outline. While recording the edge turns accent and the
-/// cap asks for the keys.
 final class KeyRecorderView: NSView {
     var onChange: ((KeyCombo?) -> Void)?
     var clearable = false
@@ -95,7 +90,7 @@ final class KeyRecorderView: NSView {
 
     override func keyDown(with event: NSEvent) {
         guard recording else { super.keyDown(with: event); return }
-        if event.keyCode == 53 { // escape cancels
+        if event.keyCode == 53 {
             recording = false
             window?.makeFirstResponder(nil)
             return

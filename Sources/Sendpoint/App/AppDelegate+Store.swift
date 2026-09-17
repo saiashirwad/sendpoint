@@ -23,24 +23,20 @@ extension AppDelegate {
                 settingsWindowController?.storeDidBecomeAvailable(store)
                 captureController.configure(store: store)
                 buildPalette(store: store)
-                switcher = StackSwitcherController(
+                let readout = StackReadoutController(store: store)
+                stackReadout = readout
+                stackSelector = StackSelector(
                     store: store,
-                    settings: shortcuts,
-                    hotKeyCenter: environment.hotKeyCenter,
-                    showPreview: { [weak self] id in self?.palette?.previewStack(id) },
-                    hidePreview: { [weak self] in self?.palette?.closeCycle() },
-                    canBeginCycle: { [weak self] in self?.palette?.canBeginCycle == true },
-                    onOpenPalette: { [weak self] id in
-                        self?.presentPalette(focus: .stacks, highlighting: id)
+                    showsReadout: { [weak self] in
+                        guard let self else { return false }
+                        return self.surfaces.visible.isDisjoint(with: [.palette, .captureEditor, .captureVoice])
                     },
-                    onSwitched: { [weak self] stack in
-                        self?.statusItemController.flash(stack.name)
-                    }
+                    showReadout: { [weak readout] in readout?.show(number: $0) },
+                    hideReadout: { [weak readout] in readout?.hide() },
+                    onSelected: { [weak self] id in self?.captureController.send(.stackSelected(id)) }
                 )
-                palette?.onCycleClosed = { [weak self] in self?.switcher?.cancel() }
                 refreshStatusItem()
             } catch is CancellationError {
-                // App termination owns cancellation and teardown.
             } catch {
                 guard !Task.isCancelled else { return }
                 bootstrapTask = nil
@@ -53,7 +49,6 @@ extension AppDelegate {
 
     func storeDidChange() {
         palette?.documentChanged()
-        switcher?.documentChanged()
         refreshStatusItem()
     }
 

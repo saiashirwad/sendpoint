@@ -4,9 +4,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// Streaming behavior through the real controller wiring: partials update the
-/// preview only while their capture is still recording, stale work is dropped,
-/// and engine switches tear down cleanly. No microphone, no network.
 @MainActor
 final class VoiceStreamingTests: XCTestCase {
     private enum Fail: LocalizedError {
@@ -133,7 +130,6 @@ final class VoiceStreamingTests: XCTestCase {
         f.recorder.partialHandler?("how is the weather")
         await waitUntil { f.controller.state.session?.liveTranscript == "how is the weather" }
 
-        // The preview never disturbs the workflow: still recording, no effects.
         XCTAssertEqual(f.controller.state.session?.phase, .recording)
         XCTAssertFalse(f.surfaces.events.contains("close"))
     }

@@ -2,8 +2,6 @@ import AVFoundation
 import Foundation
 import Observation
 
-/// Live microphone loudness, fed by the recording tap and read by the voice
-/// overlay to size its orb. Rises at once and falls gently.
 @Observable
 final class VoiceLevelMeter {
     private(set) var current: Float = 0
@@ -16,8 +14,6 @@ final class VoiceLevelMeter {
         current = 0
     }
 
-    /// Loudness in 0…1, on a decibel scale that puts quiet speech near 0.3
-    /// and normal speech near 0.8.
     nonisolated static func level(of buffer: AVAudioPCMBuffer) -> Float {
         guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
         let count = Int(buffer.frameLength)

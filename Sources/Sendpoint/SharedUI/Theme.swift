@@ -2,10 +2,6 @@ import AppKit
 import SwiftUI
 
 // MARK: - Type
-//
-// Two faces. Geist for the interface. Martian Mono, in its narrow width,
-// for everything that is a record rather than a sentence: captured
-// passages, timestamps, counts, keys, and the small labels over sections.
 
 nonisolated enum Typeface {
     static func sans(_ weight: Font.Weight) -> String {
@@ -45,34 +41,26 @@ extension NSFont {
 }
 
 // MARK: - Ink
-//
-// White paper by day, black by night, one raspberry accent, and every state drawn
-// as a wash of the text colour so it reads the same in either.
 
 nonisolated enum Ink {
     static let cornerRadius: CGFloat = 14
 
-    /// The content sheet.
     static func paper(_ scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(white: 0.07)
             : Color.white
     }
 
-    /// Sidebars sit a shade lower than the paper.
     static func well(_ scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(white: 0.04)
             : Color(white: 0.965)
     }
 
-    /// Anything lifted off the paper: the selected sidebar pill, keycaps,
-    /// menus.
     static func raised(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? Color(white: 0.15) : .white
     }
 
-    /// A hairline edge so a sheet separates from whatever sits behind it.
     static func rim(_ scheme: ColorScheme) -> Color {
         Color.primary.opacity(scheme == .dark ? 0.11 : 0.08)
     }
@@ -95,24 +83,14 @@ nonisolated enum Ink {
             : Color(red: 0.18, green: 0.62, blue: 0.40)
     }
 
-    /// Rules between rows.
     static let hairline = Color.primary.opacity(0.09)
-    /// Unselected chips and inset fields.
     static let fill = Color.primary.opacity(0.055)
-    /// Highlighted row or menu item, in the pane that has the keyboard.
     static let selection = Color.primary.opacity(0.08)
-    /// The other pane keeps its selection, fainter, so depth alone says
-    /// which pane has the keyboard. It still sits above a hover.
-    static let inactiveSelection = Color.primary.opacity(0.045)
-    /// Pointer resting on a row.
     static let hover = Color.primary.opacity(0.03)
 
-    static func wash(highlighted: Bool, dimmed: Bool = false, hovering: Bool = false) -> Color {
-        guard highlighted else { return hovering ? hover : .clear }
-        return dimmed ? inactiveSelection : selection
+    static func wash(highlighted: Bool) -> Color {
+        highlighted ? selection : .clear
     }
-
-    // AppKit needs the same colours for the views it draws itself.
 
     @MainActor static let nsPaper = NSColor(name: nil) { appearance in
         appearance.isDark
@@ -134,10 +112,6 @@ nonisolated enum Ink {
         NSColor.labelColor.withAlphaComponent(appearance.isDark ? 0.12 : 0.10)
     }
 
-    /// A short accent rule at the leading edge: keyboard focus. Dimmed to
-    /// grey when the other pane owns the keys.
-    /// The highlight behind a list row: inset from the row's edges and
-    /// rounded, so a full-bleed row reads as a pill without moving its text.
     struct Pill: View {
         static let inset: CGFloat = 8
         var radius: CGFloat
@@ -157,17 +131,11 @@ extension NSAppearance {
 
 // MARK: - Overlay
 
-/// Ink on paper for the floating overlays, chosen against the system
-/// appearance: a near-black capsule with white ink over light desktops, a
-/// translucent white capsule with black ink over dark ones, so an overlay
-/// never sinks into a same-coloured desktop.
 struct OverlayPalette {
     let ink: Color
     let paper: Color
     let amber: Color
-    /// The brand pink, for the orb while it listens and nothing else.
     let accent: Color
-    /// What the overlay's own contents render as, the opposite of the system.
     let contentScheme: ColorScheme
 
     static func against(_ system: ColorScheme) -> OverlayPalette {
@@ -195,13 +163,9 @@ struct OverlayPalette {
 // MARK: - Shaders
 
 nonisolated enum Shaders {
-    /// build.sh compiles Resources/Shaders into the bundle. A bare
-    /// `swift run` has no bundle, so the surfaces fall back to flat colour.
     static let isAvailable = Bundle.main.url(forResource: "default", withExtension: "metallib") != nil
 }
 
-/// The paper every window is drawn on. Grain and a soft light, both
-/// too faint to name, so a flat sheet stops looking like a flat fill.
 struct Backdrop: View {
     @Environment(\.colorScheme) private var scheme
 
@@ -227,9 +191,6 @@ struct Backdrop: View {
     }
 }
 
-/// The recording capsule wearing the wordmark: Sendpoint's emblem. Ink on
-/// the opposite of the system appearance, like every overlay, with the orb
-/// alive at the trailing end.
 struct WordmarkPill: View {
     var mode: VoiceOrb.Mode = .idle
     var animates = false
@@ -264,10 +225,6 @@ struct WordmarkPill: View {
     }
 }
 
-/// An empty stack, drawn: three thin sheets fanned back, each one paper so
-/// it hides the sheet behind it, the front one holding two lines waiting
-/// for words. Stroked in a pink-to-white gradient over a faint glow.
-/// Vector, so it is crisp at any size, with no idle animation work.
 struct EmptyStackGlyph: View {
     @Environment(\.colorScheme) private var scheme
 
@@ -309,11 +266,7 @@ struct EmptyStackGlyph: View {
     }
 }
 
-/// Soft pools of pink, lavender and sky over paper: the status
-/// card's background. Dark mode keeps the same hues, dimmer.
 struct Aurora: View {
-    /// How far the pools are allowed to tint the base. A small card takes
-    /// the full amount; a large sheet wants about half.
     var strength: Double = 1
     @Environment(\.colorScheme) private var scheme
 

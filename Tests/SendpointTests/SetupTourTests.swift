@@ -93,13 +93,13 @@ final class SetupTourTests: XCTestCase {
 
     func testNoteCountSpansEveryStack() async throws {
         let stacks = [
-            Stack(name: "A", notes: [Note(subject: .standalone, body: "1")]),
-            Stack(name: "B", notes: [
+            Stack(notes: [Note(subject: .standalone, body: "1")]),
+            Stack(notes: [
                 Note(subject: .standalone, body: "2"),
                 Note(subject: .selection(quote: "q"), body: "3"),
             ]),
         ]
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         XCTAssertEqual(SetupTour.noteCount(in: store), 3)

@@ -8,9 +8,6 @@ struct SettingsCapturePane: View {
     let onSettingsChanged: () -> Void
 
     @State private var inputDevices = AudioInputDeviceList()
-    /// Owns the mic-preview engine and its one teardown path. Explicit
-    /// start/stop calls below replace the old `.task(id:)` + `.onDisappear`
-    /// dual teardown.
     @State private var preview = MicrophonePreviewOwner()
     @State private var windowIsVisible = false
 
@@ -57,9 +54,6 @@ struct SettingsCapturePane: View {
         .onChange(of: windowIsVisible) { _, _ in syncPreview() }
     }
 
-    /// Runs the engine exactly while the pane is visible for the selected
-    /// device. The window-hide arm matters: ordering the Settings window out
-    /// does not remove the view, so onDisappear alone would leave the mic on.
     private func syncPreview() {
         if windowIsVisible {
             preview.start(uid: voiceSettings.inputDeviceUID)
@@ -120,7 +114,6 @@ struct SettingsCapturePane: View {
     }
 }
 
-/// A thin bar that fills from the left as the microphone gets louder.
 struct InputLevelBar: View {
     let level: Float
     let isActive: Bool

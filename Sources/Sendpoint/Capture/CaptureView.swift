@@ -2,7 +2,6 @@ import AppKit
 import SendpointDomain
 import SwiftUI
 
-/// The typed capture draft and its inline save recovery controls.
 struct CaptureView: View {
     @Bindable var model: CaptureController
 
@@ -10,8 +9,6 @@ struct CaptureView: View {
     @FocusState private var noteFocused: Bool
     @State private var quoteHeight: CGFloat = 0
 
-    /// Keeps the source visible without letting a long selection push the
-    /// editor actions below the panel's compact resize floor.
     private let quoteMaxHeight: CGFloat = 80
 
     private var quote: String {
@@ -62,8 +59,6 @@ struct CaptureView: View {
         .onAppear {
             DispatchQueue.main.async { noteFocused = true }
         }
-        // The panel is kept between notes, so each new capture asks for
-        // focus itself rather than relying on a first appearance.
         .onChange(of: model.state.session?.context) { _, context in
             guard context != nil else { return }
             DispatchQueue.main.async { noteFocused = true }
@@ -114,10 +109,7 @@ struct CaptureView: View {
                 .font(.uiBody)
                 .lineSpacing(2)
                 .scrollContentBackground(.hidden)
-                // NSTextView supplies a five-point text-container inset.
                 .padding(.horizontal, -5)
-                // The "Add a note…" overlay below is visual only: the editor
-                // carries the label so it is announced exactly once.
                 .accessibilityLabel("Note")
                 .focused($noteFocused)
                 .frame(minHeight: 72, idealHeight: 108, maxHeight: .infinity)
@@ -148,15 +140,12 @@ struct CaptureView: View {
             .accessibilityElement(children: .combine)
         case .editing, .none:
             EmptyView()
-        case let .saveFailed(_, message, retryable, missing):
+        case let .saveFailed(_, message, retryable):
             statusRow(message: message) {
                 HStack(spacing: 8) {
                     if retryable {
                         InkButton("Retry") { model.send(.retry) }
                     } else {
-                        if missing {
-                            InkButton("Save to Current Stack") { model.saveToCurrentStack() }
-                        }
                         QuietButton("Discard") { model.send(.dismiss) }
                     }
                 }

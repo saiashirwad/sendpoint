@@ -288,8 +288,6 @@ final class PermissionStateTests: XCTestCase {
         await Task.detached {
             NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
         }.value
-        // A main-queue observer runs after the posting thread returns, so
-        // give the main queue a beat before reading the state.
         try? await Task.sleep(for: .milliseconds(100))
 
         XCTAssertEqual(state.localVoiceModel, .ready)

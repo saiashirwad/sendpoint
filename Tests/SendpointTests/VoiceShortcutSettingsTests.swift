@@ -38,8 +38,6 @@ final class VoiceShortcutSettingsTests: XCTestCase {
         }
     }
 
-    /// Dictation ships bound to ⌥Space. Clearing it turns dictation off, and
-    /// that must survive a relaunch even though the slot has a default.
     func testDictationIsOnByDefaultAndStaysOffOnceCleared() throws {
         try withDefaults { defaults in
             let shortcuts = ShortcutSettings(defaults: defaults)

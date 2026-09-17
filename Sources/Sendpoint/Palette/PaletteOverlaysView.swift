@@ -2,9 +2,6 @@ import Foundation
 import SendpointDomain
 import SwiftUI
 
-/// The floating ⌘K / ⌘P menus in the palette's corner: a dim tap-to-close
-/// layer with the grouped action or template rows and a filter field below
-/// them. Takes the shell-threaded projection plus small scalars.
 struct PaletteOverlaysView: View {
     let projection: PaletteProjection
     let overlay: PaletteOverlay?
@@ -92,29 +89,18 @@ struct OverlaySectionLabel: View {
     let section: PaletteActionSection
 
     var body: some View {
-        HStack(spacing: 8) {
-            SettingsLabel(section.label)
-            Spacer(minLength: 8)
-            if let detail = section.detail {
-                Text(detail)
-                    .font(.ui(11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, PaletteMetrics.horizontalPadding)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
+        SettingsLabel(section.label)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, PaletteMetrics.horizontalPadding)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
     }
 }
 
-/// The floating menu in the corner: grouped rows and a filter field below
-/// them, the way Raycast lays out its action panel.
 struct OverlayPanel<Rows: View>: View {
     let placeholder: String
     let emptyText: String
     let isEmpty: Bool
-    /// Index of the highlighted row; the list scrolls to keep it in view.
     let highlight: Int
     @Binding var query: String
     var focus: FocusState<PaletteField?>.Binding
@@ -133,13 +119,8 @@ struct OverlayPanel<Rows: View>: View {
                                 .frame(maxWidth: .infinity, minHeight: 40)
                         }
                     }
-                    .padding(.top, 2)
-                    .padding(.bottom, 8)
+                    .padding(.vertical, 6)
                 }
-                // Tab reaches these rows today (the overlay lets Tab fall
-                // through to the views), so they form one focus section with
-                // the filter field below. No key handling lives here: arrows
-                // and ↩ still go through the palette's global key monitor.
                 .focusSection()
                 .scrollIndicators(.hidden)
                 .frame(maxHeight: 400)
@@ -165,8 +146,6 @@ struct OverlayPanel<Rows: View>: View {
     }
 }
 
-/// The floating menu surface for the overlay menus: one rounded fill, one
-/// rim, one shadow. Lives here with its only caller.
 private struct OverlaySurface: ViewModifier {
     @Environment(\.colorScheme) private var scheme
 
@@ -184,10 +163,6 @@ private struct OverlaySurface: ViewModifier {
     }
 }
 
-/// One ⌘K action row: title plus keys, red when destructive. The Button's
-/// native activate already performs the row, so VoiceOver needs nothing
-/// extra. Hover only reports outward so the reducer moves the highlight;
-/// there is deliberately no hover wash, exactly as before.
 struct PaletteActionRow: View, Equatable {
     let item: PaletteActionItem
     let isHighlighted: Bool
@@ -195,16 +170,13 @@ struct PaletteActionRow: View, Equatable {
     let onPerform: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    /// Rendered inputs only: the whole action item (title, keys,
-    /// destructiveness, section) plus highlight. Closures are identities and
-    /// the color scheme arrives via the environment. When in doubt false.
     static func == (lhs: PaletteActionRow, rhs: PaletteActionRow) -> Bool {
         lhs.item == rhs.item && lhs.isHighlighted == rhs.isHighlighted
     }
 
     var body: some View {
         Button(action: onPerform) {
-            RowShell(style: .overlay, isHighlighted: isHighlighted, onHoverEnter: onHover) {
+            RowShell(isHighlighted: isHighlighted, onHoverEnter: onHover) {
                 HStack(spacing: 8) {
                     Text(item.title)
                         .font(.ui(13, weight: .medium))
@@ -218,14 +190,10 @@ struct PaletteActionRow: View, Equatable {
             }
         }
         .buttonStyle(.plain)
-        // No custom action: the Button's native activate already performs the
-        // row, so VoiceOver users need nothing extra here.
         .focusable()
     }
 }
 
-/// One ⌘P template row: active dot, name, and the "clears after copy" note.
-/// Same Button/no-custom-action contract as the action row.
 struct PaletteTemplateRow: View, Equatable {
     let template: Template
     let isHighlighted: Bool
@@ -234,9 +202,6 @@ struct PaletteTemplateRow: View, Equatable {
     let onSelect: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    /// Rendered inputs only: the whole template (name plus the clears-after
-    /// flag), highlight, and the active dot. Closures are identities and the
-    /// color scheme arrives via the environment. When in doubt false.
     static func == (lhs: PaletteTemplateRow, rhs: PaletteTemplateRow) -> Bool {
         lhs.template == rhs.template
             && lhs.isHighlighted == rhs.isHighlighted
@@ -245,7 +210,7 @@ struct PaletteTemplateRow: View, Equatable {
 
     var body: some View {
         Button(action: onSelect) {
-            RowShell(style: .overlay, isHighlighted: isHighlighted, onHoverEnter: onHover) {
+            RowShell(isHighlighted: isHighlighted, onHoverEnter: onHover) {
                 HStack(spacing: 10) {
                     Circle()
                         .fill(Ink.accent(scheme))

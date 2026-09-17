@@ -83,8 +83,6 @@ final class CapturePanelTests: XCTestCase {
     }
 
     func testCardAnchorReachesTheCardTop() {
-        // The footer's bottom edge sits one bottom padding above the card's
-        // bottom, so an anchor of this height ends exactly at the card's top.
         let anchor = VoiceCaptureLayout.cardAnchorHeight(lines: 3, fontSize: 13)
         XCTAssertEqual(
             anchor + VoiceCaptureLayout.cardPaddingBottom,

@@ -4,12 +4,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// The settings-boundary intent layer: one event per user action, routed
-/// through a single transition function on the owning type. These tests pin
-/// the transitions (draft updates, persistence writes, clamping, feedback
-/// text) without hosting SwiftUI views — the suite has no headless driver
-/// for settings-pane bindings, so pane-level tests are skipped in favor of
-/// covering every new transition function directly.
 @MainActor
 final class SettingsIntentTests: XCTestCase {
     func testTemplateEditorEventsUpdateOnlyTheirField() {
@@ -167,24 +161,22 @@ final class SettingsIntentTests: XCTestCase {
             keyCode: UInt16(kVK_ANSI_RightBracket),
             modifiers: [.control, .option]
         )
-        XCTAssertNil(registrar.updateShortcut(replacement, for: .nextStack))
-        XCTAssertEqual(settings.nextStackCombo, replacement)
+        XCTAssertNil(registrar.updateShortcut(replacement, for: .selectStack(2)))
+        XCTAssertEqual(settings.selectStackCombo(2), replacement)
 
         XCTAssertNil(registrar.updateShortcut(nil, for: .dictate))
         XCTAssertNil(settings.dictateCombo)
     }
 
-    func testStackSettingsIntentsSwitchAndCreate() async throws {
-        let first = Stack(name: "First")
+    func testStackSettingsIntentSwitchesAndIgnoresTheCurrentStack() async throws {
         let store = try await StackStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in }),
-            defaultStack: first
+            persistence: StorePersistence(load: { nil }, commit: { _ in })
         )
+        let first = store.stacks[0]
+        let second = store.stacks[1]
 
-        let second = Stack(name: "Second")
-        StackSettingsIntent.createAndSwitch(second).send(to: store)
+        StackSettingsIntent.switchTo(stackID: second.id).send(to: store)
         await store.waitForIdle()
-        XCTAssertEqual(store.stacks.count, 2)
         XCTAssertEqual(store.currentStackID, second.id)
 
         StackSettingsIntent.switchTo(stackID: first.id).send(to: store)
@@ -192,8 +184,6 @@ final class SettingsIntentTests: XCTestCase {
         XCTAssertEqual(store.currentStackID, first.id)
 
         StackSettingsIntent.switchTo(stackID: first.id).send(to: store)
-        await store.waitForIdle()
-        XCTAssertEqual(store.currentStackID, first.id)
         XCTAssertFalse(store.hasPendingMutations, "switching to the current stack enqueues nothing")
     }
 
@@ -208,9 +198,7 @@ final class SettingsIntentTests: XCTestCase {
             dictateReleased: {},
             copy: {},
             showStack: {},
-            switchStack: { _ in },
-            nextStack: {},
-            previousStack: {},
+            selectStack: { _ in },
             clear: {}
         )
     }

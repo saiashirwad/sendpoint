@@ -3,7 +3,6 @@ import SwiftUI
 
 // MARK: - Plumbing
 
-/// Reports a view's laid-out height upward.
 struct HeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -11,30 +10,21 @@ struct HeightKey: PreferenceKey {
     }
 }
 
-/// The AppKit scroll view behind a SwiftUI ScrollView, so a list can be
-/// scrolled by exact offsets. ScrollViewReader's scrollTo is a no-op on the
-/// palette's note list on macOS 14, whatever the timing.
 final class ScrollHandle {
     weak var scrollView: NSScrollView?
 
     var viewportHeight: CGFloat { scrollView?.contentView.bounds.height ?? 0 }
 
-    /// Whether a subview's frame, in the viewport's coordinates, ends at the
-    /// bottom edge, or above it when the content is too short to scroll.
     func isAtBottomEdge(_ frame: CGRect, margin: CGFloat = 6) -> Bool {
         frame.maxY + margin <= viewportHeight + 0.5
     }
 
-    /// Scrolls so `frame`, a subview's frame in the viewport's coordinates,
-    /// sits at the edge named by `anchor`. Returns false when the content
-    /// was too short to get there: its height lags the layout by a turn.
     @discardableResult
-    func reveal(_ frame: CGRect, anchor: UnitPoint, animated: Bool) -> Bool {
+    func reveal(_ frame: CGRect, anchor: UnitPoint) -> Bool {
         guard let scrollView, let document = scrollView.documentView else { return false }
         let clip = scrollView.contentView
         let viewport = clip.bounds.height
         let content = document.bounds.height
-        // AppKit measures from the bottom unless the document is flipped.
         let currentTop = document.isFlipped
             ? clip.bounds.origin.y
             : content - viewport - clip.bounds.origin.y
@@ -48,22 +38,12 @@ final class ScrollHandle {
         )
         var origin = clip.bounds.origin
         origin.y = document.isFlipped ? top : content - viewport - top
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.16
-                context.allowsImplicitAnimation = true
-                clip.animator().setBoundsOrigin(origin)
-            }
-        } else {
-            clip.setBoundsOrigin(origin)
-        }
+        clip.setBoundsOrigin(origin)
         scrollView.reflectScrolledClipView(clip)
         return abs(top - unclamped) < 0.5
     }
 }
 
-/// Placed inside a ScrollView's content, hands the enclosing scroll view
-/// to a ScrollHandle.
 struct ScrollProbe: NSViewRepresentable {
     let handle: ScrollHandle
 
@@ -100,13 +80,13 @@ struct ScrollProbe: NSViewRepresentable {
         }
 
         func attach() {
-            if let scrollView = enclosingScrollView { handle?.scrollView = scrollView }
+            guard let scrollView = enclosingScrollView else { return }
+            handle?.scrollView = scrollView
+            scrollView.scrollerStyle = .overlay
         }
     }
 }
 
-/// Tells SwiftUI whether the window it lives in is actually on screen, so
-/// live work like the level meter stops when the window is hidden.
 struct WindowVisibilityReporter: NSViewRepresentable {
     @Binding var isVisible: Bool
 
@@ -154,8 +134,6 @@ struct WindowVisibilityReporter: NSViewRepresentable {
         private func report(_ visible: Bool) {
             reportTask?.cancel()
             reportTask = Task { @MainActor [weak self] in
-                // Deliver outside the AppKit/SwiftUI attachment update. A newer
-                // visibility event or teardown cancels this pending delivery.
                 await Task.yield()
                 guard !Task.isCancelled, let self else { return }
                 self.reportTask = nil

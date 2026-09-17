@@ -51,7 +51,6 @@ struct SettingsView: View {
 
     @State private var tab: SettingsTab = .capture
 
-    /// The smallest the window goes; it can be dragged larger.
     static let size = CGSize(width: 920, height: 600)
     private static let sidebarWidth: CGFloat = 200
 
@@ -161,7 +160,6 @@ private struct SettingsSidebar: View {
     let onShowStack: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    /// Room for the traffic lights.
     private let topInset: CGFloat = 52
 
     var body: some View {
@@ -242,11 +240,6 @@ private struct SettingsSidebarItem: View {
     }
 }
 
-/// The corner of the sidebar that says what Sendpoint is doing right now.
-/// Until it can capture, that is the next permission or download, and
-/// clicking does it. Once it can, that is the current stack: where the
-/// next note lands, how full it is, when the last one arrived. Clicking
-/// opens it.
 private struct SettingsStatusCard: View {
     @Bindable var permissionState: PermissionState
     let storeHandle: SettingsStoreHandle
@@ -268,14 +261,12 @@ private struct SettingsStatusCard: View {
 
     private var showsStack: Bool { stage == .ready && storeHandle.store != nil }
 
-    /// Three lines, top to bottom: what kind of thing this is, the thing,
-    /// and its state.
     private var copy: (kicker: String, title: String, detail: String) {
         switch stage {
         case .ready:
-            if let stack = storeHandle.store?.currentStack {
-                ("Current stack", stack.name, stackStatusDetail(
-                    noteCount: stack.notes.count, latest: stack.notes.map(\.createdAt).max()
+            if let store = storeHandle.store, let current = StackUIFacts(store: store).current {
+                ("Current stack", current.name, stackStatusDetail(
+                    noteCount: current.noteCount, latest: store.currentNotes.map(\.createdAt).max()
                 ))
             } else {
                 ("Sendpoint", "Ready to capture", "Runs on this Mac")
@@ -352,7 +343,6 @@ private struct SettingsStatusCard: View {
         .accessibilityAddTraits(isActionable ? .isButton : [])
     }
 }
-
 
 // MARK: - Template dialogs
 

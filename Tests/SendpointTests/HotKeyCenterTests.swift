@@ -70,8 +70,6 @@ final class HotKeyCenterTests: XCTestCase {
         let comboB = KeyCombo(keyCode: UInt16(kVK_ANSI_B), modifiers: [.command])
         XCTAssertEqual(centerA.register(name: .capture, combo: comboA) { pressesA.append(1) }, .registered)
         XCTAssertEqual(centerA.register(name: .copy, combo: comboB) { pressesA.append(2) }, .registered)
-        // B's own id sequence restarts at 1 and claims the shared route for
-        // that id, mirroring Carbon's single global id namespace.
         XCTAssertEqual(centerB.register(name: .capture, combo: comboA) { pressesB += 1 }, .registered)
         HotKeyCenter.route(id: 2, released: false)
         XCTAssertEqual(pressesA, [2])

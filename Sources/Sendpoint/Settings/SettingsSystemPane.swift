@@ -45,7 +45,6 @@ struct SettingsSystemPane: View {
 }
 
 enum AppVersion {
-    /// "1.7 (42)", or nothing outside a built app.
     static var display: String? {
         let info = Bundle.main.infoDictionary
         guard let version = info?["CFBundleShortVersionString"] as? String else { return nil }

@@ -3,14 +3,14 @@ import SendpointDomain
 
 extension AppDelegate {
     func refreshStatusItem() {
-        let count = store?.currentNotes.count ?? 0
-        let stackName = store?.currentStack.name ?? "No stack"
+        let facts = store.map(StackUIFacts.init(store:))
+        let current = facts?.current
         statusItemController.setBaseTitle(
-            count > 0 ? " \(count)" : "",
-            tooltip: "\(stackName) · \(templates.activeTemplate.name)"
+            StatusMenuModel.title(for: current),
+            tooltip: "\(current?.name ?? "No stack") · \(templates.activeTemplate.name)"
         )
         statusItemController.rebuildMenu(
-            facts: store.map(StackUIFacts.init(store:)),
+            facts: facts,
             storeStatus: statusMenuStoreStatus,
             error: store?.error,
             hasPendingMutations: store?.hasPendingMutations == true,
@@ -30,9 +30,7 @@ extension AppDelegate {
             dictateReleased: { [weak self] in self?.captureController.send(.dictateReleased) },
             copy: { [weak self] in self?.copyMarkdown() },
             showStack: { [weak self] in self?.showStack() },
-            switchStack: { [weak self] reverse in self?.cycleStacks(reverse: reverse) },
-            nextStack: { [weak self] in self?.nextStack() },
-            previousStack: { [weak self] in self?.previousStack() },
+            selectStack: { [weak self] number in self?.selectStack(number) },
             clear: { [weak self] in self?.clearStack() }
         )
         let issues = hotKeyRegistrar.register(actions)
@@ -46,10 +44,7 @@ extension AppDelegate {
         case .typedNote: captureSelection()
         case .dictate: captureController.send(.dictateToggled)
         case .showStack: showStack()
-        case let .switchToStack(stackID): switchToStack(stackID)
-        case .quickSwitcher: showQuickSwitcher()
-        case .nextStack: nextStack()
-        case .previousStack: previousStack()
+        case let .selectStack(number): selectStack(number)
         case let .selectTemplate(templateID): requestTemplateSelection(templateID)
         case .copyMarkdown: copyMarkdown()
         case let .clearStack(stackID): clearStack(stackID)
@@ -81,7 +76,6 @@ extension AppDelegate {
         }
     }
 
-    /// The hotkey clears the current stack; an empty one only beeps.
     private func clearStack() {
         guard let store, !store.currentNotes.isEmpty else { NSSound.beep(); return }
         Diag.log("clearStack invoked, stack=\(store.currentStackID), count=\(store.currentNotes.count)")
@@ -94,10 +88,6 @@ extension AppDelegate {
 
     private func undoClear() {
         enqueueMenuMutation(.undoClear)
-    }
-
-    private func switchToStack(_ stackID: UUID) {
-        enqueueMenuMutation(.switchStack(stackID: stackID))
     }
 
     func requestTemplateSelection(_ templateID: UUID) {
@@ -127,40 +117,19 @@ extension AppDelegate {
     }
 
     func showStack() {
-        guard let store else { NSSound.beep(); return }
-        presentPalette(focus: .notes, highlighting: store.currentStackID)
-    }
-
-    private func showQuickSwitcher() {
-        presentPalette(focus: .stacks)
-    }
-
-    private func cycleStacks(reverse: Bool) {
-        guard let switcher else { NSSound.beep(); return }
-        switcher.press(reverse: reverse)
-    }
-
-    private func nextStack() {
-        guard let switcher else { NSSound.beep(); return }
-        switcher.step(1)
-    }
-
-    private func previousStack() {
-        guard let switcher else { NSSound.beep(); return }
-        switcher.step(-1)
-    }
-
-    func presentPalette(focus: PalettePane, highlighting stackID: UUID? = nil) {
         guard store != nil, let palette else { NSSound.beep(); return }
-        palette.show(focus: focus, highlighting: stackID)
+        palette.show()
+    }
+
+    private func selectStack(_ number: Int) {
+        guard let stackSelector else { NSSound.beep(); return }
+        stackSelector.select(number)
     }
 
     func buildPalette(store: StackStore) {
         palette = StackPaletteWindowController(
             store: store,
             settings: templates,
-            shortcuts: shortcuts,
-            voiceSettings: voiceSettings,
             export: exportController,
             surfaces: surfaces,
             onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }

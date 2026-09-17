@@ -6,29 +6,20 @@ final class StackPaletteModel {
     private(set) var state = PaletteWorkflow()
     let store: StackStore
     let settings: TemplateSettings
-    let shortcuts: ShortcutSettings
-    let voiceSettings: VoiceSettings
     @ObservationIgnored private let onSelectTemplate: (UUID) -> Void
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored private let export: ExportController
-    @ObservationIgnored private let confirmDelete: (UUID, [Stack], ClearedBatch?) -> Bool
     @ObservationIgnored private var flashTask: Task<Void, Never>?
     @ObservationIgnored private var pending: [PaletteEvent] = []
     @ObservationIgnored private var isDraining = false
 
-    init(store: StackStore, settings: TemplateSettings, shortcuts: ShortcutSettings,
-         voiceSettings: VoiceSettings, export: ExportController,
-         onSelectTemplate: @escaping (UUID) -> Void,
-         confirmDelete: ((UUID, [Stack], ClearedBatch?) -> Bool)? = nil) {
+    init(store: StackStore, settings: TemplateSettings,
+         export: ExportController,
+         onSelectTemplate: @escaping (UUID) -> Void) {
         self.store = store
         self.settings = settings
-        self.shortcuts = shortcuts
-        self.voiceSettings = voiceSettings
         self.export = export
         self.onSelectTemplate = onSelectTemplate
-        self.confirmDelete = confirmDelete ?? {
-            StackDialogs.confirmsDelete(stackID: $0, stacks: $1, lastCleared: $2)
-        }
     }
 
     var projection: PaletteProjection {
@@ -45,8 +36,6 @@ final class StackPaletteModel {
         set { send(.overlayQuery(newValue)) }
     }
 
-    /// Whether the event was handled. An event sent while another is being
-    /// applied waits its turn and reports itself handled.
     @discardableResult
     func send(_ event: PaletteEvent) -> Bool {
         if case .overlayHighlight = event {
@@ -61,7 +50,7 @@ final class StackPaletteModel {
         defer { isDraining = false }
         var handled = true
         while !pending.isEmpty {
-            var update = PaletteUpdate(state: state, context: projection.context, operationID: UUID(), now: Date())
+            var update = PaletteUpdate(state: state, context: projection.context, operationID: UUID())
             handled = update.update(pending.removeFirst())
             state = update.state
             for effect in update.effects { run(effect) }
@@ -74,9 +63,6 @@ final class StackPaletteModel {
         case let .mutate(id, mutation):
             store.mutate(mutation) { [weak self] outcome in self?.send(.mutationResult(id, outcome)) }
         case .retry: store.retryPendingMutations()
-        case let .confirmDelete(id):
-            let confirmed = confirmDelete(id, store.stacks, store.lastCleared)
-            send(.deleteDecision(id, confirmed: confirmed))
         case let .copyStack(id):
             export.copy(store: store, stackID: id, template: settings.activeTemplate) { [weak self] message in
                 self?.showFlash(message)

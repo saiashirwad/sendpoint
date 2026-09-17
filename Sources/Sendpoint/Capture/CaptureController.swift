@@ -2,15 +2,12 @@ import AppKit
 import Observation
 import SendpointDomain
 
-/// The microphone and recogniser behind a voice note. Tests substitute closures.
 struct VoiceRecorder {
-    /// Asks for microphone access if needed, then starts recording.
     var start: () async throws -> Void
     var stopAndTranscribe: () async throws -> String
     var discard: () -> Void
     var levelMeter: VoiceLevelMeter
     var chooseMicrophone: (String?) -> Void = { _ in }
-    /// Unified streaming reports cumulative hypotheses here; fakes ignore it.
     var observePartials: (@escaping @Sendable (String) -> Void) -> Void = { _ in }
     var warmUp: () -> Void = {}
 
@@ -38,7 +35,6 @@ private enum VoiceRecorderError: LocalizedError {
     var errorDescription: String? { "Microphone access is off. Turn it on in Settings › Voice." }
 }
 
-/// The windows a capture shows. Tests record the calls instead of opening panels.
 struct CaptureSurfaces {
     var prepare: () -> Void
     var show: (CaptureSurface) -> Void
@@ -59,7 +55,6 @@ struct CaptureSurfaces {
     }
 }
 
-/// TEA effect owner. The reducer owns workflow state; this owns native resources.
 @Observable
 final class CaptureController {
     private(set) var state = CaptureState()
@@ -73,8 +68,6 @@ final class CaptureController {
     @ObservationIgnored private let makeSurfaces: (CaptureController) -> CaptureSurfaces
     @ObservationIgnored private lazy var surfaces = makeSurfaces(self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
-    /// Actions sent while one is being applied wait their turn, so an effect
-    /// never sees state from halfway through another action.
     @ObservationIgnored private var pending: [CaptureAction] = []
     @ObservationIgnored private var isDraining = false
     private enum Work: Hashable { case selection, recording, transcription, insertion, failure }
@@ -84,7 +77,6 @@ final class CaptureController {
     var onStatusChange: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
-    /// The capture's explicit destination, unaffected by global stack switching.
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
         let id = state.session?.destinationStackID ?? store.currentStackID
@@ -107,7 +99,7 @@ final class CaptureController {
         get {
             switch state.session?.phase {
             case let .editing(note): return note
-            case let .saving(request), let .saveFailed(request, _, _, _): return request.note.body
+            case let .saving(request), let .saveFailed(request, _, _): return request.note.body
             default: return ""
             }
         }
@@ -131,8 +123,6 @@ final class CaptureController {
         self.makeSurfaces = surfaces
     }
 
-    /// The app dictation pastes into. Sendpoint's own windows are never a
-    /// target, so a press over Settings does nothing.
     static func frontmostApp() -> DictationTarget? {
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.bundleIdentifier != Bundle.main.bundleIdentifier else { return nil }
@@ -145,7 +135,6 @@ final class CaptureController {
         self.store = store
     }
 
-    /// Builds the overlay and the note box ahead of the first hotkey press.
     func warmUp() {
         guard !state.isTornDown else { return }
         recorder.chooseMicrophone(voiceSettings.inputDeviceUID)
@@ -179,8 +168,6 @@ final class CaptureController {
         voiceSettings.send(.transcriptionPreviewOpacity(percent))
     }
 
-    /// One settings intent per stepper tap. The read-modify-write lives here
-    /// instead of in the view; `VoiceSettings` still clamps the result.
     func stepTranscriptionPreviewLines(bySteps steps: Int) {
         voiceSettings.send(.transcriptionPreviewLines(transcriptionPreviewLines + steps))
     }
@@ -195,8 +182,6 @@ final class CaptureController {
         ))
     }
 
-    /// One settings intent per microphone pick. The device-name lookup lives
-    /// here instead of in the view, next to the stored UID it describes.
     func chooseMicrophone(uid: String?, devices: [AudioInputDevice]) {
         let name = uid.flatMap { id in devices.first { $0.uid == id }?.name }
         voiceSettings.send(.inputDevice(uid: uid, name: name))
@@ -207,12 +192,6 @@ final class CaptureController {
         if let context = beginContext() { send(.begin(.text, context)) }
     }
 
-    func saveToCurrentStack() {
-        if let store { send(.retarget(store.currentStackID)) }
-    }
-
-    /// What a capture needs before the reducer sees it. A refusal is reported
-    /// here, once, and the reducer hears nothing.
     private func beginContext() -> NoteCaptureContext? {
         guard !state.isTornDown else { return nil }
         guard let store, store.state != .tornDown else {
@@ -256,9 +235,6 @@ final class CaptureController {
                 })
             }
         case let .startRecording(context):
-            // Bind every callback to the recording that installed it. Looking
-            // up the current session when a queued callback is delivered can
-            // mislabel an old hypothesis as belonging to a newer capture.
             recorder.observePartials { [weak self] text in
                 Task { @MainActor [weak self] in
                     self?.send(.voicePartial(context, text))
@@ -280,11 +256,9 @@ final class CaptureController {
         case let .commit(request):
             guard let store else { return }
             store.mutate(.addNote(stackID: request.destinationStackID, note: request.note)) {
-                [weak self, weak store] outcome in
+                [weak self] outcome in
                 guard let self, !self.state.isTornDown else { return }
-                self.send(.saved(request, outcome, destinationExists: store?.stacks.contains {
-                    $0.id == request.destinationStackID
-                } ?? false))
+                self.send(.saved(request, outcome))
             }
         case let .switchStack(id): store?.mutate(.switchStack(stackID: id))
         case .retry: store?.retryPendingMutations()
@@ -321,7 +295,6 @@ final class CaptureController {
                 self.tasks[work] = nil
                 self.send(action)
             } catch is CancellationError {
-                // Cancellation and resource release belong to cancelWork().
             } catch {
                 guard !Task.isCancelled, let self, self.state.session?.context == context else { return }
                 self.tasks[work] = nil

@@ -1,11 +1,6 @@
 import XCTest
 @testable import Sendpoint
 
-/// Ownership and teardown tests for the lifecycle-task consolidation: the
-/// NoteFrames disarm, the single-flight voice-model poll, and the
-/// mic-preview owner. None of these needs microphone hardware, panels, or
-/// windows: the poll reads an injected file-existence closure and the mic
-/// owner runs against a fake engine.
 @MainActor
 final class NoteFramesDisarmTests: XCTestCase {
     func testDisarmClearsLandingSoSettleNoOps() {
@@ -36,12 +31,9 @@ final class NoteFramesDisarmTests: XCTestCase {
         let id = UUID()
         frames.frames[id] = CGRect(x: 0, y: 400, width: 100, height: 100)
 
-        // No scroll view is attached, so the landing cannot complete and a
-        // retry is scheduled on the main queue with a weak self capture.
         frames.land(on: id)
         frames.disarm()
 
-        // Let the scheduled retry fire; it must no-op instead of relanding.
         try? await Task.sleep(for: .milliseconds(100))
         XCTAssertNil(frames.landing)
     }
@@ -106,7 +98,6 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
         ))
         XCTAssertFalse(state.isWatchingVoiceModel)
 
-        // Two presented windows (Setup + Settings) each hold one wait.
         state.startWatchingVoiceModel(interval: .milliseconds(5))
         state.startWatchingVoiceModel(interval: .milliseconds(5))
         XCTAssertTrue(state.isWatchingVoiceModel)
@@ -224,7 +215,6 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
 
         owner.start(uid: "a")
         await waitUntil { recorder.startedUIDs.count == 1 }
-        // One stop for the start clearing the previous engine first.
         XCTAssertEqual(recorder.stopCount, 1)
         owner.stop()
         XCTAssertFalse(owner.isActive)
@@ -248,9 +238,6 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
         await gate.release()
         await waitUntil { recorder.startedUIDs.count == 2 }
         XCTAssertEqual(recorder.startedUIDs, ["a", "b"])
-        // One stop for the first start's pre-clear, one for the superseded
-        // bring-up's cleanup, one for the restart clearing the stale engine
-        // before starting its own.
         XCTAssertEqual(recorder.stopCount, 3)
         XCTAssertTrue(owner.isActive)
 

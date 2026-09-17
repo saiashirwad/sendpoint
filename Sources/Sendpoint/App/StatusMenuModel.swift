@@ -1,17 +1,12 @@
 import AppKit
 import SendpointDomain
 
-/// One command the status menu can invoke. The associated value, when there is
-/// one, identifies the stack or template the command applies to.
 enum StatusMenuAction: Hashable {
     case voiceNote
     case typedNote
     case dictate
     case showStack
-    case switchToStack(UUID)
-    case quickSwitcher
-    case nextStack
-    case previousStack
+    case selectStack(Int)
     case selectTemplate(UUID)
     case copyMarkdown
     case clearStack(UUID)
@@ -22,9 +17,6 @@ enum StatusMenuAction: Hashable {
     case quit
 }
 
-/// One rendered menu item, still free of `NSMenuItem`. A nil action is a
-/// disabled item; a nil `keyEquivalentModifiers` leaves the item's default
-/// modifier mask alone.
 struct StatusMenuEntry: Equatable {
     var title: String
     var action: StatusMenuAction?
@@ -62,8 +54,6 @@ enum StatusMenuStoreStatus: Equatable {
     case unavailable(String)
 }
 
-/// Builds the status menu as plain values. `AppDelegate` only supplies the
-/// current store and settings facts, so the menu stays testable without AppKit.
 enum StatusMenuModel {
     static func items(
         facts: StackUIFacts?,
@@ -85,7 +75,6 @@ enum StatusMenuModel {
         menu.append(.entry(entry("Typed Note",
             action: ready ? .typedNote : nil,
             combo: shortcuts.captureCombo)))
-        // Dictation is off when its shortcut is unbound, so the item goes too.
         if let combo = shortcuts.dictateCombo {
             menu.append(.entry(entry("Dictate",
                 action: ready ? .dictate : nil,
@@ -96,28 +85,14 @@ enum StatusMenuModel {
             combo: shortcuts.stackCombo)))
 
         if let facts, facts.current != nil {
-            menu.append(.entry(entry(facts.currentTitle)))
-            var stackMenu: [StatusMenuItem] = []
+            menu.append(.separator)
             for stack in facts.stacks {
-                stackMenu.append(.entry(entry("\(stack.name) — \(stack.countLabel)",
-                    action: .switchToStack(stack.id),
-                    checked: stack.isCurrent)))
+                menu.append(.entry(entry("\(stack.name) — \(stack.isEmpty ? "Empty" : stack.countLabel)",
+                    action: .selectStack(stack.number),
+                    checked: stack.isCurrent,
+                    combo: shortcuts.selectStackCombo(stack.number))))
             }
-            stackMenu.append(.separator)
-            stackMenu.append(.entry(entry("Switch Stack…",
-                action: .quickSwitcher,
-                combo: shortcuts.switchStackCombo)))
-            if let combo = shortcuts.nextStackCombo {
-                stackMenu.append(.entry(entry("Next Stack",
-                    action: .nextStack,
-                    combo: combo)))
-            }
-            if let combo = shortcuts.previousStackCombo {
-                stackMenu.append(.entry(entry("Previous Stack",
-                    action: .previousStack,
-                    combo: combo)))
-            }
-            menu.append(.submenu(title: "Stack", items: stackMenu))
+            menu.append(.separator)
         }
 
         var templateMenu: [StatusMenuItem] = []
@@ -178,7 +153,11 @@ enum StatusMenuModel {
         return menu
     }
 
-    /// The disabled copy item explains why there is nothing to export yet.
+    static func title(for current: StackItemFacts?) -> String {
+        guard let current else { return "" }
+        return current.isEmpty ? " \(current.number)" : " \(current.number) · \(current.noteCount)"
+    }
+
     private static func unavailableTitle(for status: StatusMenuStoreStatus) -> String {
         switch status {
         case .loading:
@@ -190,9 +169,6 @@ enum StatusMenuModel {
         }
     }
 
-    /// Mirrors menu-item construction for one command: a valid global shortcut
-    /// is shown beside the item, and otherwise its display string becomes the
-    /// tooltip.
     private static func entry(
         _ title: String,
         action: StatusMenuAction? = nil,

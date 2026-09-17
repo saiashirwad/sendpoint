@@ -14,219 +14,217 @@ final class PaletteWorkflowTests: XCTestCase {
 
     private var stacks: [Stack] {
         [
-            Stack(id: firstStackID, name: "Reading", notes: [
+            Stack(id: firstStackID, notes: [
                 Note(id: firstNoteID, subject: .standalone, body: "One"),
                 Note(id: secondNoteID, subject: .selection(quote: "quote"), body: "Two"),
                 Note(id: thirdNoteID, subject: .standalone, body: "Three"),
             ]),
-            Stack(id: secondStackID, name: "Writing", notes: [
+            Stack(id: secondStackID, notes: [
                 Note(id: fourthNoteID, subject: .standalone, body: "Four"),
             ]),
         ]
     }
 
-    func testCycleCannotReplaceAnInlineDraftOrReopenAfterTeardown() {
+    func testOpenShowsTheCurrentStackAtItsNewestNote() {
         var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
-        harness.send(.key(.activate, textHasSelection: false))
-        let draft = harness.state.inlineEdit
-        XCTAssertNotNil(draft)
-        harness.send(.previewStack(secondStackID))
-        XCTAssertEqual(harness.state.presentation, .browsing)
-        XCTAssertEqual(harness.state.inlineEdit, draft)
+        harness.send(.open)
+
+        XCTAssertEqual(harness.projection.shownStack?.id, firstStackID)
+        XCTAssertEqual(harness.state.shownStackID, firstStackID)
+        XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
+        XCTAssertEqual(harness.state.focusRequest.field, .search)
+    }
+
+    func testNothingReopensAfterTeardown() {
+        var harness = makeHarness()
+        harness.send(.open)
         harness.send(.teardown)
-        harness.send(.previewStack(secondStackID))
+        XCTAssertEqual(harness.closeCount, 1)
+
+        harness.send(.open)
+        harness.send(.teardown)
         XCTAssertEqual(harness.state.lifecycle, .tornDown)
+        XCTAssertTrue(harness.effects.isEmpty, "teardown is idempotent")
     }
 
-    func testTabAndArrowsToggleFocusAndClearTheQuery() {
+    func testArrowsAreConsumedAndMoveNotesOnce() {
         var harness = makeHarness()
-        harness.send(.open(.stacks, highlighting: firstStackID))
-        XCTAssertEqual(harness.state.focusedPane, .stacks)
-
-        harness.send(.query("rea"))
-        harness.send(.key(.tab, textHasSelection: false))
-        XCTAssertEqual(harness.state.focusedPane, .notes)
-        XCTAssertEqual(harness.state.query, "", "flipping focus clears the query")
-
-        harness.send(.key(.backTab, textHasSelection: false))
-        XCTAssertEqual(harness.state.focusedPane, .stacks)
-
-        harness.send(.query("rea"))
-        XCTAssertFalse(harness.send(.key(.right, textHasSelection: false)),
-            "a typed query keeps the arrow keys in the field")
-        XCTAssertEqual(harness.state.focusedPane, .stacks)
-
-        harness.send(.query(""))
-        harness.send(.key(.right, textHasSelection: false))
-        XCTAssertEqual(harness.state.focusedPane, .notes)
-        harness.send(.key(.left, textHasSelection: false))
-        XCTAssertEqual(harness.state.focusedPane, .stacks)
-    }
-
-    func testChoosingANoteFromTheSidebarMovesFocusAndClearsTheQuery() {
-        var harness = makeHarness()
-        harness.send(.open(.stacks, highlighting: firstStackID))
-        harness.send(.query("rea"))
-
-        harness.send(.chooseNote(secondNoteID))
-        XCTAssertEqual(harness.state.focusedPane, .notes)
-        XCTAssertEqual(harness.state.query, "", "the stack query must not become a note query")
-        XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
-        XCTAssertNil(harness.state.inlineEdit, "Selecting a note must not start editing")
-        harness.send(.key(.activate, textHasSelection: false))
-        XCTAssertEqual(harness.state.inlineEdit?.noteID, secondNoteID)
-    }
-
-    func testOpenNotesHighlightsTheNewestNote() {
-        var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
-
-        XCTAssertEqual(harness.state.focusedPane, .notes)
-        XCTAssertEqual(harness.state.stackState.highlight, .stack(firstStackID))
-        XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID,
-            "the show-stack path lands on the newest note")
-    }
-
-    func testSidebarArrowsPreviewEachStackAtItsNewestNote() {
-        var harness = makeHarness()
-        harness.send(.open(.stacks, highlighting: firstStackID))
-        XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
-
-        harness.send(.key(.down, textHasSelection: false))
-        XCTAssertEqual(harness.state.stackState.highlight, .stack(secondStackID))
-        XCTAssertEqual(harness.state.noteState.highlight, fourthNoteID)
-
-        harness.send(.key(.up, textHasSelection: false))
-        XCTAssertEqual(harness.state.stackState.highlight, .stack(firstStackID))
-        XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
-    }
-
-    func testMonitorArrowsAreConsumedAndMoveNotesOnce() {
-        var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
+        harness.send(.open)
 
         XCTAssertTrue(harness.send(.key(.up, textHasSelection: false)))
         XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
         XCTAssertTrue(harness.send(.key(.down, textHasSelection: false)))
         XCTAssertEqual(harness.state.noteState.highlight, thirdNoteID)
-        XCTAssertTrue(harness.send(.key(.left, textHasSelection: false)))
-        XCTAssertEqual(harness.state.focusedPane, .stacks)
-        XCTAssertTrue(harness.send(.key(.right, textHasSelection: false)))
-        XCTAssertEqual(harness.state.focusedPane, .notes)
+        XCTAssertTrue(harness.send(.key(.down, textHasSelection: false)))
+        XCTAssertEqual(harness.state.noteState.highlight, firstNoteID, "the highlight wraps")
     }
 
-    func testInlineEditorsDeclineArrowsWithoutChangingDraftOrHighlight() {
-        for action: PaletteAction in [.editNote(secondNoteID), .renameStack(firstStackID), .newStack] {
-            var harness = makeHarness()
-            harness.send(.open(.notes, highlighting: firstStackID))
-            harness.send(.perform(action))
-            harness.send(.editText("Draft"))
-            let draft = harness.state.inlineEdit
-            let note = harness.state.noteState.highlight
-            let stack = harness.state.stackState.highlight
-            let pane = harness.state.focusedPane
-            XCTAssertNotNil(draft)
+    func testTheNoteEditorDeclinesArrowsWithoutChangingDraftOrHighlight() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.editText("Draft"))
+        let draft = harness.state.inlineEdit
+        XCTAssertEqual(draft, PaletteEdit(stackID: firstStackID, noteID: secondNoteID, text: "Draft"))
 
-            for key: PaletteKey in [.up, .down, .left, .right] {
-                XCTAssertFalse(harness.send(.key(key, textHasSelection: false)))
-                XCTAssertEqual(harness.state.inlineEdit, draft)
-                XCTAssertEqual(harness.state.noteState.highlight, note)
-                XCTAssertEqual(harness.state.stackState.highlight, stack)
-                XCTAssertEqual(harness.state.focusedPane, pane)
-                XCTAssertTrue(harness.effects.isEmpty)
-            }
+        for key: PaletteKey in [.up, .down, .optionUp, .commandDigit(2)] {
+            XCTAssertFalse(harness.send(.key(key, textHasSelection: false)))
+            XCTAssertEqual(harness.state.inlineEdit, draft)
+            XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
+            XCTAssertTrue(harness.effects.isEmpty)
         }
     }
 
-    func testOverlayConsumesVerticalArrowsWithoutMovingUnderlyingRows() {
+    func testOverlayConsumesVerticalArrowsWithoutMovingTheNoteHighlight() {
         var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
+        harness.send(.open)
         harness.send(.toggleOverlay(.actions))
         let note = harness.state.noteState.highlight
-        let stack = harness.state.stackState.highlight
 
         XCTAssertTrue(harness.send(.key(.down, textHasSelection: false)))
         XCTAssertEqual(harness.state.overlayHighlight, 1)
         XCTAssertTrue(harness.send(.key(.up, textHasSelection: false)))
         XCTAssertEqual(harness.state.overlayHighlight, 0)
-        XCTAssertFalse(harness.send(.key(.left, textHasSelection: false)))
-        XCTAssertFalse(harness.send(.key(.right, textHasSelection: false)))
         XCTAssertEqual(harness.state.noteState.highlight, note)
-        XCTAssertEqual(harness.state.stackState.highlight, stack)
-        XCTAssertEqual(harness.state.focusedPane, .notes)
     }
 
-    func testCommandDigitsSwitchStacksFromEitherPane() {
+    func testCommandDigitsAndTheStripSelectStacksByNumber() {
         var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
+        harness.send(.open)
+
         harness.send(.key(.commandDigit(2), textHasSelection: false))
-
         XCTAssertEqual(harness.mutation, .switchStack(stackID: secondStackID))
+
+        harness = makeHarness()
+        harness.send(.open)
+        harness.send(.selectStack(1))
+        XCTAssertNil(harness.mutation, "the current stack needs no switch")
+        XCTAssertFalse(harness.state.isBusy)
+
+        harness.send(.key(.commandDigit(StackDocument.stackCount + 1), textHasSelection: false))
+        XCTAssertNil(harness.mutation)
+        XCTAssertEqual(harness.beepCount, 1)
     }
 
-    func testStackDeletedUnderTheNotePaneKeepsAPendingDraftUntilRejection() {
+    func testTheViewerFollowsAStackSwitchMadeElsewhere() {
         var harness = makeHarness()
-        harness.send(.open(.notes, highlighting: firstStackID))
-        harness.send(.perform(.editNote(firstNoteID)))
-        harness.send(.editText("changed"))
-        harness.send(.commitEdit)
+        harness.send(.open)
+        harness.send(.query("tw"))
+        XCTAssertEqual(harness.projection.noteListing.ids, [secondNoteID])
 
-        guard let mutationID = harness.mutationID,
-              case .saving = harness.state.interaction else {
-            return XCTFail("committing a note draft must enqueue a mutation")
-        }
-        XCTAssertEqual(harness.mutation,
-            .updateNoteBody(stackID: firstStackID, noteID: firstNoteID, body: "changed"))
-
-        // The stack vanishes while the mutation is still out.
-        harness.context = makeContext(stacks: Array(stacks.dropFirst()))
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
         harness.send(.documentChanged)
 
-        XCTAssertEqual(harness.state.focusedPane, .notes, "the pane stays where it was")
-        XCTAssertEqual(harness.state.stackState.highlight, .stack(secondStackID),
-            "the sidebar falls back to a stack that still exists")
-        XCTAssertEqual(harness.state.noteState.highlight, fourthNoteID,
-            "the note pane follows the fallback stack")
-        guard case let .saving(pending) = harness.state.interaction else {
-            return XCTFail("a pending draft survives the document change")
-        }
-        XCTAssertEqual(pending.draft?.text, "changed")
-
-        harness.send(.mutationResult(mutationID, .rejected("The target stack no longer exists.")))
-        guard case let .failed(failed, message, retryable) = harness.state.interaction else {
-            return XCTFail("the rejection must land in the failed state")
-        }
-        XCTAssertEqual(message, "The target stack no longer exists.")
-        XCTAssertFalse(retryable)
-        XCTAssertEqual(failed.draft?.text, "changed")
-
-        harness.send(.cancelEdit)
-        if case .failed = harness.state.interaction {
-            XCTFail("dismissing a failed save must return to browsing")
-        }
+        XCTAssertEqual(harness.projection.shownStack?.id, secondStackID)
+        XCTAssertEqual(harness.state.shownStackID, secondStackID)
+        XCTAssertEqual(harness.state.query, "", "a search belongs to the stack it was typed in")
+        XCTAssertEqual(harness.state.noteState.highlight, fourthNoteID)
+        XCTAssertTrue(harness.effects.isEmpty)
     }
 
-    func testSearchScopeAndReturnActionFollowThePreviewedStackAndPane() {
+    func testADraftIsSavedToTheStackItBeganInWhenTheCurrentStackChanges() throws {
         var harness = makeHarness()
-        harness.send(.open(.stacks, highlighting: secondStackID))
-        var projection = PaletteProjection(state: harness.state, context: harness.context)
-        XCTAssertEqual(projection.searchPlaceholder, "Find or create a stack")
-        XCTAssertEqual(projection.primaryAction?.action, .switchToStack(secondStackID))
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.editText("Finished elsewhere"))
 
-        harness.send(.focusPane(.notes))
-        projection = PaletteProjection(state: harness.state, context: harness.context)
-        XCTAssertEqual(projection.searchPlaceholder, "Search notes in Writing")
-        XCTAssertEqual(projection.primaryAction?.action, .editNote(fourthNoteID))
-        harness.send(.query("One"))
-        projection = PaletteProjection(state: harness.state, context: harness.context)
-        XCTAssertTrue(projection.noteListing.notes.isEmpty, "Search must stay in the named stack")
-        XCTAssertNil(projection.primaryAction, "An empty result must not advertise Return to edit")
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+        harness.send(.documentChanged)
+
+        XCTAssertEqual(
+            harness.mutation,
+            .updateNoteBody(stackID: firstStackID, noteID: secondNoteID, body: "Finished elsewhere")
+        )
+        XCTAssertEqual(harness.projection.shownStack?.id, secondStackID)
+        XCTAssertEqual(harness.state.noteState.highlight, fourthNoteID)
+
+        harness.send(.mutationResult(try XCTUnwrap(harness.mutationID), .committed))
+        XCTAssertNil(harness.state.inlineEdit)
+        XCTAssertFalse(harness.state.isBusy)
+        XCTAssertEqual(harness.projection.shownStack?.id, secondStackID)
+    }
+
+    func testAFailedSaveForAnotherStackIsNamedByItsStack() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.editText("Draft"))
+        harness.send(.commitEdit)
+        let id = try XCTUnwrap(harness.mutationID)
+
+        harness.send(.mutationResult(id, .commitFailed("disk full")))
+        XCTAssertEqual(harness.projection.problem, "disk full")
+
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+        harness.send(.documentChanged)
+        XCTAssertEqual(harness.projection.problem, "Stack 1: disk full")
+        XCTAssertEqual(harness.state.inlineEdit?.text, "Draft", "the draft waits for a retry")
+
+        harness.send(.retry)
+        harness.send(.mutationResult(id, .committed))
+        XCTAssertNil(harness.projection.problem)
+        XCTAssertNil(harness.state.inlineEdit)
+    }
+
+    func testAResultForAnotherOperationIsIgnored() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.clearStack))
+        XCTAssertTrue(harness.state.isBusy)
+
+        harness.send(.mutationResult(UUID(), .committed))
+        XCTAssertTrue(harness.state.isBusy)
+    }
+
+    func testStackActionsAlwaysMeanTheCurrentStack() {
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+        harness.send(.open)
+
+        harness.send(.key(.shiftCommandDelete, textHasSelection: false))
+        XCTAssertEqual(harness.mutation, .clearStack(stackID: secondStackID))
+
+        harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+        harness.send(.open)
+        harness.send(.key(.shiftCommand("c"), textHasSelection: false))
+        XCTAssertEqual(harness.copiedStackID, secondStackID)
+
+        harness.send(.key(.commandDelete, textHasSelection: false))
+        XCTAssertEqual(harness.mutation, .removeNote(stackID: secondStackID, noteID: fourthNoteID))
+    }
+
+    func testAnEmptyStackOffersNothingToCopyOrClear() {
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, currentStackID: paddedStacks(stacks)[2].id)
+        harness.send(.open)
+
+        XCTAssertEqual(harness.projection.actionItems.map(\.action), [.chooseTemplate])
+        harness.send(.key(.shiftCommandDelete, textHasSelection: false))
+        XCTAssertNil(harness.mutation)
+        XCTAssertEqual(harness.beepCount, 1)
+        XCTAssertTrue(harness.send(.key(.activate, textHasSelection: false)))
+        XCTAssertEqual(harness.beepCount, 1)
+        XCTAssertNil(harness.state.inlineEdit)
+    }
+
+    func testEscapeClearsTheQueryBeforeClosing() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.query("one"))
+
+        harness.send(.key(.escape, textHasSelection: false))
+        XCTAssertEqual(harness.state.query, "")
+        XCTAssertEqual(harness.state.lifecycle, .open)
+
+        harness.send(.key(.escape, textHasSelection: false))
+        XCTAssertEqual(harness.state.lifecycle, .closed)
+        XCTAssertEqual(harness.closeCount, 1)
     }
 
     func testOverlayHighlightWithCurrentIndexIsANoOp() {
         var harness = makeHarness()
-        harness.send(.open(.stacks, highlighting: firstStackID))
+        harness.send(.open)
         harness.send(.toggleOverlay(.actions))
         XCTAssertEqual(harness.state.overlayHighlight, 0)
 
@@ -247,9 +245,15 @@ final class PaletteWorkflowTests: XCTestCase {
         Harness(state: PaletteWorkflow(), context: makeContext(stacks: stacks))
     }
 
+    private let padding = (0..<StackDocument.stackCount).map { _ in Stack() }
+
+    private func paddedStacks(_ leading: [Stack]) -> [Stack] {
+        leading + padding.dropFirst(leading.count)
+    }
+
     private func makeContext(stacks: [Stack], currentStackID: UUID? = nil) -> PaletteContext {
         PaletteContext(
-            stacks: stacks,
+            stacks: paddedStacks(stacks),
             currentStackID: currentStackID ?? stacks[0].id,
             lastCleared: nil,
             templates: [.plain],
@@ -266,11 +270,28 @@ private struct Harness {
 
     @discardableResult
     mutating func send(_ event: PaletteEvent) -> Bool {
-        var update = PaletteUpdate(state: state, context: context, operationID: UUID(), now: Date())
+        var update = PaletteUpdate(state: state, context: context, operationID: UUID())
         let handled = update.update(event)
         state = update.state
         effects = update.effects
         return handled
+    }
+
+    var projection: PaletteProjection { PaletteProjection(state: state, context: context) }
+
+    var beepCount: Int {
+        effects.filter { if case .beep = $0 { return true } else { return false } }.count
+    }
+
+    var closeCount: Int {
+        effects.filter { if case .close = $0 { return true } else { return false } }.count
+    }
+
+    var copiedStackID: UUID? {
+        for effect in effects {
+            if case let .copyStack(id) = effect { return id }
+        }
+        return nil
     }
 
     var mutationID: UUID? {

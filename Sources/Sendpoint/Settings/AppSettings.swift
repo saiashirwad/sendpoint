@@ -8,7 +8,6 @@ enum StackExportMode: Equatable, Sendable {
 
     init(pasteDirectly: Bool) { self = pasteDirectly ? .paste : .copy }
 
-    /// The shortcut row in Settings.
     var shortcutTitle: String {
         switch self {
         case .paste: "Paste the stack"
@@ -31,9 +30,6 @@ enum StackExportMode: Equatable, Sendable {
     }
 }
 
-/// Every mutation the settings pages can make to `AppSettings`. Views send
-/// one event per user action, then run their `onSettingsChanged` effect, as
-/// before; the mode mapping lives here instead of in the view.
 enum AppSettingsEvent: Equatable {
     case launchAtLogin(Bool)
     case exportMode(StackExportMode)
@@ -107,9 +103,6 @@ final class AppSettings {
         }
     }
 
-    /// The single transition for settings-page mutations. Each case delegates
-    /// to its existing setter, so persistence writes and validation are
-    /// unchanged; callers run `onSettingsChanged` afterwards, as before.
     func send(_ event: AppSettingsEvent) {
         switch event {
         case .launchAtLogin(let enabled): setLaunchAtLogin(enabled)

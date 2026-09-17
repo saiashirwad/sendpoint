@@ -91,7 +91,6 @@ final class PromptComposerTests: XCTestCase {
 
     private func makeStack() -> Stack {
         Stack(
-            name: "Reading",
             notes: [
                 Note(
                     subject: .selection(quote: "First line\nSecond line\n\nFourth line"),
@@ -103,8 +102,7 @@ final class PromptComposerTests: XCTestCase {
                     body: "A standalone thought",
                     createdAt: date
                 ),
-            ],
-            createdAt: date
+            ]
         )
     }
 }

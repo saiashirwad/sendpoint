@@ -2,23 +2,15 @@ import AppKit
 import SwiftUI
 
 // MARK: - Settings chrome
-//
-// Every page is sections: a mono label over flat rows separated by
-// hairlines. The sidebar names the page, so nothing else does. Nothing is
-// boxed.
 
 nonisolated enum SettingsMetrics {
-    /// Height of a plain row.
     static let rowHeight: CGFloat = 44
-    /// Gap between one section and the next.
     static let sectionSpacing: CGFloat = 28
-    /// Gap between a section label and its first row.
     static let labelSpacing: CGFloat = 3
     static let contentMaxWidth: CGFloat = 640
     static let pageInset: CGFloat = 40
 }
 
-/// Small mono caps over a group of rows.
 struct SettingsLabel: View {
     let text: String
 
@@ -34,8 +26,6 @@ struct SettingsLabel: View {
     }
 }
 
-/// A state of the world, said the way an instrument would: small mono
-/// caps, letterspaced, a step brighter than a section label.
 struct Readout: View {
     let text: String
 
@@ -51,7 +41,6 @@ struct Readout: View {
     }
 }
 
-/// A label, its rows, and an optional line of small print beneath.
 struct SettingsSection<Content: View>: View {
     let label: String
     var footnote: String? = nil
@@ -76,7 +65,6 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
-/// One quiet sentence.
 struct SettingsFootnote: View {
     let text: String
 
@@ -90,8 +78,6 @@ struct SettingsFootnote: View {
     }
 }
 
-/// Title, an inline hint in a quieter voice, and the control at the
-/// trailing edge. `detail` sits under the title, for a short explanation.
 struct SettingsRow<Trailing: View>: View {
     let title: String
     let hint: String?
@@ -138,8 +124,6 @@ struct SettingsRow<Trailing: View>: View {
     }
 }
 
-/// A row whose control is not a single line: chips, a picker with a
-/// meter under it. The control sits under the title, left-aligned.
 struct SettingsStackedRow<Content: View>: View {
     let title: String?
     @ViewBuilder let content: () -> Content
@@ -186,7 +170,6 @@ struct SettingsToggleRow: View {
     }
 }
 
-/// A compact plus/minus control for a small closed range.
 struct SettingsStepperRow: View {
     let title: String
     let valueText: String
@@ -273,11 +256,6 @@ struct SettingsDivider: View {
     var body: some View { Hairline() }
 }
 
-/// A polite VoiceOver announcement on macOS, where SwiftUI has no
-/// `.accessibilityLiveRegion` modifier. Anchored at the key window, so no
-/// extra element enters the accessibility tree and layout is untouched.
-/// Call it from `.onChange` when a status block's text changes. A no-op
-/// when there is no key window (Previews, tests) or the message is empty.
 @MainActor
 func announcePolitely(_ message: String) {
     guard !message.isEmpty, let window = NSApp.keyWindow else { return }
@@ -288,7 +266,6 @@ func announcePolitely(_ message: String) {
     )
 }
 
-/// A small anchored prompt: type a name, press Return.
 struct NamePopover: View {
     let prompt: String
     let placeholder: String
@@ -334,7 +311,6 @@ struct NamePopover: View {
     }
 }
 
-/// A page: sections down the full width, scrolling as one.
 struct SettingsPage<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
@@ -352,8 +328,6 @@ struct SettingsPage<Content: View>: View {
                 .id(Anchor.top)
             }
             .scrollIndicators(.automatic)
-            // A text field that takes first responder drags the scroll view
-            // to itself; a page always opens at its top.
             .onAppear {
                 DispatchQueue.main.async { proxy.scrollTo(Anchor.top, anchor: .top) }
             }

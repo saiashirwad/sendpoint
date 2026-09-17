@@ -3,8 +3,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// The voice key as the reducer sees it: a repeat, an early failure, or
-/// Escape must never start a second recording.
 final class CaptureVoiceGestureTests: XCTestCase {
     private let context = NoteCaptureContext(stackID: UUID())
     private let selection = CapturedSelection(text: "")
@@ -236,7 +234,6 @@ final class CaptureVoiceGestureTests: XCTestCase {
     }
 
     func testTheOtherSpeechKeyBeepsOverAnOpenCaptureAndItsReleaseIsInert() {
-        // A dictation press over a voice note, tap mode so the note key is up.
         var state = recording(mode: .tap)
         _ = state.update(.voiceReleased)
         XCTAssertEqual(state.update(.dictatePressed), [.beep])
@@ -244,7 +241,6 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.session?.phase, .recording, "the note keeps recording")
         XCTAssertEqual(state.update(.voicePressed), [.transcribe(context)])
 
-        // A note press while the dictation key is still held, hold mode.
         state = dictating()
         XCTAssertEqual(state.update(.voicePressed), [], "one key at a time")
         XCTAssertEqual(state.update(.voiceReleased), [], "not the held key")

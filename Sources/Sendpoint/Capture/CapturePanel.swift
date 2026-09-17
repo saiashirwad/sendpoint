@@ -3,9 +3,6 @@ import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
-/// A floating panel that can take keyboard focus and, crucially, does **not**
-/// hide when another app takes over. That is what lets Wispr Flow, Hex, or any
-/// other dictation tool run on top of it while the note field stays alive.
 final class CapturePanel: NSPanel {
     var onClose: (() -> Void)?
 
@@ -22,25 +19,17 @@ final class CapturePanel: NSPanel {
     }
 }
 
-/// The destination button must accept a click while another app remains active.
 final class CaptureHostingView<Content: View>: NSHostingView<Content> {
-    // Swift 6.3.3 crashes in EarlyPerfInliner on this generic subclass's
-    // synthesized deinitializer during release builds.
     @inline(never) deinit {}
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// Native windows are resources, never a second source of workflow state.
 final class CaptureWindows {
     private unowned let model: CaptureController
     private let surfaces: SurfaceCoordinator
     private let hotKeyCenter: HotKeyCenter
     private var panel: CapturePanel?
-    /// Built once and kept: constructing a panel and its SwiftUI hosting
-    /// view costs tens of milliseconds, which would sit between the hotkey
-    /// and the first sample of audio or the first typed letter. Showing one
-    /// again is a reposition.
     private var voicePanel: CapturePanel?
     private var editorPanel: CapturePanel?
     private var keyMonitor: Any?
@@ -128,8 +117,6 @@ final class CaptureWindows {
         editorPanel = nil
     }
 
-    /// Call at launch, when nobody is waiting, so the first note pays
-    /// nothing for its window.
     func prepareSurfaces() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
         if editorPanel == nil { editorPanel = makeEditorPanel() }
@@ -178,20 +165,16 @@ final class CaptureWindows {
         panel.minSize = NSSize(width: 380, height: 270)
         panel.animationBehavior = .utilityWindow
 
-        // The shared sheet draws its own rounded edge beneath the title bar.
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.contentView = contentView
         return panel
     }
 
-    /// Puts the overlay on screen without activating the app, so the front
-    /// app keeps focus while its selection is still being read.
     private func presentVoice() {
         if voicePanel == nil { voicePanel = makeVoicePanel() }
         guard let panel = voicePanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.cancelVoice) }
-        // Captions may have been switched on or resized since the last take.
         panel.setContentSize(voiceOverlaySize)
         positionVoiceOverlay(panel)
         self.panel = panel
@@ -256,7 +239,6 @@ final class CaptureWindows {
         var origin: NSPoint
 
         if let rect = selectionRect, let screen = screenContaining(quartzRect: rect) {
-            // Quartz rects are top-left origin; flip into AppKit coordinates.
             let flippedY = flipY(quartzRect: rect)
             origin = NSPoint(x: rect.midX - size.width / 2, y: flippedY - size.height - 12)
             if origin.y < screen.visibleFrame.minY + 8 {
@@ -280,8 +262,6 @@ final class CaptureWindows {
         let screen = screenContaining(point: NSEvent.mouseLocation) ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
 
-        // The overlay view carries its own shadow padding, so sit a little
-        // lower than the capsule should visually land.
         let origin = NSPoint(
             x: visible.midX - panel.frame.width / 2,
             y: visible.minY + 4
@@ -290,7 +270,6 @@ final class CaptureWindows {
     }
 
     private func flipY(quartzRect rect: CGRect) -> CGFloat {
-        // Quartz global space is anchored at the top-left of the primary display.
         guard let primary = NSScreen.screens.first else { return rect.minY }
         return primary.frame.maxY - rect.minY
     }

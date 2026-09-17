@@ -1,10 +1,6 @@
 import XCTest
 @testable import Sendpoint
 
-/// The tap-level stale-delivery guard, deterministically and without
-/// hardware: a level delivered for an older recording generation must not
-/// move the meter, while the live generation still applies. `discardRecording`
-/// advances the generation on an idle service (no engine, model, or tap).
 @MainActor
 final class VoiceTapDeliveryTests: XCTestCase {
     func testStaleTapLevelDoesNotMoveMeter() {

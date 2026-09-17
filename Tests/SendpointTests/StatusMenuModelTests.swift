@@ -28,7 +28,7 @@ final class StatusMenuModelTests: XCTestCase {
             XCTAssertNotNil(loadingCopy)
             XCTAssertNil(loadingCopy?.action)
 
-            let empty = facts(stacks: [Stack(id: firstStackID, name: "Default")], current: firstStackID)
+            let empty = facts(stacks: [Stack(id: firstStackID)], current: firstStackID)
             let available = items(facts: empty, status: .available, settings: settings)
             let emptyCopy = entry(titled: "Nothing captured yet", in: available)
             XCTAssertNotNil(emptyCopy)
@@ -38,7 +38,7 @@ final class StatusMenuModelTests: XCTestCase {
             let unavailableCopy = entry(titled: "Notes unavailable: disk full", in: unavailable)
             XCTAssertNotNil(unavailableCopy)
             XCTAssertNil(unavailableCopy?.action)
-            XCTAssertNil(submenu(titled: "Stack", in: unavailable), "no stacks to list without facts")
+            XCTAssertNil(entry(titled: "Stack 1 — Empty", in: unavailable), "no stacks to list without facts")
         }
     }
 
@@ -59,30 +59,51 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
-    func testStackSubmenuListsStacksWithCountsAndSwitchActions() {
-        withSettings { settings in
-            let first = stack(id: firstStackID, name: "First", noteCount: 1)
-            let second = stack(id: secondStackID, name: "Second", noteCount: 2)
+    func testEveryStackIsListedInlineWithItsCountShortcutAndSelectAction() throws {
+        try withSettings { settings in
+            let first = stack(id: firstStackID, noteCount: 1)
+            let second = stack(id: secondStackID, noteCount: 2)
             let menu = items(
-                facts: facts(stacks: [first, second], current: firstStackID),
+                facts: facts(stacks: [first, second], current: secondStackID),
                 status: .available,
                 settings: settings
             )
 
-            guard let stack = submenu(titled: "Stack", in: menu) else {
-                return XCTFail("expected a Stack submenu")
+            let rows = entries(in: menu).filter {
+                if case .selectStack = $0.action { return true }
+                return false
             }
-            let rows = Array(entries(in: stack).prefix(2))
-            XCTAssertEqual(rows.map(\.title), ["First — 1 note", "Second — 2 notes"])
-            XCTAssertEqual(rows.map(\.action), [.switchToStack(firstStackID), .switchToStack(secondStackID)])
-            XCTAssertEqual(rows.map(\.checked), [true, false])
-            XCTAssertEqual(entry(titled: "Switch Stack…", in: stack)?.action, .quickSwitcher)
+            XCTAssertEqual(rows.map(\.title), [
+                "Stack 1 — 1 note", "Stack 2 — 2 notes", "Stack 3 — Empty", "Stack 4 — Empty", "Stack 5 — Empty",
+            ])
+            XCTAssertEqual(rows.map(\.action), (1...5).map { .selectStack($0) })
+            XCTAssertEqual(rows.map(\.checked), [false, true, false, false, false])
+            XCTAssertEqual(rows.map(\.keyEquivalent), ["h", "j", "k", "l", ";"])
+            XCTAssertTrue(rows.allSatisfy { $0.keyEquivalentModifiers == [.option] })
+
+            settings.shortcuts.clearShortcut(for: .selectStack(1))
+            let unbound = items(
+                facts: facts(stacks: [first, second], current: secondStackID),
+                status: .available,
+                settings: settings
+            )
+            XCTAssertNil(entry(titled: "Stack 1 — 1 note", in: unbound)?.keyEquivalent)
         }
+    }
+
+    func testMenuBarTitleIsTheStackNumberThenItsCount() {
+        let stacks = facts(
+            stacks: [stack(id: firstStackID, noteCount: 0), stack(id: secondStackID, noteCount: 4)],
+            current: secondStackID
+        )
+        XCTAssertEqual(StatusMenuModel.title(for: stacks.current), " 2 · 4")
+        XCTAssertEqual(StatusMenuModel.title(for: stacks.stack(number: 1)), " 1")
+        XCTAssertEqual(StatusMenuModel.title(for: nil), "")
     }
 
     func testUndoItemAppearsOnlyWithAClearedBatch() {
         withSettings { settings in
-            let stack = stack(id: firstStackID, name: "First", noteCount: 1)
+            let stack = stack(id: firstStackID, noteCount: 1)
             let withoutUndo = facts(stacks: [stack], current: firstStackID)
             XCTAssertNil(entry(
                 titled: "Undo Clear (1)",
@@ -99,7 +120,7 @@ final class StatusMenuModelTests: XCTestCase {
 
     func testErrorAndRetryItemsRequireErrorAndPendingMutations() {
         withSettings { settings in
-            let stack = stack(id: firstStackID, name: "First", noteCount: 1)
+            let stack = stack(id: firstStackID, noteCount: 1)
             let current = facts(stacks: [stack], current: firstStackID)
             let noError = items(facts: current, status: .available, settings: settings)
             XCTAssertNil(entry(titled: "Couldn't save the stack change: disk full", in: noError))
@@ -122,31 +143,6 @@ final class StatusMenuModelTests: XCTestCase {
                 entry(titled: "Retry Pending Stack Changes", in: pending)?.action,
                 .retryPendingMutations
             )
-        }
-    }
-
-    func testNextAndPreviousStackAppearOnlyWhenTheirCombosAreSet() throws {
-        try withSettings { settings in
-            let current = facts(stacks: [stack(id: firstStackID, name: "First", noteCount: 1)], current: firstStackID)
-            let unbound = submenu(titled: "Stack", in: items(facts: current, status: .available, settings: settings))
-            XCTAssertNotNil(unbound)
-            XCTAssertNil(entry(titled: "Next Stack", in: unbound ?? []))
-            XCTAssertNil(entry(titled: "Previous Stack", in: unbound ?? []))
-
-            let next = KeyCombo(keyCode: UInt16(kVK_ANSI_N), modifiers: [.control, .option])
-            let previous = KeyCombo(keyCode: UInt16(kVK_ANSI_P), modifiers: [.control, .option])
-            try settings.setShortcut(next, for: .nextStack)
-            try settings.setShortcut(previous, for: .previousStack)
-
-            let bound = submenu(titled: "Stack", in: items(facts: current, status: .available, settings: settings))
-            let nextEntry = entry(titled: "Next Stack", in: bound ?? [])
-            let previousEntry = entry(titled: "Previous Stack", in: bound ?? [])
-            XCTAssertEqual(nextEntry?.action, .nextStack)
-            XCTAssertEqual(nextEntry?.keyEquivalent, "n")
-            XCTAssertEqual(nextEntry?.keyEquivalentModifiers, [.control, .option])
-            XCTAssertEqual(previousEntry?.action, .previousStack)
-            XCTAssertEqual(previousEntry?.keyEquivalent, "p")
-            XCTAssertEqual(previousEntry?.keyEquivalentModifiers, [.control, .option])
         }
     }
 
@@ -193,11 +189,11 @@ final class StatusMenuModelTests: XCTestCase {
     }
 
     private func facts(stacks: [Stack], current: UUID, lastCleared: ClearedBatch? = nil) -> StackUIFacts {
-        StackUIFacts(stacks: stacks, currentStackID: current, lastCleared: lastCleared)
+        StackUIFacts(stacks: filled(stacks), currentStackID: current, lastCleared: lastCleared)
     }
 
-    private func stack(id: UUID, name: String, noteCount: Int) -> Stack {
-        Stack(id: id, name: name, notes: (0..<noteCount).map { _ in makeNote() })
+    private func stack(id: UUID, noteCount: Int) -> Stack {
+        Stack(id: id, notes: (0..<noteCount).map { _ in makeNote() })
     }
 
     private func makeNote() -> Note {

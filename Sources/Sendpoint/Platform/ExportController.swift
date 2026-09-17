@@ -130,14 +130,12 @@ final class ExportController {
 
     func copyNote(_ note: Note, report: (String) -> Void) {
         guard state != .tornDown else { return }
-        // Changing the clipboard explicitly aborts any delayed stack paste.
         pasteTask?.cancel()
         pasteTask = nil
         if case let .awaitingPaste(request, _) = state { send(.pasted(request.id, dispatched: false)) }
         report(services.write(PromptComposer.noteMarkdown(note)) == nil ? "Couldn’t copy the note." : "Copied note")
     }
 
-    /// Actions sent while one is being applied wait their turn.
     func send(_ action: ExportAction) {
         pending.append(action)
         guard !isDraining else { return }

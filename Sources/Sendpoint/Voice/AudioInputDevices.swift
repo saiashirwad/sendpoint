@@ -4,19 +4,13 @@ import CoreAudio
 import Foundation
 import Observation
 
-/// One microphone the system knows about. The UID survives reboots and
-/// unplugging; the numeric ID does not, so only the UID is ever stored.
 nonisolated struct AudioInputDevice: Identifiable, Equatable, Sendable {
     let id: AudioDeviceID
     let uid: String
     let name: String
 }
 
-/// Which microphone to record from, given what the user asked for and what
-/// is plugged in right now. Kept free of CoreAudio so it can be tested.
 nonisolated enum InputDeviceChoice {
-    /// `nil` means "leave the engine on the system default".
-    /// `available` is only enumerated when there is a preference to match.
     static func resolve(
         preferredUID: String?, available: @autoclosure () -> [AudioInputDevice]
     ) -> AudioInputDevice? {
@@ -25,7 +19,6 @@ nonisolated enum InputDeviceChoice {
     }
 }
 
-/// CoreAudio lookups for input devices. Every call is synchronous and cheap.
 enum AudioInputDeviceQuery {
     private static let system = AudioObjectID(kAudioObjectSystemObject)
 
@@ -50,14 +43,6 @@ enum AudioInputDeviceQuery {
         return AudioInputDevice(id: id, uid: uid, name: name)
     }
 
-    /// Points an engine's input unit at `device`. Must run before anything
-    /// reads the node's format, and before the engine starts.
-    ///
-    /// The engine fixes the unit's output format when its input node is
-    /// first touched. Switching the device underneath it leaves that format
-    /// at the old sample rate; when the new device runs at another rate the
-    /// unit renders nothing at all and a recording ends up empty. Copying
-    /// the new hardware rate into the output format keeps them in step.
     @discardableResult
     static func select(_ device: AudioInputDevice, on input: AVAudioInputNode) -> Bool {
         guard let unit = input.audioUnit else { return false }
@@ -157,17 +142,11 @@ enum AudioInputDeviceQuery {
     }
 }
 
-/// The live list of microphones, refreshed whenever one is plugged in,
-/// removed, or made the system default.
 @Observable
 final class AudioInputDeviceList {
     private(set) var devices: [AudioInputDevice] = []
     private(set) var systemDefault: AudioInputDevice?
 
-    /// Removed in deinit, which is nonisolated. The array is written only
-    /// during init and read only after the last reference goes away, so no
-    /// concurrent access is possible, and CoreAudio's removal call is safe
-    /// from any thread.
     @ObservationIgnored nonisolated(unsafe) private var listeners: [(AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
 
     init() {

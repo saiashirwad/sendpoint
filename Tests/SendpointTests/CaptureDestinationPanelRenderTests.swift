@@ -7,8 +7,8 @@ import XCTest
 @MainActor
 final class CaptureDestinationPanelRenderTests: XCTestCase {
     func testRetainedVoiceWindowDoesNotPresentTextCaptureDestinationPicker() async throws {
-        let stack = Stack(name: "Default")
-        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -27,7 +27,6 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             }
         }
 
-        // Load both retained view trees while their windows remain hidden.
         for panel in [voice, editor] { panel.contentView?.layoutSubtreeIfNeeded() }
         let textContext = NoteCaptureContext(stackID: stack.id)
         controller.send(.begin(.text, textContext))
@@ -59,15 +58,15 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
         }
         let stacks = [
-            Stack(name: "Default", notes: [Note(subject: .standalone, body: "One")]),
-            Stack(name: "Research", notes: [
+            Stack(notes: [Note(subject: .standalone, body: "One")]),
+            Stack(notes: [
                 Note(subject: .standalone, body: "One"),
                 Note(subject: .standalone, body: "Two"),
             ]),
-            Stack(name: "Product notes"),
-            Stack(name: "Follow-ups", notes: [Note(subject: .standalone, body: "One")]),
+            Stack(),
+            Stack(notes: [Note(subject: .standalone, body: "One")]),
         ]
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -113,12 +112,12 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
         }
         let stacks = [
-            Stack(name: "Research", notes: [
+            Stack(notes: [
                 Note(subject: .standalone, body: "One"),
                 Note(subject: .standalone, body: "Two"),
             ]),
         ]
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -156,8 +155,6 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         try composite([voice, picker], to: directory, name: "voice-capture-card-destination.png")
     }
 
-    /// Composites the actual hosting views at their live window coordinates.
-    /// This includes the real anchor placement, rather than a mock VStack.
     private func composite(_ windows: [NSWindow], to directory: String, name: String) throws {
         let bounds = windows.map(\.frame).reduce(windows[0].frame) { $0.union($1) }
         let image = NSImage(size: bounds.size)
@@ -188,8 +185,8 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
     }
 
     func testPickerClearsTheWholeCardWhenCaptionsAreOn() async throws {
-        let stack = Stack(name: "Default")
-        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))

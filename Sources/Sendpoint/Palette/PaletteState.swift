@@ -1,13 +1,6 @@
 import Foundation
 import SendpointDomain
 
-/// Which pane owns the keyboard: the stack sidebar or the note list.
-nonisolated enum PalettePane: Equatable, Hashable {
-    case stacks
-    case notes
-}
-
-/// Which note carries the keyboard highlight inside a stack.
 nonisolated struct NoteHighlightState: Equatable {
     private(set) var highlight: UUID?
 
@@ -15,7 +8,6 @@ nonisolated struct NoteHighlightState: Equatable {
         highlight = id
     }
 
-    /// Moves the highlight through the listed notes, wrapping at both ends.
     mutating func move(by offset: Int, in ids: [UUID]) {
         guard !ids.isEmpty else { return }
         guard let highlight, let index = ids.firstIndex(of: highlight) else {
@@ -25,23 +17,16 @@ nonisolated struct NoteHighlightState: Equatable {
         self.highlight = ids[wrappedIndex(index, by: offset, count: ids.count)]
     }
 
-    /// Ensures the highlight names a listed note after the listing changes.
     mutating func confine(to ids: [UUID]) {
         if let highlight, ids.contains(highlight) { return }
         highlight = ids.first
     }
 }
 
-/// Everything the palette can do from the keyboard or the ⌘K menu.
 nonisolated enum PaletteAction: Hashable {
-    case switchToStack(UUID)
-    case createStack(String)
-    case newStack
-    case renameStack(UUID)
-    case deleteStack(UUID)
-    case clearStack(UUID)
+    case clearStack
     case undoClear
-    case copyStack(UUID)
+    case copyStack
     case chooseTemplate
     case editNote(UUID)
     case copyNote(UUID)
@@ -50,11 +35,9 @@ nonisolated enum PaletteAction: Hashable {
     case moveNoteDown(UUID)
 }
 
-/// Which part of the palette a ⌘K entry acts on. The menu groups by this,
-/// so titles can be plain verbs.
 nonisolated enum PaletteActionSection: Hashable {
     case note
-    case stack(name: String?)
+    case stack
     case template
 
     var label: String {
@@ -64,14 +47,8 @@ nonisolated enum PaletteActionSection: Hashable {
         case .template: "Template"
         }
     }
-
-    var detail: String? {
-        if case let .stack(name) = self { return name }
-        return nil
-    }
 }
 
-/// One entry of the ⌘K menu: the action, how it reads, and its keys.
 nonisolated struct PaletteActionItem: Equatable, Identifiable {
     let action: PaletteAction
     let title: String
@@ -81,47 +58,27 @@ nonisolated struct PaletteActionItem: Equatable, Identifiable {
 
     var id: PaletteAction { action }
 
-    /// Whether the palette already shows this action's keys somewhere on
-    /// its own chrome: the footer, the sidebar, the undo banner. Those stay
-    /// out of the ⌘K menu, which lists only what has no other home.
     var isPinned: Bool {
         if keys == "↩" { return true }
         switch action {
-        case .chooseTemplate, .newStack, .undoClear: return true
+        case .chooseTemplate, .undoClear: return true
         default: return false
-        }
-    }
-
-    /// One word for the footer.
-    var verb: String {
-        switch action {
-        case .switchToStack: title.hasPrefix("Keep") ? "Keep" : "Switch"
-        case .createStack: "Create"
-        default: title
         }
     }
 }
 
-/// What the palette is looking at, reduced to what decides the action list.
 nonisolated struct PaletteActionContext: Equatable {
     enum Focus: Equatable {
-        case stack(StackItemFacts)
-        case createStack(name: String)
         case note(id: UUID, index: Int, count: Int)
         case nothing
     }
 
-    var pane: PalettePane
     var focus: Focus
-    /// The stack the note pane shows: the sidebar highlight.
-    var shownStack: StackItemFacts?
-    var canDeleteStack: Bool
+    var stack: StackItemFacts?
     var undo: StackUndoFacts?
     var templateName: String
 }
 
-/// The ⌘K menu, derived from context so the footer, the menu, and the key
-/// handler all agree on what is possible right now.
 nonisolated enum PaletteActionCatalog {
     static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
@@ -130,79 +87,32 @@ nonisolated enum PaletteActionCatalog {
             items.append(PaletteActionItem(action: action, title: title, keys: keys,
                 section: section, isDestructive: destructive))
         }
-        func template() { add(.chooseTemplate, "Change template", "⌘P", in: .template) }
-        func undo(in section: PaletteActionSection) {
-            if let undo = context.undo { add(.undoClear, undo.title, "⌘Z", in: section) }
-        }
-        func copy(_ stack: StackItemFacts, keys: String) {
-            guard stack.noteCount > 0 else { return }
-            add(.copyStack(stack.id), "Copy as Markdown", keys, in: .stack(name: stack.name))
-        }
-        func clear(_ stack: StackItemFacts) {
-            guard stack.noteCount > 0 else { return }
-            add(.clearStack(stack.id), "Clear", "⇧⌘⌫", in: .stack(name: stack.name), destructive: true)
-        }
-        func stackActions(_ stack: StackItemFacts, switchKeys: String, copyKeys: String,
-                          showsCurrent: Bool) {
-            let section = PaletteActionSection.stack(name: stack.name)
-            if showsCurrent || !stack.isCurrent {
-                add(.switchToStack(stack.id), stack.isCurrent ? "Keep current" : "Switch", switchKeys, in: section)
-            }
-            copy(stack, keys: copyKeys)
-            add(.renameStack(stack.id), "Rename", "⌘R", in: section)
-            add(.newStack, "New stack", "⌘N", in: section)
-            undo(in: section)
-            clear(stack)
-        }
 
-        switch context.focus {
-        case let .stack(stack):
-            stackActions(stack, switchKeys: "↩", copyKeys: "⌘C", showsCurrent: true)
-            if context.canDeleteStack {
-                add(.deleteStack(stack.id), "Delete", "⌘⌫", in: .stack(name: stack.name), destructive: true)
-            }
-            template()
-        case let .createStack(name):
-            add(.createStack(name), "Create “\(name)”", "↩", in: .stack(name: nil))
-            template()
-        case let .note(id, index, count):
+        if case let .note(id, index, count) = context.focus {
             add(.editNote(id), "Edit", "↩", in: .note)
             add(.copyNote(id), "Copy", "⌘C", in: .note)
             if index > 0 { add(.moveNoteUp(id), "Move up", "⌥↑", in: .note) }
             if index < count - 1 { add(.moveNoteDown(id), "Move down", "⌥↓", in: .note) }
             add(.deleteNote(id), "Delete", "⌘⌫", in: .note, destructive: true)
-            if let stack = context.shownStack {
-                stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
-            } else {
-                undo(in: .stack(name: nil))
-            }
-            template()
-        case .nothing:
-            if context.pane == .notes, let stack = context.shownStack {
-                stackActions(stack, switchKeys: "⌘↩", copyKeys: "⇧⌘C", showsCurrent: false)
-            } else {
-                add(.newStack, "New stack", "⌘N", in: .stack(name: nil))
-                undo(in: .stack(name: nil))
-            }
-            template()
         }
+        let hasNotes = context.stack.map { !$0.isEmpty } ?? false
+        if hasNotes { add(.copyStack, "Copy as Markdown", "⇧⌘C", in: .stack) }
+        if let undo = context.undo { add(.undoClear, undo.title, "⌘Z", in: .stack) }
+        if hasNotes { add(.clearStack, "Clear", "⇧⌘⌫", in: .stack, destructive: true) }
+        add(.chooseTemplate, "Change template", "⌘P", in: .template)
         return items
     }
 
-    /// What the ⌘K menu lists: the unpinned actions, narrowed by what was
-    /// typed. A section's name counts, so "note" or "stack" finds a group.
     static func menu(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
         items.filter { !$0.isPinned }
-            .matching(query) { [$0.title, $0.section.label, $0.section.detail ?? ""].joined(separator: " ") }
+            .matching(query) { [$0.title, $0.section.label].joined(separator: " ") }
     }
 }
 
-/// The keys the palette claims ahead of its text fields.
 nonisolated enum PaletteKey: Equatable {
-    case up, down, left, right
+    case up, down
     case optionUp, optionDown
-    case tab, backTab
-    case activate, commandActivate
+    case activate
     case escape
     case commandDelete, shiftCommandDelete
     case commandDigit(Int)

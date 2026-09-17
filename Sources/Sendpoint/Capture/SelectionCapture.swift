@@ -8,23 +8,9 @@ nonisolated struct CapturedSelection: Equatable {
     var screenRect: CGRect?
 }
 
-/// Reads whatever the user has highlighted in the frontmost app.
-///
-/// Two strategies, in order:
-///  1. Accessibility: ask the focused element for `AXSelectedText`. Silent and
-///     leaves the clipboard alone, but some apps (many Electron ones, Chrome
-///     with web accessibility off) do not answer.
-///  2. Synthesise ⌘C, read the pasteboard, then put the old pasteboard back.
-///
-/// Tests substitute the two closures; `live` binds the real monitor and pasteboard.
 struct SelectionCapture {
-    /// `editorMayOpen` is called as soon as typed capture can show the editor.
-    /// Clipboard fallback may continue against the original process after that.
     var read: (FallbackPolicy, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
-    /// Sends ⌘V to the app that was frontmost when export began.
     var paste: (_ processIdentifier: pid_t, _ expectedRevision: Int) async throws -> Bool
-    /// Dictation: puts `text` on the clipboard and pastes it into that app.
-    /// The clipboard keeps the text afterwards, the same as a stack export.
     var insertText: (_ text: String, _ processIdentifier: pid_t) async throws -> Bool = { _, _ in false }
 
     static func live(monitor: AutomaticSelectionMonitor, pasteboard: NSPasteboard = .general) -> Self {
@@ -48,27 +34,17 @@ struct SelectionCapture {
         )
     }
 
-    /// How far to go when Accessibility reports no selection.
     enum FallbackPolicy {
-        /// Typed capture: open the editor, then wait for the shortcut modifiers
-        /// and give the original app time to copy.
         case patient
-        /// Hold-to-talk: the modifiers stay down by design, and no selection
-        /// usually means a free-standing thought, so only glance at the clipboard.
         case brief
 
         var waitsForModifierRelease: Bool { self == .patient }
-        /// A real copy lands well under 100ms; the rest is slack for a busy app.
         var clipboardTimeout: TimeInterval { self == .patient ? 0.3 : 0.15 }
     }
 
-    /// What the focused element said when asked for its selection.
     private enum AccessibilityAnswer {
         case text(String, CGRect?)
-        /// The element handles text selection and reports none. Nothing to
-        /// copy, so the clipboard fallback would only wait out its timeout.
         case empty
-        /// No focused element, or one that does not speak the text protocol.
         case unavailable
     }
 
@@ -124,11 +100,6 @@ struct SelectionCapture {
               let text = textRef as? String
         else { return .unavailable }
         if text.isEmpty {
-            // An empty string alone is not proof: some views answer "" for
-            // any selection. A zero-length range inside real text is. Kitty
-            // reports "", range (0,0) and zero characters no matter what is
-            // highlighted, so an element that claims to hold no text at all
-            // still goes to the clipboard fallback.
             let holdsText = (characterCount(of: element) ?? 0) > 0
             return holdsText && selectedRangeLength(of: element) == 0 ? .empty : .unavailable
         }
@@ -153,7 +124,6 @@ struct SelectionCapture {
         return range.length
     }
 
-    /// Screen rect of the highlighted range, so the panel can appear beside it.
     private static func selectionRect(of element: AXUIElement) -> CGRect? {
         var rangeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
@@ -170,7 +140,7 @@ struct SelectionCapture {
         var rect = CGRect.zero
         guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &rect), rect.width > 0 || rect.height > 0
         else { return nil }
-        return rect // top-left origin, Quartz screen coordinates
+        return rect
     }
 
     // MARK: - Clipboard fallback
@@ -184,9 +154,6 @@ struct SelectionCapture {
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
 
-        // Typed capture must feel immediate. The copy remains targeted at the
-        // process that was frontmost when capture began, so the editor can take
-        // focus while we wait for the shortcut modifiers to be released.
         if fallback == .patient { editorMayOpen() }
         if fallback.waitsForModifierRelease { try await waitForModifierRelease() }
         try Task.checkCancellation()
@@ -208,7 +175,6 @@ struct SelectionCapture {
             try await Task.sleep(for: .milliseconds(20))
         }
 
-        // Do not overwrite clipboard data changed after the copy we observed.
         if let copiedChangeCount, pasteboard.changeCount == copiedChangeCount {
             restore(saved, to: pasteboard)
         }
@@ -225,10 +191,6 @@ struct SelectionCapture {
         return true
     }
 
-    /// A synthetic ⌘-key event inherits whatever modifiers are physically held.
-    /// The hotkey that triggered us is ⌃⌘-something, so firing straight away
-    /// makes the target app see ⌃⌘C or ⌃⌘V — neither of which is copy or paste.
-    /// Wait for the user's fingers to come off first.
     private static func waitForModifierRelease(timeout: TimeInterval = 0.7) async throws {
         let watched: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
         let deadline = Date().addingTimeInterval(timeout)

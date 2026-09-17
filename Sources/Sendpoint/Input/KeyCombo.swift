@@ -2,10 +2,8 @@ import AppKit
 import Carbon.HIToolbox
 import os
 
-/// A global shortcut: one key plus modifiers.
 nonisolated struct KeyCombo: Codable, Equatable, Hashable {
     var keyCode: UInt16
-    /// Raw value of NSEvent.ModifierFlags, masked to the device-independent flags.
     var modifierRawValue: UInt
 
     var modifiers: NSEvent.ModifierFlags {
@@ -21,14 +19,7 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
         return m
     }
 
-    /// The same key with ⇧ added, or `nil` when ⇧ is already part of it.
-    var addingShift: KeyCombo? {
-        guard !modifiers.contains(.shift) else { return nil }
-        return KeyCombo(keyCode: keyCode, modifiers: modifiers.union(.shift))
-    }
-
     var isValid: Bool {
-        // Require at least one of control/option/command so we don't eat plain typing.
         !modifiers.intersection([.command, .option, .control]).isEmpty
     }
 
@@ -50,8 +41,6 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
         return s
     }
 
-    /// The character NSMenuItem wants for this key, so the menu shows the
-    /// shortcut correctly for ⌫, ↩, arrows and the rest — not just letters.
     var menuKeyEquivalent: String? {
         if let special = KeyCombo.menuEquivalents[keyCode] { return special }
         let name = KeyCombo.name(for: keyCode)
@@ -88,9 +77,6 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
         return name
     }
 
-    /// Layout lookups go through Text Input Services on every call, and the
-    /// status menu asks for every shortcut on every rebuild, so answers are
-    /// kept until the keyboard layout changes.
     private static let literalNames = OSAllocatedUnfairLock(initialState: [UInt16: String]())
     private static let layoutWatcher: Void = {
         DistributedNotificationCenter.default().addObserver(
@@ -121,7 +107,6 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
         UInt16(kVK_F10): "F10", UInt16(kVK_F11): "F11", UInt16(kVK_F12): "F12",
     ]
 
-    /// Ask the current keyboard layout what character this key produces.
     private static func literal(for keyCode: UInt16) -> String? {
         guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
               let layoutPtr = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)

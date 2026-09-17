@@ -1,22 +1,33 @@
 import AppKit
 import Carbon.HIToolbox
+import SendpointDomain
 
-/// Names a hotkey registered with HotKeyCenter.
-enum HotKeyName: String, CaseIterable, Hashable {
+enum HotKeyName: Hashable {
     case voiceCapture
     case capture
     case dictate
     case copy
     case stack
-    case switchStack
-    case nextStack
-    case previousStack
     case clear
-    case switchStackReverse
+    case selectStack(Int)
     case voiceEscape
-    case switchEscape
-    case switchPinUp
-    case switchPinDown
+
+    static let allCases: [HotKeyName] =
+        [.voiceCapture, .capture, .dictate, .copy, .stack, .clear, .voiceEscape]
+        + (1...StackDocument.stackCount).map(HotKeyName.selectStack)
+
+    var rawValue: String {
+        switch self {
+        case .voiceCapture: "voiceCapture"
+        case .capture: "capture"
+        case .dictate: "dictate"
+        case .copy: "copy"
+        case .stack: "stack"
+        case .clear: "clear"
+        case let .selectStack(number): "selectStack\(number)"
+        case .voiceEscape: "voiceEscape"
+        }
+    }
 }
 
 enum HotKeyRegistrationResult: Equatable {
@@ -25,15 +36,6 @@ enum HotKeyRegistrationResult: Equatable {
     case failed(Int32)
 }
 
-/// Registers system-wide shortcuts through Carbon, which works without
-/// Accessibility permission and fires even when another app is frontmost.
-///
-/// Isolation: explicitly `@MainActor`. (The target's default isolation
-/// already implied this; the annotation locks it in.) Every caller is
-/// MainActor-bound — `AppEnvironment` composition, `HotKeyRegistrar`,
-/// the `CapturePanel`/`StackSwitcherController` cycle keys, `AppDelegate`
-/// teardown, and the Carbon callback, which hops to the main queue before
-/// dispatching — so the mutable registry needs no locks.
 @MainActor
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
@@ -52,20 +54,11 @@ final class HotKeyCenter {
     private let registerEvent: RegisterEvent
     private let unregisterEvent: @MainActor (EventHotKeyRef) -> Void
 
-    /// Weak box so the routing table never retains a center.
     private final class WeakCenter {
         weak var value: HotKeyCenter?
         init(_ value: HotKeyCenter) { self.value = value }
     }
 
-    /// Carbon dispatches carry only a numeric id, so the C callback looks up
-    /// which center instance registered that id here instead of hardcoding
-    /// `.shared`. The latest registrant of an id wins, mirroring Carbon's
-    /// single global id namespace per signature. Entries are weak: a
-    /// deallocated center simply stops receiving dispatches. Every access —
-    /// writes from `registerRaw`/`unregister`, reads from `route` — runs on
-    /// the MainActor (the C callback only reads inside `assumeIsolated`),
-    /// so no lock is needed.
     private static var routes: [UInt32: WeakCenter] = [:]
 
     init(
@@ -76,7 +69,6 @@ final class HotKeyCenter {
         self.unregisterEvent = unregisterEvent
     }
 
-    /// Replaces any shortcut previously registered under `name`.
     @discardableResult
     func register(name: HotKeyName, combo: KeyCombo?, released: (() -> Void)? = nil, action: @escaping () -> Void) -> HotKeyRegistrationResult {
         unregister(name: name)
@@ -90,8 +82,6 @@ final class HotKeyCenter {
         )
     }
 
-    /// Registers a Carbon hotkey without requiring a KeyCombo. This is used
-    /// for the temporary, modifier-free Escape cancel key.
     @discardableResult
     func registerRaw(
         name: HotKeyName,
@@ -105,7 +95,7 @@ final class HotKeyCenter {
 
         let id = nextID
         nextID += 1
-        let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id) // 'CLAN'
+        let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id)
         let (status, ref) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
         guard status == noErr, let ref else {
             Diag.log("hotkey FAILED name=\(name.rawValue) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
@@ -123,11 +113,8 @@ final class HotKeyCenter {
         guard let id = names.removeValue(forKey: name.rawValue) else { return }
         if let ref = refs.removeValue(forKey: id) { unregisterEvent(ref) }
         handlers[id] = nil
-        // Only clear the route when it still points at this center: another
-        // instance may have claimed the same id afterwards.
         if Self.routes[id]?.value === self { Self.routes.removeValue(forKey: id) }
     }
-
 
     func fire(id: UInt32, released: Bool) {
         guard let handler = handlers[id] else { return }
@@ -135,10 +122,6 @@ final class HotKeyCenter {
         if released { handler.released?() } else { handler.pressed() }
     }
 
-    /// Dispatches one Carbon event to the center that registered `id`, when
-    /// that center is still alive. Each id maps to exactly one center, so an
-    /// event can never double-dispatch; events for unknown ids (stale events
-    /// for an unregistered hotkey) are dropped.
     static func route(id: UInt32, released: Bool) {
         guard let center = routes[id]?.value else { return }
         center.fire(id: id, released: released)

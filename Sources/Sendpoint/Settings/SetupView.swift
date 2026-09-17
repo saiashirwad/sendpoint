@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// The next thing the setup pill should do. One stage at a time, in the
-/// order Sendpoint actually needs them.
 enum SetupHeroStage: Equatable {
     case accessibility
     case microphone
@@ -69,8 +67,6 @@ enum SetupHeroStage: Equatable {
 
     static let stepNames = ["Accessibility", "Microphone", "Voice model"]
 
-    /// Coarse setup step. Progress within a step (download percent) must not
-    /// count as advancing, or we would steal focus on every poll.
     var step: Int {
         switch self {
         case .accessibility: 0
@@ -80,7 +76,6 @@ enum SetupHeroStage: Equatable {
         }
     }
 
-    /// The ask, in plain words. One line at 22pt in the setup window.
     var headline: String {
         switch self {
         case .accessibility: "Let Sendpoint read your selection"
@@ -90,12 +85,10 @@ enum SetupHeroStage: Equatable {
         case .downloading: "Fetching the voice model"
         case .failedOffline: "No internet right now"
         case .failedOther: "That download didn't finish"
-        // Once everything is granted the tour speaks; see SetupTour.
         case .ready: ""
         }
     }
 
-    /// Why, or what happens next. One sentence, one line.
     var detail: String {
         switch self {
         case .accessibility:
@@ -117,7 +110,6 @@ enum SetupHeroStage: Equatable {
         }
     }
 
-    /// The button. Nil while a download runs; progress stands in for it.
     var actionTitle: String? {
         switch self {
         case .accessibility: "Grant access"
@@ -159,7 +151,6 @@ struct SetupView: View {
     @State private var windowIsVisible = false
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Emblem, one ask, the step rail and its button. Never scrolls.
     static let size = NSSize(width: 500, height: 352)
     private static let inset: CGFloat = 32
 
@@ -227,7 +218,6 @@ struct SetupView: View {
         }
     }
 
-    /// Permissions first; once they are in, the tour takes the same rail.
     private var inTour: Bool { stage == .ready }
 
     private var steps: some View {
@@ -251,11 +241,6 @@ struct SetupView: View {
             : stage.detail
     }
 
-    /// Headline and one line of why. Swaps as a block when the stage moves
-    /// on, so each step reads as a new page rather than edited text. The
-    /// block is one combined element, and a stage change is announced
-    /// politely (macOS SwiftUI has no live-region modifier, so the
-    /// announcement is posted explicitly; sighted behavior is untouched).
     private var ask: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(headline)
@@ -281,8 +266,6 @@ struct SetupView: View {
         if inTour {
             tourControl
         } else if case let .downloading(progress) = stage {
-            // The number is the whole status: it climbs from the first byte
-            // through the CoreML compile and lands on 100 as the stage flips.
             Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
                 .font(.mono(13, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -295,8 +278,6 @@ struct SetupView: View {
         }
     }
 
-    /// A skip while a note is awaited; the stack opens for real with setup
-    /// still behind it; Done is the only way setup completes.
     @ViewBuilder
     private var tourControl: some View {
         switch tour.step {
@@ -332,10 +313,6 @@ struct SetupView: View {
     }
 }
 
-/// The recording capsule, alive, wearing the wordmark: the emblem at the
-/// top of setup. It lights up once everything is granted, thinks
-/// while the model downloads, and goes flat when a download fails.
-/// Clicking it does the next thing Sendpoint needs, like the button.
 private struct SetupHeroPill: View {
     @Bindable var permissionState: PermissionState
     let animates: Bool
@@ -381,8 +358,6 @@ private struct SetupHeroPill: View {
     }
 }
 
-/// The steps as the kicker line: done ones ticked, the current one marked
-/// with the accent, the rest waiting in grey.
 private struct SetupSteps: View {
     let names: [String]
     let step: Int
@@ -559,8 +534,6 @@ enum CapabilityStatus {
     }
 }
 
-/// Status on the trailing edge of a capability row: progress, a verb to
-/// click, a ready mark, or a quiet caption.
 struct CapabilityAccessory: View {
     let status: CapabilityStatus
     var actionTitle: String? = nil
@@ -587,7 +560,6 @@ struct CapabilityAccessory: View {
     }
 }
 
-/// Paper check on a green disc. Pops in once; stays put after that.
 struct ReadyMark: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
@@ -643,10 +615,6 @@ struct CapabilityProgress: View {
     }
 }
 
-/// Two lines the user can select for real, on their own sheet of paper so
-/// they read as a document rather than the window's chrome. A text view
-/// rather than SwiftUI text so the capture's Accessibility read finds the
-/// selection the same way it does in any other app.
 struct SetupPassage: NSViewRepresentable {
     let text: String
 
@@ -682,8 +650,6 @@ struct SetupPassage: NSViewRepresentable {
     }
 }
 
-/// Borderless so setup matches the recording pill, not a document window.
-/// Esc dismisses; there is no close button.
 final class SetupPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -699,13 +665,9 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     private let permissionState: PermissionState
     private let surfaces: SurfaceCoordinator
     private let tour = SetupTour()
-    /// Every note in every stack, or nil until the store has loaded.
     private let noteCount: () -> Int?
     private var lifecycle: Lifecycle = .active
     private var pollingTask: Task<Void, Never>?
-    /// Whether this window currently holds a wait on the shared voice-model
-    /// poll. Balances present/hide so the PermissionState waiter count stays
-    /// exact when both Setup and Settings are open.
     private var voiceWatchActive = false
     private var lastStep: Int?
 
@@ -786,8 +748,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         )
     }
 
-    /// Permission steps, then tour slides. A change means the user acted
-    /// somewhere else, so setup comes forward to show the next thing.
     private var currentStep: Int {
         let stage = currentStage
         return stage == .ready ? stage.step + tour.step.rawValue : stage.step
@@ -828,8 +788,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
                 let step = self.currentStep
                 if self.lastStep != step {
                     self.lastStep = step
-                    // The stack palette closes when it loses key status, so
-                    // setup must not come forward over it for the last slide.
                     if self.tour.step != .done { self.revealAfterStepChange() }
                 }
                 do {

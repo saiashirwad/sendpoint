@@ -1,7 +1,6 @@
 import SendpointDomain
 import Foundation
 
-/// IDs and time captured before selection reading or recording can delay us.
 nonisolated struct NoteCaptureContext: Equatable {
     let stackID: UUID
     let noteID: UUID
@@ -18,9 +17,6 @@ nonisolated struct NoteCaptureContext: Equatable {
     }
 }
 
-/// Immutable source, note identity, and time captured when a panel starts.
-/// The session carries its chosen destination separately; delayed work keeps
-/// matching this original context even when the user changes that destination.
 nonisolated struct NoteCaptureTarget: Equatable {
     let context: NoteCaptureContext
     let captured: CapturedSelection

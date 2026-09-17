@@ -2,11 +2,8 @@ import AppKit
 
 @main
 enum Main {
-    /// NSApplication.delegate is weak, so this is the one strong reference.
     private static let delegate = AppDelegate()
     static func main() {
-        // Two copies would take turns overwriting store.json.
-        // SENDPOINT_ALLOW_MULTIPLE=1 lets a development build run beside the installed one.
         if ProcessInfo.processInfo.environment["SENDPOINT_ALLOW_MULTIPLE"] != "1",
            let bundleID = Bundle.main.bundleIdentifier,
            let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
@@ -16,9 +13,6 @@ enum Main {
             exit(0)
         }
 
-        // Overlay scrollers in every window, whatever the system setting:
-        // Sendpoint's lists are short and its surfaces are sheets, and a
-        // permanent scroll bar reads as chrome on them.
         UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
 
         let app = NSApplication.shared

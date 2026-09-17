@@ -1,35 +1,34 @@
 import SendpointDomain
 import SwiftUI
 
-/// The palette's search header: a magnifier, the query field (or the static
-/// "Switch stack" title while cycling), the match readout, and the clear
-/// button. Takes the shell-threaded projection plus small scalars; the
-/// query binding writes straight back to the model.
 struct PaletteHeaderView: View {
     let projection: PaletteProjection
     @Binding var query: String
-    let presentation: PalettePresentation
-    let focusedPane: PalettePane
     let isSearchDisabled: Bool
     let focus: FocusState<PaletteField?>.Binding
+    let onEvent: (PaletteEvent) -> Void
+
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 10) {
+        let facts = projection.facts
+        HStack(spacing: 14) {
+            if let current = facts.current {
+                StackReadoutLabel(stack: current, numeralSize: 17, detailSize: 12)
+                    .animation(.snappy(duration: 0.25), value: current.noteCount)
+                    .fixedSize()
+                Hairline(axis: .vertical).frame(height: 18)
+            }
+
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.tertiary)
 
-            if presentation == .cycling {
-                Text("Switch stack")
-                    .font(.ui(15, weight: .medium))
-                Spacer()
-            } else {
-                TextField(projection.searchPlaceholder, text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.ui(15))
-                    .focused(focus, equals: .search)
-                    .disabled(isSearchDisabled)
-            }
+            TextField("Search notes", text: $query)
+                .textFieldStyle(.plain)
+                .font(.ui(15))
+                .focused(focus, equals: .search)
+                .disabled(isSearchDisabled)
 
             if let matches = matchReadout(projection) {
                 Text(matches)
@@ -52,18 +51,17 @@ struct PaletteHeaderView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
             }
+
+            StackStrip(stacks: facts.stacks, size: 12, accent: Ink.accent(scheme)) {
+                onEvent(.selectStack($0))
+            }
         }
         .padding(.horizontal, PaletteMetrics.horizontalPadding)
         .frame(height: 48)
     }
 
-    /// "3 OF 12" while a search narrows the focused pane.
     private func matchReadout(_ projection: PaletteProjection) -> String? {
-        guard query.nonblank != nil, presentation != .cycling else { return nil }
-        let (matches, total): (Int, Int) = switch focusedPane {
-        case .stacks: (projection.stackListing.stacks.count, projection.facts.stacks.count)
-        case .notes: (projection.noteListing.notes.count, projection.shownStack?.notes.count ?? 0)
-        }
-        return "\(matches) OF \(total)"
+        guard query.nonblank != nil else { return nil }
+        return "\(projection.noteListing.notes.count) OF \(projection.shownStack?.notes.count ?? 0)"
     }
 }

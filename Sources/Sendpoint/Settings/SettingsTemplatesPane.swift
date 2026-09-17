@@ -2,8 +2,6 @@ import AppKit
 import SendpointDomain
 import SwiftUI
 
-/// Templates as chips over one editor. The chip in ink is the template
-/// being edited; a dot on it means the draft has unsaved changes.
 struct SettingsTemplatesPane: View {
     @Bindable var settings: AppSettings
     @Bindable var editor: TemplateEditorState

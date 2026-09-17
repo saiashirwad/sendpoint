@@ -1,17 +1,10 @@
 import SendpointDomain
 import SwiftUI
 
-/// The palette's note pane: the highlighted stack's notes as cards, with
-/// the scroll-landing modifiers that keep keyboard movement in view.
-/// Takes the shell-threaded projection plus small scalars; the shared
-/// NoteFrames instance stays owned by the shell and is passed through.
 struct NoteListView: View {
     let projection: PaletteProjection
-    let stackHighlight: QuickSwitchRow?
     let query: String
-    let focusedPane: PalettePane
     let inlineEdit: PaletteEdit?
-    let noteNamespace: Namespace.ID
     let focus: FocusState<PaletteField?>.Binding
     let noteFrames: NoteFrames
     let onEvent: (PaletteEvent) -> Void
@@ -22,12 +15,10 @@ struct NoteListView: View {
 
     @ViewBuilder
     private func notePane(_ projection: PaletteProjection) -> some View {
-        if case let .create(name) = stackHighlight {
-            placeholder(title: "Create “\(name)”", detail: "Press ↩ to make it and switch to it.")
-        } else if let stack = projection.shownStack {
+        if let stack = projection.shownStack {
             noteCards(stack: stack, projection: projection)
         } else {
-            placeholder(title: "No stack selected", detail: nil)
+            placeholder(title: "Stack unavailable", detail: nil)
         }
     }
 
@@ -53,9 +44,6 @@ struct NoteListView: View {
             )
         } else {
             ScrollView {
-                    // A plain stack: stacks hold a handful of notes, and
-                    // lazy stacks of variable-height text re-measure on
-                    // every move.
                     VStack(spacing: 0) {
                         ForEach(Array(listing.notes.enumerated()), id: \.element.id) { index, entry in
                             if index > 0 {
@@ -67,40 +55,27 @@ struct NoteListView: View {
                     .padding(.vertical, 6)
                     .background(ScrollProbe(handle: noteFrames.scroll))
             }
-            // Keep focus grouping stable across inline edits; keys are
-            // routed by the window monitor, not by this section.
             .focusSection()
             .coordinateSpace(name: StackPaletteView.notesSpace)
             .onPreferenceChange(NoteFramesKey.self) { frames in
                 noteFrames.frames.merge(frames) { $1 }
-                // A landing stays armed until a fresh frame shows the note
-                // at the bottom edge: text lays out over a few passes, and
-                // a frame measured early is shorter than the note ends up.
                 noteFrames.settle()
             }
             .onChange(of: projection.highlightedNoteID) {
-                // Keyboard movement brings the highlighted note into view,
-                // and only when it is cut off, so the list never jumps
-                // under a note already on screen.
-                guard focusedPane == .notes,
-                      let id = projection.highlightedNoteID else { return }
+                guard let id = projection.highlightedNoteID else { return }
                 guard let frame = noteFrames.frames[id] else {
                     noteFrames.landing = id
                     return
                 }
                 if let anchor = noteRevealAnchor(frame: frame, viewportHeight: noteFrames.scroll.viewportHeight) {
-                    noteFrames.scroll.reveal(frame, anchor: anchor, animated: true)
+                    noteFrames.scroll.reveal(frame, anchor: anchor)
                 }
             }
             .onChange(of: stack.id) {
-                // Arrowing the sidebar lands each stack's preview at its
-                // newest note.
                 guard let id = listing.notes.last?.id else { return }
                 noteFrames.land(on: id)
             }
             .onAppear {
-                // The newest note is the landing spot when nothing is
-                // highlighted yet.
                 guard let id = projection.highlightedNoteID ?? listing.notes.last?.id else { return }
                 noteFrames.land(on: id)
             }
@@ -111,7 +86,6 @@ struct NoteListView: View {
         NoteCard(
             entry: entry,
             isHighlighted: highlightedNoteID == entry.id,
-            isDimmed: focusedPane != .notes,
             isEditing: inlineEdit?.noteID == entry.id,
             draft: Binding(
                 get: {
@@ -120,7 +94,6 @@ struct NoteListView: View {
                 set: { onEvent(.editText($0)) }
             ),
             focus: focus,
-            namespace: noteNamespace,
             onSelect: { onEvent(.chooseNote(entry.id)) },
             onEdit: { onEvent(.perform(.editNote(entry.id))) }
         )

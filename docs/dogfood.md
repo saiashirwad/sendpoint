@@ -25,12 +25,14 @@ tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
 
 ## Stacks
 
-- [ ] Hold the switch shortcut, cycle with repeated presses, release. The lit stack becomes current.
-- [ ] Hold the switch shortcut, press Up or Down. The palette opens on the lit stack, sidebar focused, notes on the right.
-- [ ] In the palette: Tab moves focus between the stack list and the notes; the unfocused pane dims its highlight.
-- [ ] Show Stack opens at the bottom of the newest stack's notes, last note highlighted.
-- [ ] In the palette: rename, delete with confirmation, undo a clear.
-- [ ] Only one stack: the switch shortcut beeps.
+- [ ] Press each stack shortcut with nothing open. The readout names the stack and its note count, then leaves; the menu bar number follows.
+- [ ] Press the current stack's shortcut. The readout shows and nothing else changes.
+- [ ] Press a stack shortcut with the viewer open. No readout; the header and the notes change to that stack.
+- [ ] Press a stack shortcut while editing a note in the viewer. The edit saves to the stack it began in, then the viewer shows the new stack.
+- [ ] Press a stack shortcut while recording a voice note. The capsule's destination follows and the note lands there.
+- [ ] Show Stack opens at the bottom of the current stack's notes, last note highlighted.
+- [ ] In the viewer: click a numeral or press ⌘1–⌘5 to switch; clear the stack and undo it.
+- [ ] Launch over a version 3 store. The five most recent stacks arrive with their notes and `store.v3.json` sits beside `store.json`.
 
 ## Templates
 

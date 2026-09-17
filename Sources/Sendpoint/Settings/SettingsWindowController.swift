@@ -2,7 +2,6 @@ import AppKit
 import SendpointDomain
 import SwiftUI
 
-/// The stack store arrives after launch; Settings may already be open.
 @Observable
 final class SettingsStoreHandle {
     var store: StackStore?
@@ -24,9 +23,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onShowStack: () -> Void
     private var window: NSWindow?
     private(set) var templateEditor: TemplateEditorState?
-    /// Whether this window currently holds a wait on the shared voice-model
-    /// poll. Balances present/hide so the PermissionState waiter count stays
-    /// exact when both Setup and Settings are open.
     private var voiceWatchActive = false
 
     init(

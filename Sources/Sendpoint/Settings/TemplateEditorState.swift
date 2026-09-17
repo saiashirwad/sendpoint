@@ -8,8 +8,6 @@ enum TemplateEditorError: Error, Equatable, LocalizedError {
     var errorDescription: String? { "Save or discard the template changes first." }
 }
 
-/// Every draft mutation the settings templates page can make. Views send one
-/// event per user action; the draft itself is read-only outside this type.
 enum TemplateEditorEvent: Equatable {
     case editName(String)
     case editPreamble(String)
@@ -58,8 +56,6 @@ final class TemplateEditorState {
     var canDelete: Bool { settings.templates.count > 1 }
     var templates: [Template] { settings.templates }
 
-    /// The single transition for draft edits. Save/revert/selection flows are
-    /// unchanged and keep deriving `isDirty` from the draft.
     func send(_ event: TemplateEditorEvent) {
         switch event {
         case .editName(let name): draft.name = name

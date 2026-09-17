@@ -1,34 +1,15 @@
 import SendpointDomain
 import SwiftUI
 
-/// The palette's footer: the cycling hints while switching stacks, or the
-/// flash/context line plus the template picker and primary/⌘K actions.
-/// Takes the shell-threaded projection plus small scalars.
 struct PaletteFooterView: View {
     let projection: PaletteProjection
-    let presentation: PalettePresentation
-    let focusedPane: PalettePane
     let flash: (text: String, generation: Int)?
-    let switchComboLabel: String
     let onEvent: (PaletteEvent) -> Void
 
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if presentation == .cycling {
-            HStack(spacing: 14) {
-                hint(switchComboLabel, "cycle")
-                hint("⇧", "reverse")
-                Spacer()
-                Text("Release to switch")
-                    .font(.uiCaption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, PaletteMetrics.horizontalPadding)
-            .frame(height: PaletteMetrics.barHeight)
-        } else {
-            browsingFooter(projection)
-        }
+        browsingFooter(projection)
     }
 
     private func browsingFooter(_ projection: PaletteProjection) -> some View {
@@ -67,11 +48,13 @@ struct PaletteFooterView: View {
             .buttonStyle(.plain)
             .help("Template used when copying (⌘P)")
 
-            if let primary = projection.primaryAction {
-                QuietButton(primary.verb, keys: "↩") {
-                    onEvent(.perform(primary.action))
-                }
+            let primary = projection.primaryAction
+            QuietButton(primary?.title ?? "Edit", keys: "↩") {
+                if let primary { onEvent(.perform(primary.action)) }
             }
+            .opacity(primary == nil ? 0 : 1)
+            .disabled(primary == nil)
+            .accessibilityHidden(primary == nil)
 
             QuietButton("Actions", keys: "⌘K") {
                 onEvent(.toggleOverlay(.actions))
@@ -82,38 +65,17 @@ struct PaletteFooterView: View {
         .frame(height: PaletteMetrics.barHeight)
     }
 
-    /// Where the keyboard is and how to move it.
+    @ViewBuilder
     private func context(_ projection: PaletteProjection) -> some View {
-        HStack(spacing: 12) {
-            switch focusedPane {
-            case .stacks:
-                let count = projection.facts.stacks.count
-                Text("\(count) stack\(count == 1 ? "" : "s")")
-                hint("⇥", "notes")
-            case .notes:
-                let count = projection.shownStack?.notes.count ?? 0
-                Text("\(projection.shownStack?.name ?? "") · \(noteCountLabel(count))")
-                    .lineLimit(1)
-                    .contentTransition(.numericText(value: Double(count)))
-                    .animation(.snappy(duration: 0.3), value: count)
-                hint("⇥", "stacks")
-            }
-        }
-        .font(.uiCaption.monospacedDigit())
-        .foregroundStyle(.secondary)
-    }
-
-    private func hint(_ keys: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Keycap(keys, size: 10, isMuted: true)
-            Text(label)
+        if let startedAt = projection.facts.current?.startedAt {
+            Text("Started \(startedAt.formatted(.relative(presentation: .named)))")
                 .font(.uiCaption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }
 
-/// The banner offering to put cleared notes back.
 struct PaletteUndoBanner: View {
     let undo: StackUndoFacts
     let onEvent: (PaletteEvent) -> Void
@@ -136,8 +98,6 @@ struct PaletteUndoBanner: View {
     }
 }
 
-/// A validation or save problem, with Retry when the failure is retryable
-/// and Dismiss when it is not.
 struct PaletteProblemRow: View {
     let message: String
     let interaction: PaletteInteraction
@@ -163,7 +123,6 @@ struct PaletteProblemRow: View {
     }
 }
 
-/// A store error, with Retry while mutations are still pending.
 struct PaletteErrorRow: View {
     let error: StackStoreError
     let hasPendingMutations: Bool

@@ -17,7 +17,6 @@ public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-/// An injected persistence boundary for the versioned stack document.
 public struct StorePersistence: Sendable {
     public static let fileName = "store.json"
 
@@ -39,10 +38,6 @@ public struct StorePersistence: Sendable {
         try await loadOperation()
     }
 
-    /// Whether the most recent `load()` quarantined a corrupt file before
-    /// reporting first launch. Lets callers distinguish "fresh start, moved
-    /// a corrupt file aside" from "fresh start, first launch". Always false
-    /// for injected doubles built without a quarantine source.
     public func didQuarantineCorruptFile() async -> Bool {
         await quarantineFlagOperation()
     }
@@ -84,9 +79,6 @@ private actor AtomicJSONStore {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let quarantineDateFormatter: ISO8601DateFormatter
-    /// Whether the most recent `load()` quarantined a corrupt file.
-    /// Reset at the start of every load; set only after a quarantine move
-    /// succeeds, so a failed quarantine (which throws) never reports one.
     private(set) var didQuarantine = false
 
     init(directory: URL, now: @escaping @Sendable () -> Date) {
@@ -114,17 +106,12 @@ private actor AtomicJSONStore {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            // A file that vanished between the existence check and the read
-            // is still first launch, not an I/O failure.
             let code = (error as NSError).code
             if (error as NSError).domain == NSCocoaErrorDomain,
                code == NSFileNoSuchFileError || code == NSFileReadNoSuchFileError
             {
                 return nil
             }
-            // Raw I/O failures must never look like a wipe: throw without
-            // quarantining so the caller reports "unavailable" instead of
-            // starting empty.
             throw StorePersistenceError.unavailable
         }
 
@@ -136,11 +123,18 @@ private actor AtomicJSONStore {
             didQuarantine = true
             return nil
         }
-        guard version == StackDocument.currentVersion else {
+        guard version == StackDocument.currentVersion || version == StackDocumentMigration.legacyVersion else {
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
         do {
+            if version == StackDocumentMigration.legacyVersion {
+                let backup = directory.appendingPathComponent("store.v\(version).json")
+                if !fileManager.fileExists(atPath: backup.path) {
+                    try fileManager.copyItem(at: fileURL, to: backup)
+                }
+                return try StackDocumentMigration.migrate(legacy: data, decoder: decoder)
+            }
             let document = try decoder.decode(StackDocument.self, from: data)
             try StackDocumentMutations.validate(document)
             return document
@@ -161,7 +155,6 @@ private actor AtomicJSONStore {
             throw StorePersistenceError.invalidDocument(error.message)
         }
 
-        // Finish validation and encoding before touching the last committed file.
         let data = try encoder.encode(document)
         let fileManager = FileManager.default
         try fileManager.createDirectory(

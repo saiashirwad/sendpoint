@@ -3,36 +3,24 @@ import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
-/// Owns the palette panel, its key handling, and its one teardown path.
 final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private enum Lifecycle {
         case active
         case tornDown
     }
 
-    private static let frameAutosaveName = "StackPalette"
+    private static let frameAutosaveName = "StackViewer"
 
     private let panel: CapturePanel
     private let model: StackPaletteModel
     private let surfaces: SurfaceCoordinator
-    /// Owns the note frames (alongside the ScrollHandle acquaintances inside
-    /// them) so they outlive SwiftUI view identity. Disarmed on every hide
-    /// and on teardown; the frames dict is keyed by note UUID and merged on
-    /// overwrite, so the longer lifetime changes no behavior.
     private let noteFrames = NoteFrames()
     private var keyMonitor: Any?
     private var lifecycle: Lifecycle = .active
-    var onCycleClosed: () -> Void = {}
-
-    var canBeginCycle: Bool {
-        lifecycle == .active && !model.state.isBusy && model.state.inlineEdit == nil
-    }
 
     init(
         store: StackStore,
         settings: TemplateSettings,
-        shortcuts: ShortcutSettings,
-        voiceSettings: VoiceSettings,
         export: ExportController,
         surfaces: SurfaceCoordinator,
         onSelectTemplate: @escaping (UUID) -> Void
@@ -42,8 +30,8 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         self.panel = panel
 
         let model = StackPaletteModel(
-            store: store, settings: settings, shortcuts: shortcuts,
-            voiceSettings: voiceSettings, export: export, onSelectTemplate: onSelectTemplate
+            store: store, settings: settings,
+            export: export, onSelectTemplate: onSelectTemplate
         )
         self.model = model
         super.init()
@@ -55,22 +43,15 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
         panel.delegate = self
         installKeyMonitor()
-        surfaces.register(.switcher, transitions: .init(
-            show: { [weak self] in self?.presentCycle() },
-            hide: { [weak self] in self?.hideCycle() }
-        ))
         surfaces.register(.palette, transitions: .init(
             show: { [weak self] in self?.present() },
             hide: { [weak self] in self?.hide() }
         ))
     }
 
-    /// A titled window with the title bar hidden, not a borderless one: an
-    /// opaque backing is what lets macOS smooth text, and the system draws
-    /// the rounded corners and shadow.
     static func makePanel() -> CapturePanel {
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 920, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
             styleMask: [.titled, .fullSizeContentView, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -93,47 +74,13 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         return panel
     }
 
-    func show(focus: PalettePane, highlighting stackID: UUID? = nil) {
+    func show() {
         guard lifecycle == .active else { return }
-        if model.state.presentation == .cycling { closeCycle() }
-        model.send(.open(focus, highlighting: stackID))
+        model.send(.open)
         surfaces.present(.palette)
     }
 
-    func previewStack(_ id: UUID) {
-        guard canBeginCycle else { return }
-        if !surfaces.visible.contains(.switcher) { surfaces.dismiss(.palette) }
-        model.send(.previewStack(id))
-        surfaces.present(.switcher)
-    }
-
-    func closeCycle() { surfaces.dismiss(.switcher) }
-
-    private func presentCycle() {
-        if !panel.isVisible {
-            if !panel.setFrameUsingName(Self.frameAutosaveName) { placeNearTop() }
-        }
-        panel.ignoresMouseEvents = true
-        panel.level = .floating
-        panel.makeFirstResponder(nil)
-        panel.resignKey()
-        panel.orderFrontRegardless()
-        panel.contentView?.layoutSubtreeIfNeeded()
-        panel.displayIfNeeded()
-    }
-
-    private func hideCycle() {
-        guard lifecycle == .active else { return }
-        noteFrames.disarm()
-        model.send(.close)
-        panel.orderOut(nil)
-        panel.ignoresMouseEvents = false
-        onCycleClosed()
-    }
-
     private func present() {
-        panel.ignoresMouseEvents = false
-        panel.level = .normal
         if !panel.isVisible {
             if !panel.setFrameUsingName(Self.frameAutosaveName) {
                 placeNearTop()
@@ -142,13 +89,11 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         panel.presentActivated()
     }
 
-    /// The only close path. Safe to call more than once.
     func close() { model.send(.close) }
 
     func teardown() {
         guard lifecycle == .active else { return }
         model.send(.teardown)
-        surfaces.unregister(.switcher)
         surfaces.unregister(.palette)
         releaseWindow()
     }
@@ -182,23 +127,14 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard lifecycle == .active else { return }
-        guard model.state.presentation != .cycling else { return }
         surfaces.resignedKey(.palette)
     }
 
     // MARK: - Keys
 
-    /// Every key the palette cares about is handled here, ahead of the text
-    /// fields, so ↑↓ move the highlight instead of the insertion point. Any
-    /// key the model declines falls through to the field.
-    ///
-    /// This monitor is the sole palette key owner, whether focus is in a
-    /// field, a row, or chrome. It runs before the responder chain, so a
-    /// consumed key cannot also activate a Button or move SwiftUI focus.
-    /// The reducer decides when editing keys should reach the native field.
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.lifecycle == .active, self.model.state.presentation != .cycling, event.window === self.panel,
+            guard let self, self.lifecycle == .active, event.window === self.panel,
                   let key = PaletteKey(event: event)
             else { return event }
             let selection = (self.panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0
@@ -222,30 +158,21 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 }
 
 extension PaletteKey {
-    private static let commandLetters: Set<Character> = ["c", "k", "n", "p", "r", "z"]
+    private static let commandLetters: Set<Character> = ["c", "k", "p", "z"]
 
-    /// Decodes an event by character rather than hardware key code where a
-    /// letter is involved, so ⌘R survives non-US keyboard layouts.
     init?(event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         let plain = modifiers.isEmpty
         let command = modifiers == .command
         let shiftCommand = modifiers == [.command, .shift]
         let option = modifiers == .option
-        let shift = modifiers == .shift
         switch event.keyCode {
         case UInt16(kVK_UpArrow) where plain: self = .up
         case UInt16(kVK_DownArrow) where plain: self = .down
-        case UInt16(kVK_LeftArrow) where plain: self = .left
-        case UInt16(kVK_RightArrow) where plain: self = .right
         case UInt16(kVK_UpArrow) where option: self = .optionUp
         case UInt16(kVK_DownArrow) where option: self = .optionDown
-        case UInt16(kVK_Tab) where plain: self = .tab
-        case UInt16(kVK_Tab) where shift: self = .backTab
         case UInt16(kVK_Return) where plain, UInt16(kVK_ANSI_KeypadEnter) where plain:
             self = .activate
-        case UInt16(kVK_Return) where command, UInt16(kVK_ANSI_KeypadEnter) where command:
-            self = .commandActivate
         case UInt16(kVK_Escape) where plain: self = .escape
         case UInt16(kVK_Delete) where command: self = .commandDelete
         case UInt16(kVK_Delete) where shiftCommand: self = .shiftCommandDelete
