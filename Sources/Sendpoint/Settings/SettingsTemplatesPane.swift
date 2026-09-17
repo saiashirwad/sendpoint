@@ -35,7 +35,7 @@ struct SettingsTemplatesPane: View {
                     .padding(.vertical, 10)
                     .accessibilityLabel("Template name")
             }
-            SettingsSection("Prompt", footnote: "Goes above the notes. Tell the AI what to do with them.") {
+            SettingsSection("Prompt") {
                 TextField(
                     "Summarise these notes…",
                     text: Binding(

@@ -6,6 +6,7 @@ final class StackPaletteModel {
     private(set) var state = PaletteWorkflow()
     let store: StackStore
     let settings: TemplateSettings
+    let shortcuts: ShortcutSettings
     @ObservationIgnored private let onSelectTemplate: (UUID) -> Void
     @ObservationIgnored var onClose: () -> Void = {}
     @ObservationIgnored private let export: ExportController
@@ -13,11 +14,12 @@ final class StackPaletteModel {
     @ObservationIgnored private var pending: [PaletteEvent] = []
     @ObservationIgnored private var isDraining = false
 
-    init(store: StackStore, settings: TemplateSettings,
+    init(store: StackStore, settings: TemplateSettings, shortcuts: ShortcutSettings,
          export: ExportController,
          onSelectTemplate: @escaping (UUID) -> Void) {
         self.store = store
         self.settings = settings
+        self.shortcuts = shortcuts
         self.export = export
         self.onSelectTemplate = onSelectTemplate
     }
@@ -25,7 +27,13 @@ final class StackPaletteModel {
     var projection: PaletteProjection {
         PaletteProjection(state: state, context: PaletteContext(stacks: store.stacks,
             currentStackID: store.currentStackID, lastCleared: store.lastCleared,
-            templates: settings.templates, activeTemplate: settings.activeTemplate))
+            templates: settings.templates, activeTemplate: settings.activeTemplate,
+            moveShortcuts: moveShortcuts))
+    }
+    private var moveShortcuts: [Int: String] {
+        Dictionary(uniqueKeysWithValues: (1...StackDocument.stackCount).compactMap { number in
+            shortcuts.moveNoteCombo(number).map { (number, $0.displayString) }
+        })
     }
     var query: String {
         get { state.query }
@@ -65,11 +73,12 @@ final class StackPaletteModel {
         case .retry: store.retryPendingMutations()
         case let .copyStack(id):
             export.copy(store: store, stackID: id, template: settings.activeTemplate) { [weak self] message in
-                self?.showFlash(message)
+                self?.send(.flash(message))
             }
         case let .copyNote(note):
-            export.copyNote(note) { [weak self] message in self?.showFlash(message) }
+            export.copyNote(note) { [weak self] message in self?.send(.flash(message)) }
         case let .selectTemplate(id): onSelectTemplate(id)
+        case let .clearFlashLater(generation): clearFlashLater(generation)
         case .close:
             flashTask?.cancel()
             flashTask = nil
@@ -78,9 +87,7 @@ final class StackPaletteModel {
         }
     }
 
-    private func showFlash(_ message: String) {
-        send(.copied(message))
-        guard let generation = state.flash?.generation else { return }
+    private func clearFlashLater(_ generation: Int) {
         flashTask?.cancel()
         flashTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(1.8)) } catch { return }

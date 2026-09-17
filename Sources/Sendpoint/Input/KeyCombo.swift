@@ -19,6 +19,11 @@ nonisolated struct KeyCombo: Codable, Equatable, Hashable {
         return m
     }
 
+    var addingShift: KeyCombo? {
+        guard !modifiers.contains(.shift) else { return nil }
+        return KeyCombo(keyCode: keyCode, modifiers: modifiers.union(.shift))
+    }
+
     var isValid: Bool {
         !modifiers.intersection([.command, .option, .control]).isEmpty
     }

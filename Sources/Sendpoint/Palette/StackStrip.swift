@@ -6,24 +6,30 @@ struct StackStrip: View {
     var accent: Color
     var onSelect: ((Int) -> Void)?
 
+    private static let hitPadding: CGFloat = 6
+
     var body: some View {
-        HStack(spacing: size * 0.75) {
+        HStack(spacing: onSelect == nil ? size * 0.75 : 0) {
             ForEach(stacks) { stack in
                 numeral(stack)
             }
         }
+        .padding(.trailing, onSelect == nil ? 0 : -Self.hitPadding)
         .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
     private func numeral(_ stack: StackItemFacts) -> some View {
         let label = Text("\(stack.number)")
-            .font(.mono(size, weight: stack.isCurrent ? .medium : .regular))
+            .font(.ui(size, weight: stack.isCurrent ? .semibold : .medium).monospacedDigit())
             .foregroundStyle(color(stack))
             .accessibilityLabel("\(stack.name), \(stack.countLabel)\(stack.isCurrent ? ", current" : "")")
         if let onSelect {
             Button { onSelect(stack.number) } label: {
-                label.frame(minWidth: size * 1.4, minHeight: size * 1.8).contentShape(Rectangle())
+                label
+                    .padding(.horizontal, Self.hitPadding)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("\(stack.name) · \(stack.countLabel)")
@@ -46,7 +52,7 @@ struct StackReadoutLabel: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: numeralSize * 0.4) {
             Text("\(stack.number)")
-                .font(.mono(numeralSize, weight: .medium))
+                .font(.ui(numeralSize, weight: .semibold).monospacedDigit())
                 .frame(width: numeralSize * 0.8)
             Text(stack.isEmpty ? "Empty" : stack.countLabel)
                 .font(.ui(detailSize).monospacedDigit())

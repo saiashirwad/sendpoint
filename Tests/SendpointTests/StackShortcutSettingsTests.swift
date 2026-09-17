@@ -37,6 +37,26 @@ final class StackShortcutSettingsTests: XCTestCase {
         }
     }
 
+    func testMovingANoteIsTheStacksShortcutWithShiftAndIsClaimedWithIt() throws {
+        try withDefaults { defaults in
+            let settings = ShortcutSettings(defaults: defaults)
+            let optionShiftJ = KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.option, .shift])
+
+            XCTAssertEqual(settings.moveNoteCombo(2), optionShiftJ)
+            XCTAssertEqual(settings.moveNoteStackNumber(for: optionShiftJ), 2)
+            XCTAssertNil(settings.moveNoteStackNumber(for: KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.option])))
+            XCTAssertEqual(settings.shortcutConflict(for: optionShiftJ, excluding: .clear), .duplicate(.selectStack(2)))
+
+            let replacement = KeyCombo(keyCode: UInt16(kVK_ANSI_2), modifiers: [.control, .shift])
+            try settings.setShortcut(replacement, for: .selectStack(2))
+            XCTAssertNil(settings.moveNoteCombo(2), "a shortcut that already holds shift has no move variant")
+            XCTAssertNil(settings.moveNoteStackNumber(for: optionShiftJ))
+
+            settings.clearShortcut(for: .selectStack(3))
+            XCTAssertNil(settings.moveNoteCombo(3))
+        }
+    }
+
     func testStackShortcutsCanBeReboundAndClearedAndBothPersist() throws {
         try withDefaults { defaults in
             let settings = ShortcutSettings(defaults: defaults)

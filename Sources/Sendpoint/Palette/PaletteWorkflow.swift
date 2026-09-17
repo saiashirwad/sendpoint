@@ -20,7 +20,7 @@ enum PaletteEvent {
     case perform(PaletteAction), key(PaletteKey, textHasSelection: Bool)
     case editText(String), commitEdit, cancelEdit, noteFocus(UUID?)
     case toggleOverlay(PaletteOverlay), closeOverlay, overlayQuery(String), overlayHighlight(Int)
-    case selectTemplate(UUID), clearFlash(Int), copied(String)
+    case selectTemplate(UUID), clearFlash(Int), flash(String)
     case mutationResult(UUID, StackMutationOutcome)
     case retry
 }
@@ -82,6 +82,7 @@ struct PaletteContext {
     let lastCleared: ClearedBatch?
     let templates: [Template]
     let activeTemplate: Template
+    var moveShortcuts: [Int: String] = [:]
 }
 
 enum PaletteEffect {
@@ -90,6 +91,7 @@ enum PaletteEffect {
     case copyStack(UUID)
     case copyNote(Note)
     case selectTemplate(UUID)
+    case clearFlashLater(Int)
     case close
     case beep
 }
@@ -106,6 +108,14 @@ struct PaletteProjection {
 
     var shownStack: Stack? {
         context.stacks.stack(id: context.currentStackID)
+    }
+
+    var undo: StackUndoFacts? {
+        facts.undo.flatMap { $0.isCurrentStack ? $0 : nil }
+    }
+
+    var showsUndoInFooter: Bool {
+        undo != nil && shownStack?.notes.isEmpty == false
     }
 
     var noteListing: NoteListing {
@@ -132,10 +142,14 @@ struct PaletteProjection {
         } else {
             focus = .nothing
         }
+        let targets = facts.stacks.filter { !$0.isCurrent }.map {
+            PaletteMoveTarget(number: $0.number, keys: context.moveShortcuts[$0.number] ?? "")
+        }
         return PaletteActionContext(
             focus: focus,
+            moveTargets: targets,
             stack: facts.current,
-            undo: facts.undo,
+            undo: undo,
             templateName: context.activeTemplate.name
         )
     }
@@ -152,9 +166,6 @@ struct PaletteProjection {
         context.templates.matching(state.overlayQuery, text: \.name)
     }
 
-    var primaryAction: PaletteActionItem? {
-        actionItems.first { $0.keys == "↩" }
-    }
 }
 
 struct PaletteUpdate {
@@ -240,9 +251,10 @@ struct PaletteUpdate {
             guard !finishEdit(before: event) else { break }
             closeOverlay()
             effects.append(.selectTemplate(id))
-        case let .copied(text):
+        case let .flash(text):
             state.nextFlash += 1
             state.flash = (text, state.nextFlash)
+            effects.append(.clearFlashLater(state.nextFlash))
         case let .clearFlash(generation):
             if state.flash?.generation == generation { state.flash = nil }
         case .open, .teardown: break
@@ -263,6 +275,12 @@ struct PaletteUpdate {
         case let .deleteNote(id): enqueue(.removeNote(stackID: stackID, noteID: id))
         case let .moveNoteUp(id): moveNote(id, offset: -1)
         case let .moveNoteDown(id): moveNote(id, offset: 1)
+        case let .moveNoteToStack(id, number):
+            guard let destination = context.stacks.stack(number: number), destination.id != stackID,
+                  view.shownStack?.notes.contains(where: { $0.id == id }) == true
+            else { effects.append(.beep); break }
+            enqueue(.moveNoteToStack(noteID: id, from: stackID, to: destination.id),
+                then: .flash("Moved to \(stackTitle(number))"))
         }
     }
 
@@ -373,7 +391,7 @@ struct PaletteUpdate {
             case .escape: closeOverlay()
             case .command("k"): update(.toggleOverlay(.actions))
             case .command("p"): update(.toggleOverlay(.templates))
-            case .command, .shiftCommand, .commandDelete, .shiftCommandDelete, .optionUp, .optionDown, .commandDigit:
+            case .command, .shiftCommand, .commandDelete, .shiftCommandDelete, .optionUp, .optionDown, .commandDigit, .moveToStack:
                 closeOverlay()
                 return handle(key, textHasSelection: false)
             }
@@ -397,6 +415,9 @@ struct PaletteUpdate {
         case .command("k"): openOverlay(.actions)
         case .command("p"): openOverlay(.templates)
         case let .commandDigit(digit): update(.selectStack(digit))
+        case let .moveToStack(number):
+            if let id = state.noteState.highlight { update(.perform(.moveNoteToStack(id, number))) }
+            else { effects.append(.beep) }
         case .activate:
             if let id = state.noteState.highlight { chooseNote(id, editing: true) }
             else { effects.append(.beep) }

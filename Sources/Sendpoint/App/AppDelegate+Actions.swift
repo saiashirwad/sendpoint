@@ -130,6 +130,7 @@ extension AppDelegate {
         palette = StackPaletteWindowController(
             store: store,
             settings: templates,
+            shortcuts: shortcuts,
             export: exportController,
             surfaces: surfaces,
             onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }

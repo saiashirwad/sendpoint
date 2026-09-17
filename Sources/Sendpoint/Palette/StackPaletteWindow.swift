@@ -21,6 +21,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     init(
         store: StackStore,
         settings: TemplateSettings,
+        shortcuts: ShortcutSettings,
         export: ExportController,
         surfaces: SurfaceCoordinator,
         onSelectTemplate: @escaping (UUID) -> Void
@@ -30,7 +31,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         self.panel = panel
 
         let model = StackPaletteModel(
-            store: store, settings: settings,
+            store: store, settings: settings, shortcuts: shortcuts,
             export: export, onSelectTemplate: onSelectTemplate
         )
         self.model = model
@@ -135,7 +136,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.lifecycle == .active, event.window === self.panel,
-                  let key = PaletteKey(event: event)
+                  let key = PaletteKey(event: event, shortcuts: self.model.shortcuts)
             else { return event }
             let selection = (self.panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0
             let handled = self.model.send(.key(key, textHasSelection: selection > 0))
@@ -159,6 +160,15 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
 extension PaletteKey {
     private static let commandLetters: Set<Character> = ["c", "k", "p", "z"]
+
+    init?(event: NSEvent, shortcuts: ShortcutSettings) {
+        let combo = KeyCombo(keyCode: event.keyCode, modifiers: event.modifierFlags)
+        if let number = shortcuts.moveNoteStackNumber(for: combo) {
+            self = .moveToStack(number)
+        } else {
+            self.init(event: event)
+        }
+    }
 
     init?(event: NSEvent) {
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum PaletteMetrics {
-    static let horizontalPadding: CGFloat = 18
+    static let horizontalPadding: CGFloat = 22
     static let barHeight: CGFloat = 40
     static let overlayWidth: CGFloat = 320
     static let pillRadius: CGFloat = 7

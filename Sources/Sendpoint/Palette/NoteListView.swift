@@ -25,8 +25,7 @@ struct NoteListView: View {
     @ViewBuilder
     private func noteCards(stack: Stack, projection: PaletteProjection) -> some View {
         let listing = projection.noteListing
-        let wasCleared = projection.facts.undo?.stackID == stack.id
-        if stack.notes.isEmpty && wasCleared, let undo = projection.facts.undo {
+        if stack.notes.isEmpty, let undo = projection.undo {
             VStack(spacing: 18) {
                 placeholder(title: "Stack cleared", detail: "\(noteCountLabel(undo.noteCount)) set aside.")
                     .frame(maxHeight: 120)

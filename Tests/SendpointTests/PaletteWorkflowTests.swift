@@ -194,6 +194,102 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.mutation, .removeNote(stackID: secondStackID, noteID: fourthNoteID))
     }
 
+    func testTheHighlightedNoteMovesToAnotherStackAndTheViewerFollowsIt() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.key(.up, textHasSelection: false))
+        XCTAssertEqual(harness.state.noteState.highlight, secondNoteID)
+
+        XCTAssertTrue(harness.send(.key(.moveToStack(2), textHasSelection: false)))
+        XCTAssertEqual(
+            harness.mutation, .moveNoteToStack(noteID: secondNoteID, from: firstStackID, to: secondStackID)
+        )
+        let id = try XCTUnwrap(harness.mutationID)
+
+        guard case let .applied(document) = StackDocumentMutations.applying(
+            try XCTUnwrap(harness.mutation),
+            to: StackDocument(stacks: harness.context.stacks, currentStackID: firstStackID)
+        ) else { return XCTFail("the move applies") }
+        harness.context = makeContext(stacks: Array(document.stacks.prefix(2)), currentStackID: document.currentStackID)
+        harness.send(.documentChanged)
+        harness.send(.mutationResult(id, .committed))
+
+        XCTAssertEqual(harness.projection.shownStack?.id, secondStackID)
+        XCTAssertEqual(harness.state.noteState.highlight, secondNoteID, "the moved note is the newest there")
+        XCTAssertEqual(harness.state.flash?.text, "Moved to Stack 2")
+        XCTAssertEqual(harness.flashClearGenerations, [1])
+        XCTAssertFalse(harness.state.isBusy)
+    }
+
+    func testMovingNeedsAHighlightedNoteAndAnotherStack() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.key(.moveToStack(1), textHasSelection: false))
+        XCTAssertNil(harness.mutation, "already in this stack")
+        XCTAssertEqual(harness.beepCount, 1)
+
+        harness.context = makeContext(stacks: stacks, currentStackID: paddedStacks(stacks)[2].id)
+        harness.send(.documentChanged)
+        harness.send(.key(.moveToStack(1), textHasSelection: false))
+        XCTAssertNil(harness.mutation, "nothing is highlighted in an empty stack")
+        XCTAssertEqual(harness.beepCount, 1)
+    }
+
+    func testTheMoveKeyBelongsToTheTextFieldWhileEditing() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+
+        XCTAssertFalse(harness.send(.key(.moveToStack(2), textHasSelection: false)))
+        XCTAssertNil(harness.mutation)
+        XCTAssertNotNil(harness.state.inlineEdit)
+    }
+
+    func testMovesAreListedForEveryOtherStackWithTheirKeys() {
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, moveShortcuts: [2: "⌥⇧J", 3: "⌥⇧K"])
+        harness.send(.open)
+
+        let moves = harness.projection.actionItems.filter {
+            if case .moveNoteToStack = $0.action { return true }
+            return false
+        }
+        XCTAssertEqual(moves.map(\.title), ["Move to Stack 2", "Move to Stack 3", "Move to Stack 4", "Move to Stack 5"])
+        XCTAssertEqual(moves.map(\.keys), ["⌥⇧J", "⌥⇧K", "", ""])
+        XCTAssertEqual(moves.first?.action, .moveNoteToStack(thirdNoteID, 2))
+    }
+
+    func testUndoIsOfferedOnlyForTheCurrentStack() {
+        let cleared = ClearedBatch(stackID: firstStackID, notes: [Note(subject: .standalone, body: "Gone")])
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID, lastCleared: cleared)
+        harness.send(.open)
+
+        XCTAssertNil(harness.projection.undo)
+        XCTAssertFalse(harness.projection.showsUndoInFooter)
+        XCTAssertFalse(harness.projection.actionItems.contains { $0.action == .undoClear })
+        harness.send(.key(.command("z"), textHasSelection: false))
+        XCTAssertNil(harness.mutation)
+        XCTAssertEqual(harness.beepCount, 1)
+
+        harness.context = makeContext(stacks: stacks, currentStackID: firstStackID, lastCleared: cleared)
+        harness.send(.documentChanged)
+        XCTAssertEqual(harness.projection.undo?.stackID, firstStackID)
+        XCTAssertTrue(harness.projection.showsUndoInFooter)
+        harness.send(.key(.command("z"), textHasSelection: false))
+        XCTAssertEqual(harness.mutation, .undoClear)
+    }
+
+    func testAClearedEmptyStackOffersUndoInItsEmptyState() {
+        let cleared = ClearedBatch(stackID: firstStackID, notes: [Note(subject: .standalone, body: "Gone")])
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: [Stack(id: firstStackID)], lastCleared: cleared)
+        harness.send(.open)
+
+        XCTAssertNotNil(harness.projection.undo)
+        XCTAssertFalse(harness.projection.showsUndoInFooter)
+    }
+
     func testAnEmptyStackOffersNothingToCopyOrClear() {
         var harness = makeHarness()
         harness.context = makeContext(stacks: stacks, currentStackID: paddedStacks(stacks)[2].id)
@@ -251,13 +347,17 @@ final class PaletteWorkflowTests: XCTestCase {
         leading + padding.dropFirst(leading.count)
     }
 
-    private func makeContext(stacks: [Stack], currentStackID: UUID? = nil) -> PaletteContext {
+    private func makeContext(
+        stacks: [Stack], currentStackID: UUID? = nil, lastCleared: ClearedBatch? = nil,
+        moveShortcuts: [Int: String] = [:]
+    ) -> PaletteContext {
         PaletteContext(
             stacks: paddedStacks(stacks),
             currentStackID: currentStackID ?? stacks[0].id,
-            lastCleared: nil,
+            lastCleared: lastCleared,
             templates: [.plain],
-            activeTemplate: .plain
+            activeTemplate: .plain,
+            moveShortcuts: moveShortcuts
         )
     }
 }
@@ -285,6 +385,10 @@ private struct Harness {
 
     var closeCount: Int {
         effects.filter { if case .close = $0 { return true } else { return false } }.count
+    }
+
+    var flashClearGenerations: [Int] {
+        effects.compactMap { if case let .clearFlashLater(generation) = $0 { return generation } else { return nil } }
     }
 
     var copiedStackID: UUID? {

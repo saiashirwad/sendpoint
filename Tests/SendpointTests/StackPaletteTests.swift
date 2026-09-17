@@ -104,9 +104,9 @@ final class StackPaletteTests: XCTestCase {
         ))
         XCTAssertEqual(
             PaletteActionCatalog.menu(items, query: "").map(\.action),
-            [.copyNote(secondNoteID), .moveNoteUp(secondNoteID), .moveNoteDown(secondNoteID),
+            [.editNote(secondNoteID), .copyNote(secondNoteID), .moveNoteUp(secondNoteID), .moveNoteDown(secondNoteID),
              .deleteNote(secondNoteID), .copyStack, .clearStack],
-            "↩, ⌘Z and ⌘P are already shown on the palette itself")
+            "⌘Z and ⌘P are already shown on the palette itself")
         XCTAssertEqual(PaletteActionCatalog.menu(items, query: "clear").map(\.action), [.clearStack])
         XCTAssertEqual(
             PaletteActionCatalog.menu(items, query: "stack").map(\.action), [.copyStack, .clearStack],

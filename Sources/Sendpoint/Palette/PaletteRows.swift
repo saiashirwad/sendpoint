@@ -36,7 +36,7 @@ struct NoteCard: View, Equatable {
 
     @State private var hovering = false
 
-    static let inset: CGFloat = 22
+    static let inset = PaletteMetrics.horizontalPadding
 
     private var quote: String {
         guard case let .selection(quote) = entry.subject else { return "" }
@@ -74,9 +74,9 @@ struct NoteCard: View, Equatable {
         HStack(alignment: .top, spacing: 16) {
             noteColumn
             Text(noteTimeLabel(entry.createdAt))
-                .font(.mono(10.5))
+                .font(.ui(11).monospacedDigit())
                 .foregroundStyle(.tertiary)
-                .padding(.top, 3)
+                .padding(.top, 4)
                 .accessibilityLabel(timeLabel)
         }
         .padding(.horizontal, Self.inset)
@@ -142,54 +142,56 @@ struct QuotedPassage: View {
     private var isTruncated: Bool { fullHeight > clampedHeight + 1 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            passage
-                .lineLimit(isExpanded ? nil : 3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
-                            if !isExpanded { clampedHeight = height }
-                        }
-                    }
-                }
-                .background {
-                    passage.lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .background {
-                            GeometryReader { proxy in
-                                Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
-                                    fullHeight = height
-                                }
-                            }
-                        }
-                        .hidden()
-                }
-                .padding(.leading, 12)
-                .overlay(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(Color.primary.opacity(0.16))
-                        .frame(width: 1.5)
-                }
-            if isTruncated {
-                Button(isExpanded ? "Collapse" : "Show passage") {
-                    isExpanded.toggle()
-                }
-                .buttonStyle(.plain)
-                .font(.uiCaption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 12)
-                .accessibilityLabel(isExpanded ? "Collapse passage" : "Show full passage")
+        Group {
+            if isTruncated || isExpanded {
+                Button { isExpanded.toggle() } label: { measured.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Collapse the passage" : "Show the whole passage")
+                    .accessibilityHint(isExpanded ? "Collapses the passage" : "Shows the whole passage")
+            } else {
+                measured
             }
         }
         .onChange(of: text) { isExpanded = false }
     }
 
+    private var measured: some View {
+        passage
+            .lineLimit(isExpanded ? nil : 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
+                        if !isExpanded { clampedHeight = height }
+                    }
+                }
+            }
+            .background {
+                passage.lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.onChange(of: proxy.size.height, initial: true) { _, height in
+                                fullHeight = height
+                            }
+                        }
+                    }
+                    .hidden()
+            }
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(Color.primary.opacity(0.16))
+                    .frame(width: 1.5)
+            }
+    }
+
     private var passage: some View {
         Text(text)
-            .font(.mono(12))
-            .lineSpacing(4)
+            .font(.ui(12.5))
+            .lineSpacing(3)
             .foregroundStyle(.secondary)
+            .multilineTextAlignment(.leading)
     }
 }
 

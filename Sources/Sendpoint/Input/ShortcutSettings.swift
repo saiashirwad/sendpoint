@@ -128,6 +128,10 @@ final class ShortcutSettings {
     var stackCombo: KeyCombo { requiredCombo(.stack) }
     var clearCombo: KeyCombo { requiredCombo(.clear) }
     func selectStackCombo(_ number: Int) -> KeyCombo? { combos[.selectStack(number)] }
+    func moveNoteCombo(_ number: Int) -> KeyCombo? { selectStackCombo(number)?.addingShift }
+    func moveNoteStackNumber(for combo: KeyCombo) -> Int? {
+        (1...StackDocument.stackCount).first { moveNoteCombo($0) == combo }
+    }
     var dictateCombo: KeyCombo? { combos[.dictate] }
 
     init(defaults: UserDefaults = .standard) {
@@ -157,8 +161,12 @@ final class ShortcutSettings {
             (KeyCombo(keyCode: UInt16(kVK_ANSI_W), modifiers: [.command]), "Close Window (⌘W)"),
             (KeyCombo(keyCode: UInt16(kVK_ANSI_Z), modifiers: [.command]), "Undo (⌘Z)"),
         ]
-        if let (_, name) = fixed.first(where: { $0.0 == proposed }) { return .reserved(name) }
-        if let duplicate = ShortcutSlot.allCases.first(where: { $0 != slot && combo(for: $0) == proposed }) {
+        let claimed = Self.claimedCombos(proposed, for: slot)
+        if let (_, name) = fixed.first(where: { claimed.contains($0.0) }) { return .reserved(name) }
+        if let duplicate = ShortcutSlot.allCases.first(where: { other in
+            guard other != slot, let combo = combo(for: other) else { return false }
+            return !Set(Self.claimedCombos(combo, for: other)).isDisjoint(with: claimed)
+        }) {
             return .duplicate(duplicate)
         }
         return nil
@@ -187,6 +195,11 @@ final class ShortcutSettings {
             preconditionFailure("Optional shortcuts have no required value")
         }
         return fallback
+    }
+
+    private static func claimedCombos(_ combo: KeyCombo, for slot: ShortcutSlot) -> [KeyCombo] {
+        guard case .selectStack = slot, let move = combo.addingShift else { return [combo] }
+        return [combo, move]
     }
 
     private func persist(_ combo: KeyCombo, key: String) {

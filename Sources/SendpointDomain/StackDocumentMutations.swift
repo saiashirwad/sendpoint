@@ -7,6 +7,7 @@ public enum StackDocumentMutation: Equatable, Sendable {
     case removeNote(stackID: UUID, noteID: UUID)
 
     case moveNote(stackID: UUID, noteID: UUID, destinationIndex: Int)
+    case moveNoteToStack(noteID: UUID, from: UUID, to: UUID)
     case clearStack(stackID: UUID)
     case clearExportedNotes(stackID: UUID, notes: [Note])
     case undoClear
@@ -127,6 +128,21 @@ public enum StackDocumentMutations {
             let note = notes.remove(at: sourceIndex)
             notes.insert(note, at: destinationIndex)
             document.stacks[stackIndex].notes = notes
+
+        case let .moveNoteToStack(noteID, from, to):
+            guard let sourceIndex = stackIndex(from, in: document),
+                  let destinationIndex = stackIndex(to, in: document)
+            else { return .rejected("The stack no longer exists.") }
+            guard from != to else { return .noOp }
+            guard let noteIndex = document.stacks[sourceIndex].notes.firstIndex(where: { $0.id == noteID }) else {
+                return .rejected("The note no longer exists.")
+            }
+            guard !document.stacks[destinationIndex].notes.contains(where: { $0.id == noteID }) else {
+                return .rejected("The note already exists.")
+            }
+            let note = document.stacks[sourceIndex].notes.remove(at: noteIndex)
+            document.stacks[destinationIndex].notes.append(note)
+            document.currentStackID = to
 
         case let .clearStack(stackID):
             guard let stackIndex = stackIndex(stackID, in: document) else {

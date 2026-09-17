@@ -100,6 +100,35 @@ final class StackDocumentMutationTests: XCTestCase {
         )
     }
 
+    func testMovingANoteAcrossStacksAppendsItAndMakesTheDestinationCurrent() {
+        let moved = makeNote(id: UUID(), body: "moved")
+        let stays = makeNote(id: UUID(), body: "stays")
+        let waiting = makeNote(id: UUID(), body: "waiting")
+        let initial = StackDocument(
+            stacks: filled([Stack(id: firstID, notes: [moved, stays]), Stack(id: secondID, notes: [waiting])]),
+            currentStackID: firstID
+        )
+
+        let result = applied(.moveNoteToStack(noteID: moved.id, from: firstID, to: secondID), to: initial)
+        XCTAssertEqual(result.stacks[0].notes, [stays])
+        XCTAssertEqual(result.stacks[1].notes, [waiting, moved])
+        XCTAssertEqual(result.currentStackID, secondID)
+
+        XCTAssertEqual(
+            StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: firstID), to: initial),
+            .noOp
+        )
+        XCTAssertEqual(
+            StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: secondID), to: result),
+            .rejected("The note no longer exists."),
+            "a repeated move finds the note already gone"
+        )
+        XCTAssertEqual(
+            StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: UUID()), to: initial),
+            .rejected("The stack no longer exists.")
+        )
+    }
+
     func testClearCanBeUndoneAfterSwitchingStacks() {
         let old = makeNote(id: UUID(), body: "old")
         let first = Stack(id: firstID, notes: [old])

@@ -29,10 +29,6 @@ struct StackPaletteView: View {
                 onEvent: { model.send($0) }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let undo = projection.facts.undo {
-                Hairline()
-                PaletteUndoBanner(undo: undo, onEvent: { model.send($0) })
-            }
             if let message = projection.problem {
                 Hairline()
                 PaletteProblemRow(

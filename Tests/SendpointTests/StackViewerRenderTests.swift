@@ -13,14 +13,25 @@ final class StackViewerRenderTests: XCTestCase {
         func notes(_ count: Int) -> [Note] {
             (0..<count).map { Note(subject: .standalone, body: "Note \($0 + 1)") }
         }
-        let stacks = filled([Stack(notes: notes(4)), Stack(), Stack(notes: notes(12)), Stack(notes: notes(1))])
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let quoted = [
+            Note(subject: .selection(quote: "A short passage."), body: "This is a sound test. I'm just testing this out."),
+            Note(
+                subject: .selection(quote: String(repeating: "The library lends more books than it owns, and the ledger never balances. ", count: 6)),
+                body: "Another sound test, another sound test, another sound test, why would you want another sound test, huh?"
+            ),
+        ]
+        let stacks = filled([Stack(notes: quoted), Stack(), Stack(notes: notes(12)), Stack(notes: notes(1))])
+        let document = StackDocument(
+            stacks: stacks, currentStackID: stacks[0].id,
+            lastCleared: ClearedBatch(stackID: stacks[0].id, notes: notes(3))
+        )
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         let suite = "StackViewerRenderTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let model = StackPaletteModel(
             store: store, settings: TemplateSettings(defaults: defaults),
+            shortcuts: ShortcutSettings(defaults: defaults),
             export: ExportController(services: ExportServices(write: { _ in 1 }, paste: { _, _ in true })),
             onSelectTemplate: { _ in }
         )

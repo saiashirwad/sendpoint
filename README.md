@@ -26,7 +26,7 @@ The default shortcuts, all changeable in Settings:
 | <kbd>⌥H</kbd> <kbd>⌥J</kbd> <kbd>⌥K</kbd> <kbd>⌥L</kbd> <kbd>⌥;</kbd> | Switch to stack 1, 2, 3, 4 or 5 |
 | <kbd>⌃⌘⌫</kbd>    | Clear stack                                  |
 
-There are always five stacks, one per key on the home row. A stack is somewhere to collect notes for the next few minutes and then hand off, so nothing is named, created or deleted: press a key and that stack is current. New notes land there, export empties it, and the menu bar shows its number. The stack viewer only ever shows the current stack, and follows along when you press another key.
+There are always five stacks, one per key on the home row. A stack is somewhere to collect notes for the next few minutes and then hand off, so nothing is named, created or deleted: press a key and that stack is current. New notes land there, export empties it, and the menu bar shows its number. The stack viewer only ever shows the current stack, and follows along when you press another key. In the viewer, add <kbd>⇧</kbd> to a stack's key to take the highlighted note there with you: <kbd>⌥⇧J</kbd> moves it to the end of stack 2 and switches to it.
 
 Voice notes work two ways, set in Settings. **Hold** is the default: hold to speak, release to save. **Tap** presses once to start and again to save. <kbd>⎋</kbd> cancels either way.
 

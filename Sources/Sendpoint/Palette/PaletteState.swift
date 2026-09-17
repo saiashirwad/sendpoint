@@ -33,6 +33,7 @@ nonisolated enum PaletteAction: Hashable {
     case deleteNote(UUID)
     case moveNoteUp(UUID)
     case moveNoteDown(UUID)
+    case moveNoteToStack(UUID, Int)
 }
 
 nonisolated enum PaletteActionSection: Hashable {
@@ -59,12 +60,16 @@ nonisolated struct PaletteActionItem: Equatable, Identifiable {
     var id: PaletteAction { action }
 
     var isPinned: Bool {
-        if keys == "↩" { return true }
         switch action {
         case .chooseTemplate, .undoClear: return true
         default: return false
         }
     }
+}
+
+nonisolated struct PaletteMoveTarget: Equatable {
+    let number: Int
+    let keys: String
 }
 
 nonisolated struct PaletteActionContext: Equatable {
@@ -74,6 +79,7 @@ nonisolated struct PaletteActionContext: Equatable {
     }
 
     var focus: Focus
+    var moveTargets: [PaletteMoveTarget] = []
     var stack: StackItemFacts?
     var undo: StackUndoFacts?
     var templateName: String
@@ -93,6 +99,9 @@ nonisolated enum PaletteActionCatalog {
             add(.copyNote(id), "Copy", "⌘C", in: .note)
             if index > 0 { add(.moveNoteUp(id), "Move up", "⌥↑", in: .note) }
             if index < count - 1 { add(.moveNoteDown(id), "Move down", "⌥↓", in: .note) }
+            for target in context.moveTargets {
+                add(.moveNoteToStack(id, target.number), "Move to \(stackTitle(target.number))", target.keys, in: .note)
+            }
             add(.deleteNote(id), "Delete", "⌘⌫", in: .note, destructive: true)
         }
         let hasNotes = context.stack.map { !$0.isEmpty } ?? false
@@ -116,6 +125,7 @@ nonisolated enum PaletteKey: Equatable {
     case escape
     case commandDelete, shiftCommandDelete
     case commandDigit(Int)
+    case moveToStack(Int)
     case command(Character)
     case shiftCommand(Character)
 }

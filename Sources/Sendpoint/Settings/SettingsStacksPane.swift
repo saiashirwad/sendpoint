@@ -23,11 +23,7 @@ struct SettingsStacksPane: View {
         let store = storeHandle.store
         let facts = store.map(StackUIFacts.init(store:))
         SettingsPage {
-            SettingsSection(
-                "Stacks",
-                footnote: "Always \(StackDocument.stackCount), one key each, from anywhere. "
-                    + "New notes land in the current stack, and exporting empties it. Click a stack to make it current."
-            ) {
+            SettingsSection("Stacks") {
                 ShortcutRows(
                     specs: ShortcutSlot.selectStackCases.map { ShortcutSpec(title: $0.title, slot: $0) },
                     shortcuts: shortcuts,
@@ -66,7 +62,7 @@ private struct StackShortcutLabel: View {
             Button { onSelect(stack.id) } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     Text("\(stack.number)")
-                        .font(.mono(14, weight: .medium))
+                        .font(.ui(14, weight: .semibold).monospacedDigit())
                         .foregroundStyle(stack.isCurrent ? AnyShapeStyle(Ink.accent(scheme)) : AnyShapeStyle(.primary))
                         .frame(width: 12)
                     Text(stack.isEmpty ? "Empty" : stack.countLabel)
