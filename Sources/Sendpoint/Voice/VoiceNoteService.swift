@@ -4,7 +4,7 @@ import Foundation
 import SendpointDomain
 
 extension Notification.Name {
-    static let voiceModelDidBecomeReady = Notification.Name("Sendpoint.voiceModelDidBecomeReady")
+    nonisolated static let voiceModelDidBecomeReady = Notification.Name("Sendpoint.voiceModelDidBecomeReady")
 }
 
 nonisolated enum LocalVoiceModelFiles {

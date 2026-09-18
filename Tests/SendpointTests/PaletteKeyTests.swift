@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import XCTest
 @testable import Sendpoint
 
+@MainActor
 final class PaletteKeyTests: XCTestCase {
     private func keyEvent(keyCode: Int, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.keyEvent(
@@ -23,7 +24,6 @@ final class PaletteKeyTests: XCTestCase {
             PaletteKey(event: keyEvent(keyCode: kVK_DownArrow, modifiers: .option)), .optionDown)
     }
 
-    @MainActor
     func testShiftOnAStackShortcutDecodesAsAMoveToThatStack() {
         let suite = "PaletteKeyTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

@@ -16,41 +16,44 @@ final class StackReadoutModel {
 struct StackReadoutView: View {
     let model: StackReadoutModel
 
-    static let size = CGSize(width: 260, height: 96)
+    static let margin: CGFloat = 16
+    static let height: CGFloat = 56
 
     var body: some View {
         let palette = OverlayPalette.dark
         let facts = StackUIFacts(store: model.store)
-        HStack(spacing: 18) {
+        HStack(spacing: 24) {
             if let stack = facts.stack(number: model.number) {
                 StackReadoutLabel(stack: stack, numeralSize: 26, detailSize: 13)
             }
-            Spacer(minLength: 0)
             StackStrip(stacks: facts.stacks.map { stack in
                 StackItemFacts(id: stack.id, number: stack.number, noteCount: stack.noteCount,
                     isCurrent: stack.number == model.number, startedAt: stack.startedAt)
             }, size: 12, accent: palette.accent)
         }
+        .fixedSize()
         .padding(.horizontal, 20)
-        .frame(width: Self.size.width - 32, height: Self.size.height - 40)
+        .frame(height: Self.height)
         .foregroundStyle(palette.ink)
         .background(palette.paper, in: RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
         .environment(\.colorScheme, .dark)
-        .frame(width: Self.size.width, height: Self.size.height)
+        .padding(Self.margin)
     }
 }
 
 final class StackReadoutController {
     private enum Lifecycle { case active, tornDown }
 
-    private let panel: NSPanel
+    let panel: NSPanel
     private let model: StackReadoutModel
     private var lifecycle: Lifecycle = .active
 
     init(store: StackStore) {
         model = StackReadoutModel(store: store)
+        let hosting = NSHostingView(rootView: StackReadoutView(model: model))
+        hosting.sizingOptions = [.intrinsicContentSize]
         panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: StackReadoutView.size),
+            contentRect: NSRect(origin: .zero, size: hosting.fittingSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -64,7 +67,7 @@ final class StackReadoutController {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.animationBehavior = .none
-        panel.contentView = NSHostingView(rootView: StackReadoutView(model: model))
+        panel.contentView = hosting
     }
 
     func show(number: Int) {
@@ -72,7 +75,9 @@ final class StackReadoutController {
         model.number = number
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if let visible = screen?.visibleFrame {
-            panel.setFrameOrigin(NSPoint(x: visible.midX - panel.frame.width / 2, y: visible.minY + 4))
+            let size = panel.contentView?.fittingSize ?? panel.frame.size
+            let origin = NSPoint(x: visible.midX - size.width / 2, y: visible.minY + 4)
+            panel.setFrame(NSRect(origin: origin, size: size), display: true)
         }
         panel.orderFrontRegardless()
     }

@@ -217,7 +217,7 @@ struct FloppyGlyph: View {
     }
 }
 
-private struct FloppyOutline: Shape {
+nonisolated private struct FloppyOutline: Shape {
     func path(in rect: CGRect) -> Path {
         func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(x: rect.minX + x * rect.width, y: rect.minY + y * rect.height)
