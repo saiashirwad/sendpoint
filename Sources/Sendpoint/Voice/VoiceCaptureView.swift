@@ -31,6 +31,10 @@ enum VoiceCaptureLayout {
             + cardFooterGap + cardFooterHeight + cardPaddingBottom
     }
 
+    static func cardSize(lines: Int, fontSize: CGFloat) -> NSSize {
+        NSSize(width: cardWidth, height: cardHeight(lines: lines, fontSize: fontSize))
+    }
+
     static func cardAnchorHeight(lines: Int, fontSize: CGFloat) -> CGFloat {
         cardHeight(lines: lines, fontSize: fontSize) - cardPaddingBottom
     }

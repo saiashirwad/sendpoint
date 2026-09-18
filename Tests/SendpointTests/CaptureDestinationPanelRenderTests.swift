@@ -53,6 +53,36 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
                       "Ending capture must remove the destination panel")
     }
 
+    func testBeginningATextCaptureFocusesTheNoteWithNoScrollInset() async throws {
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
+            rootView: CaptureView(model: controller)
+        ))
+        defer {
+            controller.send(.teardown)
+            editor.contentView = nil
+            editor.close()
+        }
+        editor.contentView?.layoutSubtreeIfNeeded()
+        controller.send(.begin(.text, NoteCaptureContext(stackID: stack.id)))
+        try await Task.sleep(for: .milliseconds(150))
+
+        let note = try XCTUnwrap(editor.firstResponder as? NoteTextView)
+        let scroll = try XCTUnwrap(note.enclosingScrollView)
+        XCTAssertFalse(scroll.automaticallyAdjustsContentInsets)
+        XCTAssertEqual(scroll.contentInsets.top, 0)
+        XCTAssertEqual(note.convert(note.textContainerOrigin, to: scroll), .zero,
+                       "the titlebar must not push the note below the top of its editor")
+
+        note.insertText("Follow up", replacementRange: note.selectedRange())
+        XCTAssertEqual(controller.note, "Follow up")
+    }
+
     func testRenderPickerAboveLiveVoicePill() async throws {
         guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
             throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
@@ -168,8 +198,15 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         let context = NoteCaptureContext(stackID: stacks[0].id)
         controller.send(.begin(.text, context))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
+        try registerAppFonts()
+        controller.setTranscriptionPreviewLines(5)
+        controller.setTranscriptionPreviewFontSize(15)
         let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
             rootView: CaptureView(model: controller)
+        ))
+        editor.setContentSize(VoiceCaptureLayout.cardSize(
+            lines: controller.transcriptionPreviewLines,
+            fontSize: CGFloat(controller.transcriptionPreviewFontSize)
         ))
         editor.setFrameOrigin(NSPoint(x: 400, y: 160))
         defer {
@@ -180,9 +217,24 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         editor.orderFrontRegardless()
         try await Task.sleep(for: .milliseconds(400))
         try screenshot(editor, to: directory, name: "text-capture-card-empty.png")
-        controller.note = "Follow up on this before the review."
+        func textView(in view: NSView) -> NSTextView? {
+            if let found = view as? NSTextView { return found }
+            for sub in view.subviews { if let found = textView(in: sub) { return found } }
+            return nil
+        }
+        let typed = try XCTUnwrap(textView(in: try XCTUnwrap(editor.contentView)))
+        editor.makeFirstResponder(typed)
+        typed.insertText("Follow up on this before the review.", replacementRange: typed.selectedRange())
         try await Task.sleep(for: .milliseconds(300))
         try screenshot(editor, to: directory, name: "text-capture-card.png")
+    }
+
+    private func registerAppFonts() throws {
+        let fonts = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/Fonts")
+        let files = try FileManager.default.contentsOfDirectory(at: fonts, includingPropertiesForKeys: nil)
+        CTFontManagerRegisterFontURLs(files as CFArray, .process, true, nil)
     }
 
     private func screenshot(_ window: NSWindow, to directory: String, name: String) throws {

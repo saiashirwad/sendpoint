@@ -134,20 +134,33 @@ final class CaptureWindows {
         if editorPanel == nil { editorPanel = makeEditorPanel() }
         guard let panel = editorPanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.dismiss) }
+        panel.setContentSize(editorSize)
         position(panel, near: captured?.screenRect)
         self.panel = panel
 
         panel.presentActivated()
     }
 
+    private var editorSize: NSSize {
+        VoiceCaptureLayout.cardSize(
+            lines: model.transcriptionPreviewLines,
+            fontSize: CGFloat(model.transcriptionPreviewFontSize)
+        )
+    }
+
     private func makeEditorPanel() -> CapturePanel {
         let hosting = CaptureHostingView(rootView: CaptureView(model: model))
-        return Self.makeEditorPanel(contentView: hosting)
+        let panel = Self.makeEditorPanel(contentView: hosting)
+        panel.setContentSize(editorSize)
+        return panel
     }
 
     static func makeEditorPanel(contentView: NSView = NSView()) -> CapturePanel {
         let panel = CapturePanel(
-            contentRect: NSRect(x: 0, y: 0, width: VoiceCaptureLayout.cardWidth, height: 150),
+            contentRect: NSRect(origin: .zero, size: VoiceCaptureLayout.cardSize(
+                lines: VoiceSettings.defaultPreviewLines,
+                fontSize: CGFloat(VoiceSettings.defaultPreviewFontSize)
+            )),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -162,7 +175,10 @@ final class CaptureWindows {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.minSize = NSSize(width: 320, height: 110)
+        panel.minSize = NSSize(width: 320, height: VoiceCaptureLayout.cardHeight(
+            lines: VoiceSettings.previewLinesMin,
+            fontSize: CGFloat(VoiceSettings.previewFontSizeMin)
+        ))
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.animationBehavior = .utilityWindow
 

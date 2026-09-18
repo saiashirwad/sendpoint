@@ -5,16 +5,16 @@ import SwiftUI
 struct CaptureView: View {
     @Bindable var model: CaptureController
 
-    @FocusState private var noteFocused: Bool
+    @State private var focusRequest = 0
 
     private let palette = OverlayPalette.dark
+    private var fontSize: CGFloat { CGFloat(model.transcriptionPreviewFontSize) }
     private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
         VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
             noteEditor
-                .padding(.top, -2)
             HStack(spacing: 10) {
                 CaptureStackLabel(model: model, mode: .text, ink: palette.ink)
                 CaptureTether(text: tether, ink: palette.ink)
@@ -33,16 +33,14 @@ struct CaptureView: View {
         .environment(\.colorScheme, .dark)
         .ignoresSafeArea()
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
-        .onAppear {
-            DispatchQueue.main.async { noteFocused = true }
-        }
+        .onAppear { focusRequest += 1 }
         .onChange(of: model.state.session?.context) { _, context in
             guard context != nil else { return }
-            DispatchQueue.main.async { noteFocused = true }
+            focusRequest += 1
         }
         .onChange(of: model.state.session?.destinationPicker) { previous, current in
             if previous == .open, current == .closed, !model.isNoteFrozen {
-                noteFocused = true
+                focusRequest += 1
             }
         }
     }
@@ -53,29 +51,17 @@ struct CaptureView: View {
     }
 
     private var noteEditor: some View {
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $model.note)
-                .font(.uiBody)
-                .lineSpacing(VoiceCaptureLayout.transcriptLineSpacing)
-                .foregroundStyle(palette.ink.opacity(0.92))
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, -5)
-                .accessibilityLabel("Note")
-                .accessibilityAction(named: "Save") { model.send(.save) }
-                .accessibilityAction(named: "Discard") { model.send(.dismiss) }
-                .focused($noteFocused)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .disabled(model.isNoteFrozen)
-
-            if model.note.isEmpty {
-                Text("Add a note…")
-                    .font(.uiBody)
-                    .foregroundStyle(palette.ink.opacity(0.35))
-                    .padding(.top, 6)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
+        NoteEditor(
+            text: $model.note,
+            placeholder: "Add a note…",
+            fontSize: fontSize,
+            ink: NSColor(palette.ink),
+            isEditable: !model.isNoteFrozen,
+            focusRequest: focusRequest,
+            onSave: { model.send(.save) },
+            onDiscard: { model.send(.dismiss) }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
