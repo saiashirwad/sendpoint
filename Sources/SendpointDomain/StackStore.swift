@@ -1,14 +1,12 @@
 import Foundation
 import Observation
 
-/// A failure from a queued note-store transition.
 public enum StackStoreError: Error, Equatable, Sendable {
     case mutationRejected(String)
     case commitFailed(String)
     case tornDown
 }
 
-/// The result reported for one queued mutation attempt.
 public enum StackMutationOutcome: Equatable, Sendable {
     case committed
     case noOp
@@ -17,7 +15,6 @@ public enum StackMutationOutcome: Equatable, Sendable {
     case cancelled
 }
 
-/// Owns the last committed stack document and serializes all changes to it.
 @MainActor
 @Observable
 public final class StackStore {
@@ -58,13 +55,17 @@ public final class StackStore {
         document.currentStackID
     }
 
-    /// The current stack first, then the rest by how recently they were used.
-    public var stacksByRecency: [Stack] {
-        document.stacksByRecency
+    public var selectedStackID: UUID {
+        for queued in queuedMutations.reversed() {
+            switch queued.mutation {
+            case let .switchStack(id), let .moveNoteToStack(_, _, id): return id
+            default: continue
+            }
+        }
+        return document.currentStackID
     }
 
     public var currentStack: Stack {
-        // StackDocument validation guarantees this lookup succeeds.
         stacks.stack(id: document.currentStackID)!
     }
 
@@ -84,11 +85,8 @@ public final class StackStore {
         !queuedMutations.isEmpty
     }
 
-    /// Loads the committed document. On first launch it commits `Default`
-    /// before making the store available to its caller.
     public init(
         persistence: StorePersistence,
-        defaultStack: Stack = Stack(name: "Default"),
         onChange: @escaping @MainActor @Sendable () -> Void = {}
     ) async throws {
         try Task.checkCancellation()
@@ -99,10 +97,7 @@ public final class StackStore {
             try StackDocumentMutations.validate(loaded)
             initialDocument = loaded
         } else {
-            let candidate = StackDocument(
-                stacks: [defaultStack],
-                currentStackID: defaultStack.id
-            )
+            let candidate = StackDocument.empty()
             try StackDocumentMutations.validate(candidate)
             try Task.checkCancellation()
             try await persistence.commit(candidate)
@@ -115,8 +110,6 @@ public final class StackStore {
         self.onChange = onChange
     }
 
-    /// Enqueues one pure document transition. The next candidate always starts
-    /// from the last document whose commit completed successfully.
     public func mutate(
         _ mutation: StackDocumentMutation,
         outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)? = nil
@@ -131,7 +124,6 @@ public final class StackStore {
         startProcessingIfNeeded()
     }
 
-    /// Resumes work retained after a commit failure.
     public func retryPendingMutations() {
         switch state {
         case .tornDown:
@@ -146,8 +138,6 @@ public final class StackStore {
         }
     }
 
-    /// Returns when the active drain completes or halts. Cancelling the
-    /// caller returns early without touching the store.
     public func waitForIdle() async {
         guard state == .processing else { return }
         let waiter = UUID()
@@ -160,8 +150,6 @@ public final class StackStore {
         }
     }
 
-    /// Waits for queued work to commit, giving up after `timeout`. The store
-    /// keeps processing either way; this only bounds how long the caller waits.
     public func drain(timeout: Duration) async {
         guard state == .processing else { return }
         await withTaskGroup(of: Void.self) { group in
@@ -172,8 +160,6 @@ public final class StackStore {
         }
     }
 
-    /// Stops accepting changes, discards queued work, and cancels
-    /// the one task owned by the store. Repeated calls have no further effect.
     public func teardown() {
         guard state != .tornDown else { return }
         state = .tornDown
@@ -210,10 +196,9 @@ public final class StackStore {
                         finishProcessing()
                         return
                     }
-                    // Release the failed drain before calling client code so
-                    // a retry from the callback can own a new processing task.
                     finishProcessing(nextState: .halted)
                     queuedMutation.outcome?(.commitFailed(message))
+                    onChange()
                     return
                 case .cancelled:
                     finishProcessing()
@@ -226,6 +211,7 @@ public final class StackStore {
                 queuedMutations.removeFirst()
                 error = .mutationRejected(message)
                 queuedMutation.outcome?(.rejected(message))
+                onChange()
             }
         }
 

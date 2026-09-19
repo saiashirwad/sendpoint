@@ -11,35 +11,33 @@ final class VoiceShortcutSettingsTests: XCTestCase {
             let voice = VoiceSettings(defaults: defaults)
             let combo = KeyCombo(keyCode: UInt16(kVK_Space), modifiers: [.option, .shift])
             try shortcuts.setShortcut(combo, for: .voiceCapture)
-            voice.setVoiceMode(.tap)
+            voice.send(.voiceMode(.tap))
             XCTAssertEqual(ShortcutSettings(defaults: defaults).voiceCaptureCombo, combo)
             XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .tap)
-            voice.setVoiceMode(.hold)
+            voice.send(.voiceMode(.hold))
             XCTAssertEqual(VoiceSettings(defaults: defaults).voiceMode, .hold)
 
             XCTAssertTrue(voice.transcriptionPreview)
             XCTAssertEqual(voice.transcriptionPreviewLines, 4)
             XCTAssertEqual(voice.transcriptionPreviewFontSize, 13)
             XCTAssertEqual(voice.transcriptionPreviewOpacity, 80)
-            voice.setTranscriptionPreview(false)
-            voice.setTranscriptionPreviewLines(2)
-            voice.setTranscriptionPreviewFontSize(15)
-            voice.setTranscriptionPreviewOpacity(70)
+            voice.send(.transcriptionPreview(false))
+            voice.send(.transcriptionPreviewLines(2))
+            voice.send(.transcriptionPreviewFontSize(15))
+            voice.send(.transcriptionPreviewOpacity(70))
             XCTAssertFalse(VoiceSettings(defaults: defaults).transcriptionPreview)
             XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewLines, 2)
             XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewFontSize, 15)
             XCTAssertEqual(VoiceSettings(defaults: defaults).transcriptionPreviewOpacity, 70)
-            voice.setTranscriptionPreviewLines(9)
-            voice.setTranscriptionPreviewFontSize(3)
-            voice.setTranscriptionPreviewOpacity(54)
+            voice.send(.transcriptionPreviewLines(9))
+            voice.send(.transcriptionPreviewFontSize(3))
+            voice.send(.transcriptionPreviewOpacity(54))
             XCTAssertEqual(voice.transcriptionPreviewLines, 5)
             XCTAssertEqual(voice.transcriptionPreviewFontSize, 11)
             XCTAssertEqual(voice.transcriptionPreviewOpacity, 50)
         }
     }
 
-    /// Dictation ships bound to ⌥Space. Clearing it turns dictation off, and
-    /// that must survive a relaunch even though the slot has a default.
     func testDictationIsOnByDefaultAndStaysOffOnceCleared() throws {
         try withDefaults { defaults in
             let shortcuts = ShortcutSettings(defaults: defaults)

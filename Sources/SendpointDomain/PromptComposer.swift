@@ -15,8 +15,13 @@ public enum PromptComposer {
             calendar: calendar,
             timeZone: timeZone
         )
-        let shortTimeStyle = Date.FormatStyle(
-            date: .omitted,
+        var dayCalendar = calendar
+        dayCalendar.timeZone = timeZone
+        let spansDays = stack.notes.contains {
+            !dayCalendar.isDate($0.createdAt, inSameDayAs: stack.notes[0].createdAt)
+        }
+        let stampStyle = Date.FormatStyle(
+            date: spansDays ? .abbreviated : .omitted,
             time: .shortened,
             locale: locale,
             calendar: calendar,
@@ -28,8 +33,8 @@ public enum PromptComposer {
             blocks.append(template.preamble)
         }
 
-        if template.includeHeading {
-            blocks.append("# Reading notes — \(stack.createdAt.formatted(longDateStyle))")
+        if template.includeHeading, let startedAt = stack.startedAt {
+            blocks.append("# Reading notes — \(startedAt.formatted(longDateStyle))")
         }
 
         for (offset, note) in stack.notes.enumerated() {
@@ -46,7 +51,7 @@ public enum PromptComposer {
             noteBlocks.append(note.body)
 
             if template.includeTimestamps {
-                noteBlocks.append("_\(note.createdAt.formatted(shortTimeStyle))_")
+                noteBlocks.append("_\(note.createdAt.formatted(stampStyle))_")
             }
 
             blocks.append(noteBlocks.joined(separator: "\n\n"))

@@ -1,7 +1,5 @@
 import Foundation
 
-/// The notes of one stack that match a query. Matching is case- and
-/// diacritic-insensitive over the quote and the note.
 public struct NoteListing: Equatable, Sendable {
     public let notes: [Note]
 

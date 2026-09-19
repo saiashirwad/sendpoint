@@ -8,112 +8,45 @@ final class StackUITests: XCTestCase {
     private let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
 
-    func testSingleStackCannotBeDeleted() {
+    func testStacksAreKnownByNumberWithTheirCountAndAge() {
+        let early = Note(subject: .standalone, body: "Early", createdAt: Date(timeIntervalSince1970: 100))
+        let late = Note(subject: .standalone, body: "Late", createdAt: Date(timeIntervalSince1970: 200))
         let facts = StackUIFacts(
-            stacks: [Stack(id: firstID, name: "Only")],
-            currentStackID: firstID,
+            stacks: filled([Stack(id: firstID), Stack(id: secondID, notes: [late, early])]),
+            currentStackID: secondID,
             lastCleared: nil
         )
 
-        XCTAssertFalse(facts.canDelete)
-
-        let cleared = [makeNote("Cleared")]
-        let deletion = StackDeletionFacts(
-            stackID: firstID,
-            stacks: [
-                Stack(id: firstID, name: "Cleared"),
-                Stack(id: secondID, name: "Other"),
-            ],
-            lastCleared: ClearedBatch(stackID: firstID, notes: cleared)
-        )
-        XCTAssertTrue(deletion.requiresConfirmation)
-        XCTAssertTrue(deletion.includesUndoBatch)
-        XCTAssertEqual(deletion.noteCount, 1)
+        XCTAssertEqual(facts.stacks.map(\.number), [1, 2, 3, 4, 5])
+        XCTAssertEqual(facts.stacks.map(\.name).prefix(2), ["Stack 1", "Stack 2"])
+        XCTAssertEqual(facts.current?.number, 2)
+        XCTAssertEqual(facts.current?.countLabel, "2 notes")
+        XCTAssertEqual(facts.current?.startedAt, early.createdAt)
+        XCTAssertEqual(facts.stack(number: 1)?.id, firstID)
+        XCTAssertTrue(facts.stack(number: 1)?.isEmpty == true)
+        XCTAssertNil(facts.stack(number: 1)?.startedAt)
+        XCTAssertNil(facts.stack(number: 6))
+        XCTAssertNil(facts.undo)
     }
 
     func testUndoFactsIdentifyANoncurrentSourceStack() {
         let cleared = [makeNote("One"), makeNote("Two")]
         let facts = StackUIFacts(
-            stacks: [
-                Stack(id: firstID, name: "Reading"),
-                Stack(id: secondID, name: "Writing"),
-            ],
+            stacks: filled([Stack(id: firstID), Stack(id: secondID)]),
             currentStackID: secondID,
             lastCleared: ClearedBatch(stackID: firstID, notes: cleared)
         )
 
         XCTAssertEqual(facts.undo?.stackID, firstID)
-        XCTAssertEqual(facts.undo?.title, "Undo Clear in Reading (2)")
-        XCTAssertEqual(facts.undo?.notification, "Cleared 2 notes in Reading")
-    }
+        XCTAssertEqual(facts.undo?.title, "Undo Clear in Stack 1 (2)")
+        XCTAssertEqual(facts.undo?.notification, "Cleared 2 notes in Stack 1")
 
-    func testNameDraftTrimsAndRejectsBlankOrFoldedDuplicates() {
-        let stacks = [Stack(id: firstID, name: "Résumé")]
-
-        XCTAssertEqual(
-            StackNameDraft(text: "  New Notes  ", excludedStackID: nil)
-                .validation(stacks: stacks),
-            .valid("New Notes")
-        )
-        XCTAssertEqual(
-            StackNameDraft(text: " \n ", excludedStackID: nil)
-                .validation(stacks: stacks),
-            .invalid("Enter a stack name.")
-        )
-        for duplicate in ["résumé", "RESUME", "ＲＥＳＵＭＥ"] {
-            XCTAssertEqual(
-                StackNameDraft(text: duplicate, excludedStackID: nil)
-                    .validation(stacks: stacks),
-                .invalid("A stack with that name already exists.")
-            )
-        }
-    }
-
-    func testRenameDraftExcludesCapturedStackButNotOtherStacks() {
-        let stacks = [
-            Stack(id: firstID, name: "Reading"),
-            Stack(id: secondID, name: "Writing"),
-        ]
-
-        XCTAssertEqual(
-            StackNameDraft(text: " reading ", excludedStackID: firstID)
-                .validation(stacks: stacks),
-            .valid("reading")
-        )
-        XCTAssertEqual(
-            StackNameDraft(text: "WRITING", excludedStackID: firstID)
-                .validation(stacks: stacks),
-            .invalid("A stack with that name already exists.")
-        )
-    }
-
-    func testQuickSwitchStateKeepsExplicitSelectionAndFallsBackAfterDeletion() {
-        let both = StackUIFacts(
-            stacks: [
-                Stack(id: firstID, name: "Reading"),
-                Stack(id: secondID, name: "Writing"),
-            ],
+        let current = StackUIFacts(
+            stacks: filled([Stack(id: firstID), Stack(id: secondID)]),
             currentStackID: firstID,
-            lastCleared: nil
+            lastCleared: ClearedBatch(stackID: firstID, notes: cleared)
         )
-        var state = QuickSwitchState()
-        state.synchronize(with: both)
-        XCTAssertEqual(state.selectedStackID, firstID)
-        XCTAssertEqual(state.choose(secondID, from: both), secondID)
-        XCTAssertEqual(state.selectedStackID, secondID)
-        XCTAssertNil(state.choose(UUID(), from: both))
-        XCTAssertEqual(state.selectedStackID, secondID)
-        state.selectCurrent(from: both)
-        XCTAssertEqual(state.selectedStackID, firstID)
-        _ = state.choose(secondID, from: both)
-
-        let afterDeletion = StackUIFacts(
-            stacks: [Stack(id: firstID, name: "Reading")],
-            currentStackID: firstID,
-            lastCleared: nil
-        )
-        state.synchronize(with: afterDeletion)
-        XCTAssertEqual(state.selectedStackID, firstID)
+        XCTAssertEqual(current.undo?.title, "Undo Clear (2)")
     }
 
     private func makeNote(_ body: String) -> Note {
@@ -121,80 +54,6 @@ final class StackUITests: XCTestCase {
             subject: .standalone,
             body: body
         )
-    }
-}
-
-extension StackUITests {
-    func testQuickSwitchListingFiltersAndOffersCreation() {
-        let facts = StackUIFacts(
-            stacks: [
-                Stack(id: firstID, name: "Reading"),
-                Stack(id: secondID, name: "Writing"),
-            ],
-            currentStackID: firstID,
-            lastCleared: nil
-        )
-
-        let everything = QuickSwitchListing(facts: facts, query: "   ")
-        XCTAssertEqual(everything.stacks.map(\.id), [firstID, secondID])
-        XCTAssertNil(everything.creatableName)
-
-        let partial = QuickSwitchListing(facts: facts, query: "ITI")
-        XCTAssertEqual(partial.stacks.map(\.id), [secondID])
-        XCTAssertEqual(partial.creatableName, "ITI")
-        XCTAssertEqual(partial.rows, [.stack(secondID), .create("ITI")])
-
-        let existing = QuickSwitchListing(facts: facts, query: " reading ")
-        XCTAssertEqual(existing.stacks.map(\.id), [firstID])
-        XCTAssertNil(existing.creatableName, "an existing name is not offered for creation")
-
-        let none = QuickSwitchListing(facts: facts, query: "zzz")
-        XCTAssertTrue(none.stacks.isEmpty)
-        XCTAssertEqual(none.rows, [.create("zzz")])
-    }
-
-    func testQuickSwitchStateMovesThroughRowsAndConfinesToListing() {
-        let facts = StackUIFacts(
-            stacks: [
-                Stack(id: firstID, name: "Reading"),
-                Stack(id: secondID, name: "Writing"),
-            ],
-            currentStackID: firstID,
-            lastCleared: nil
-        )
-        let rows: [QuickSwitchRow] = [.stack(firstID), .stack(secondID), .create("New")]
-
-        var state = QuickSwitchState()
-        state.synchronize(with: facts)
-        XCTAssertEqual(state.highlight, .stack(firstID))
-
-        state.move(by: -1, in: rows)
-        XCTAssertEqual(state.highlight, .create("New"), "moving up from the top wraps")
-        XCTAssertNil(state.selectedStackID)
-
-        state.move(by: 1, in: rows)
-        XCTAssertEqual(state.highlight, .stack(firstID), "moving down from the bottom wraps")
-
-        state.move(by: 1, in: rows)
-        XCTAssertEqual(state.selectedStackID, secondID)
-
-        state.confine(to: [.stack(secondID)], preferring: firstID)
-        XCTAssertEqual(state.highlight, .stack(secondID), "a still-listed highlight is kept")
-
-        state.confine(to: [.create("Wri")], preferring: firstID)
-        XCTAssertEqual(state.highlight, .create("Wri"), "otherwise the first listed row wins")
-
-        state.confine(to: [.stack(secondID), .stack(firstID)], preferring: firstID)
-        XCTAssertEqual(state.highlight, .stack(firstID), "the current stack is preferred when listed")
-
-        state.move(by: 1, in: [])
-        XCTAssertEqual(state.highlight, .stack(firstID), "an empty listing leaves the highlight alone")
-
-        state.synchronize(with: facts)
-        XCTAssertEqual(state.highlight, .stack(firstID))
-        state.highlight(.create("Draft"))
-        state.synchronize(with: facts)
-        XCTAssertEqual(state.highlight, .create("Draft"), "stack changes keep a create highlight")
     }
 }
 
@@ -215,7 +74,6 @@ final class NoteRevealAnchorTests: XCTestCase {
 
 final class RevealedScrollOffsetTests: XCTestCase {
     func testBottomAnchorPutsTheNoteAtTheBottomEdgeWithMargin() {
-        // Viewport 400, content 1000, currently at the top; note spans 380...500 in the viewport.
         let top = revealedScrollOffset(
             currentTop: 0, frame: CGRect(x: 0, y: 380, width: 300, height: 120),
             viewportHeight: 400, contentHeight: 1000, anchor: .bottom
@@ -269,24 +127,6 @@ final class StackStatusDetailTests: XCTestCase {
             stackStatusDetail(noteCount: 1, latest: latest, now: now, calendar: calendar).prefix(7),
             "1 note "
         )
-    }
-}
-
-final class NoteTimeLabelTests: XCTestCase {
-    private let calendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }()
-
-    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9) -> Date {
-        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
-    }
-
-    func testTimeLabelIsJustTheTime() {
-        let at = date(2026, 9, 15, 20)
-        XCTAssertEqual(noteTimeLabel(at, calendar: calendar), at.formatted(
-            Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute()))
     }
 }
 

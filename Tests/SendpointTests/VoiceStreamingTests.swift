@@ -4,9 +4,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// Streaming behavior through the real controller wiring: partials update the
-/// preview only while their capture is still recording, stale work is dropped,
-/// and engine switches tear down cleanly. No microphone, no network.
 @MainActor
 final class VoiceStreamingTests: XCTestCase {
     private enum Fail: LocalizedError {
@@ -21,7 +18,6 @@ final class VoiceStreamingTests: XCTestCase {
                 prepare: { self.events.append("prepare") },
                 show: { self.events.append("show \($0)") },
                 focus: { self.events.append("focus") },
-                stopEscapeHandling: { self.events.append("stopEscape") },
                 close: { self.events.append("close") },
                 discard: { self.events.append("discard") }
             )
@@ -133,7 +129,6 @@ final class VoiceStreamingTests: XCTestCase {
         f.recorder.partialHandler?("how is the weather")
         await waitUntil { f.controller.state.session?.liveTranscript == "how is the weather" }
 
-        // The preview never disturbs the workflow: still recording, no effects.
         XCTAssertEqual(f.controller.state.session?.phase, .recording)
         XCTAssertFalse(f.surfaces.events.contains("close"))
     }
@@ -214,7 +209,7 @@ final class VoiceStreamingTests: XCTestCase {
     }
 
     func testPreviewWrapsWithoutReflowingCompletedLines() {
-        let font = NSFont.ui(LiveTranscriptPreview.fontSize)
+        let font = NSFont.ui(CGFloat(VoiceSettings.defaultPreviewFontSize))
         let width = ("aaaaa aaaaa" as NSString).size(withAttributes: [.font: font]).width
         let first = LiveTranscriptPreview.lines(for: "aaaaa aaaaa", width: width, font: font)
         XCTAssertEqual(first, ["aaaaa aaaaa"])
@@ -229,8 +224,9 @@ final class VoiceStreamingTests: XCTestCase {
             font: font
         )
         XCTAssertGreaterThan(many.count, 4)
-        XCTAssertEqual(LiveTranscriptPreview.visible(many).count, 4)
-        XCTAssertEqual(LiveTranscriptPreview.visible(many), Array(many.suffix(4)))
+        let window = LiveTranscriptPreview.window(many, max: 4)
+        XCTAssertEqual(window.rows.map(\.text), Array(many.suffix(4)))
+        XCTAssertTrue(window.overflow)
         XCTAssertTrue(LiveTranscriptPreview.lines(for: "", width: width, font: font).isEmpty)
     }
 }

@@ -4,7 +4,6 @@ import XCTest
 
 @MainActor
 final class WindowVisibilityReporterTests: XCTestCase {
-    /// Exercise AppKit attachment and notifications without showing test windows.
     private final class Window: NSWindow {
         var shown = false
         var exposed = false

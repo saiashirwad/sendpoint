@@ -27,7 +27,6 @@ final class SurfaceCoordinatorTests: XCTestCase {
 
         coordinator.present(.palette)
         coordinator.present(.setup)
-        coordinator.present(.switcher)
         coordinator.present(.captureEditor)
         coordinator.present(.captureVoice)
         XCTAssertTrue(spy.activationChanges.isEmpty)
@@ -54,17 +53,6 @@ final class SurfaceCoordinatorTests: XCTestCase {
         coordinator.dismiss(.settings)
 
         XCTAssertEqual(events, ["regular", "show", "hide", "accessory"])
-    }
-
-    func testSwitcherHidesPaletteAndBlocksItsReopen() {
-        let spy = Spy()
-        let coordinator = makeCoordinator(spy: spy)
-        coordinator.present(.palette)
-        coordinator.present(.switcher)
-        coordinator.present(.palette)
-
-        XCTAssertEqual(spy.events, ["show palette", "hide palette", "show switcher"])
-        XCTAssertEqual(coordinator.visible, [.switcher])
     }
 
     func testUserCloseUpdatesAppliedState() {

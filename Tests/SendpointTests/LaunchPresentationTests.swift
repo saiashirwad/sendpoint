@@ -40,7 +40,7 @@ final class LaunchPresentationTests: XCTestCase {
         XCTAssertEqual(LaunchPresentation.Kind.from(eventID: nil, loginItemProperty: nil), .userOpen)
         XCTAssertEqual(
             LaunchPresentation.Kind.from(
-                eventID: 0x72617070, // 'rapp'
+                eventID: 0x72617070,
                 loginItemProperty: LaunchPresentation.Kind.launchedAsLoginItem
             ),
             .userOpen

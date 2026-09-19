@@ -1,8 +1,6 @@
 import XCTest
 @testable import Sendpoint
 
-/// Progress must reach whoever is watching, not only whoever started the
-/// download: launch warm-up begins it, Setup subscribes later.
 final class VoiceModelProgressRelayTests: XCTestCase {
     private final class Sink: @unchecked Sendable {
         private let lock = NSLock()

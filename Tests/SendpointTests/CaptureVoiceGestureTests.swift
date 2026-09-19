@@ -3,8 +3,6 @@ import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
-/// The voice key as the reducer sees it: a repeat, an early failure, or
-/// Escape must never start a second recording.
 final class CaptureVoiceGestureTests: XCTestCase {
     private let context = NoteCaptureContext(stackID: UUID())
     private let selection = CapturedSelection(text: "")
@@ -63,6 +61,33 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.voice, VoiceGesture())
     }
 
+    func testAStoreChangeForTheSameStackLeavesAnOpenPickerAlone() {
+        var state = recording(mode: .tap)
+        _ = state.update(.toggleDestinations(context))
+
+        XCTAssertEqual(state.update(.stackSelected(context.stackID)), [])
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+
+        let other = UUID()
+        XCTAssertEqual(state.update(.stackSelected(other)), [])
+        XCTAssertEqual(state.session?.destinationStackID, other)
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+    }
+
+    func testFinishingBeforeThePassageArrivesStartsOneDeadlineThenTranscribes() {
+        var state = CaptureState()
+        _ = state.update(.voicePressed)
+        _ = state.update(.begin(.voice, context))
+        _ = state.update(.recordingStarted(context))
+
+        XCTAssertEqual(state.update(.voiceReleased), [.selectionDeadline(context)])
+        XCTAssertEqual(state.update(.finishVoice), [], "a repeated finish starts no second deadline")
+        XCTAssertEqual(state.update(.selection(context, selection)), [.transcribe(context)],
+            "the deadline reports an empty passage, which releases the recording")
+        XCTAssertEqual(state.session?.phase, .transcribing)
+        XCTAssertEqual(state.update(.selection(context, selection)), [], "a late passage is dropped")
+    }
+
     func testTapWaitsForASecondPressAndConsumesItsRelease() {
         var state = CaptureState()
         XCTAssertEqual(state.update(.voiceModeChanged(.tap)), [])
@@ -103,6 +128,29 @@ final class CaptureVoiceGestureTests: XCTestCase {
             XCTAssertEqual(state.update(.voiceReleased), [])
             XCTAssertEqual(state.update(.voicePressed), [.beginVoice], "\(mode): a fresh press starts over")
         }
+    }
+
+    func testEscapeDuringTranscriptionAbortsAndDropsTheLateTranscript() {
+        var state = recording(mode: .hold)
+        XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])
+        XCTAssertEqual(state.update(.voiceEscape), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
+        XCTAssertEqual(state.update(.transcript(context, "too late")), [], "stale")
+    }
+
+    func testEscapeWithTheDestinationPickerOpenAbortsInOnePress() {
+        var state = recording(mode: .hold)
+        _ = state.update(.toggleDestinations(context))
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+        XCTAssertEqual(state.update(.voiceEscape), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
+    }
+
+    func testAnEmptyTranscriptClosesQuietlyAndSavesNothing() {
+        var state = recording(mode: .hold)
+        XCTAssertEqual(state.update(.voiceReleased), [.transcribe(context)])
+        XCTAssertEqual(state.update(.transcript(context, " \n")), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
     }
 
     func testEscapeCancelsATapRecordingOnce() {
@@ -213,12 +261,11 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.voice, VoiceGesture(mode: .tap))
     }
 
-    func testDictationWithNothingSaidOrNothingPastedShowsAMessageThenCloses() {
+    func testDictationWithNothingSaidClosesQuietlyAndNothingPastedShowsAMessage() {
         var state = dictating()
         _ = state.update(.dictateReleased)
-        XCTAssertEqual(state.update(.transcript(context, "  ")), [.failureTimer(context)])
-        XCTAssertEqual(state.session?.phase, .failed("No speech was found."))
-        XCTAssertEqual(state.update(.failureTimeout(context)), [.close])
+        XCTAssertEqual(state.update(.transcript(context, "  ")), [.close])
+        XCTAssertEqual(state.lifecycle, .idle)
 
         state = dictating()
         _ = state.update(.dictateReleased)
@@ -236,7 +283,6 @@ final class CaptureVoiceGestureTests: XCTestCase {
     }
 
     func testTheOtherSpeechKeyBeepsOverAnOpenCaptureAndItsReleaseIsInert() {
-        // A dictation press over a voice note, tap mode so the note key is up.
         var state = recording(mode: .tap)
         _ = state.update(.voiceReleased)
         XCTAssertEqual(state.update(.dictatePressed), [.beep])
@@ -244,7 +290,6 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.session?.phase, .recording, "the note keeps recording")
         XCTAssertEqual(state.update(.voicePressed), [.transcribe(context)])
 
-        // A note press while the dictation key is still held, hold mode.
         state = dictating()
         XCTAssertEqual(state.update(.voicePressed), [], "one key at a time")
         XCTAssertEqual(state.update(.voiceReleased), [], "not the held key")

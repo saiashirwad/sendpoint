@@ -1,8 +1,6 @@
 import Foundation
 
 public extension Note {
-    /// Creates a note from captured values. Whitespace-only bodies are rejected;
-    /// quotes retain their original formatting and IDs/timestamps are never regenerated.
     static func capturing(
         selection: String,
         body: String,

@@ -18,19 +18,14 @@ public enum TemplateError: Error, Equatable, Sendable, LocalizedError {
     }
 }
 
-/// A nonempty collection with unique IDs/names and an active member. Mutations
-/// validate before changing anything; storage and change notifications are external.
 public struct TemplateCollection: Equatable, Sendable {
     public private(set) var templates: [Template]
     public private(set) var activeTemplateID: UUID
 
     public var activeTemplate: Template {
-        // Construction and every mutation preserve active membership.
         templates.first { $0.id == activeTemplateID }!
     }
 
-    /// Invalid stored collections are replaced as a whole. Valid collections
-    /// retain edited built-ins and custom order, with built-ins placed first.
     public init(restoring stored: [Template]? = nil, activeTemplateID requestedID: UUID? = nil) {
         guard let stored, Self.isValid(stored) else {
             templates = Template.builtIns

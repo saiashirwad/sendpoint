@@ -82,9 +82,27 @@ final class CapturePanelTests: XCTestCase {
         )
     }
 
+    func testTextCardSharesTheVoiceCardSize() {
+        let size = VoiceCaptureLayout.cardSize(lines: 3, fontSize: 15)
+        XCTAssertEqual(size.width, VoiceCaptureLayout.cardWidth)
+        XCTAssertEqual(size.height, VoiceCaptureLayout.cardHeight(lines: 3, fontSize: 15))
+
+        let editor = CaptureWindows.makeEditorPanel()
+        XCTAssertEqual(editor.frame.size, VoiceCaptureLayout.cardSize(
+            lines: VoiceSettings.defaultPreviewLines,
+            fontSize: CGFloat(VoiceSettings.defaultPreviewFontSize)
+        ))
+        XCTAssertLessThanOrEqual(
+            editor.minSize.height,
+            VoiceCaptureLayout.cardHeight(
+                lines: VoiceSettings.previewLinesMin,
+                fontSize: CGFloat(VoiceSettings.previewFontSizeMin)
+            ),
+            "the smallest settings card must fit under the resize floor"
+        )
+    }
+
     func testCardAnchorReachesTheCardTop() {
-        // The footer's bottom edge sits one bottom padding above the card's
-        // bottom, so an anchor of this height ends exactly at the card's top.
         let anchor = VoiceCaptureLayout.cardAnchorHeight(lines: 3, fontSize: 13)
         XCTAssertEqual(
             anchor + VoiceCaptureLayout.cardPaddingBottom,

@@ -7,4 +7,5 @@
 - Check cancellation around external calls. Apply a result only when its full context still matches the current state.
 - Inject small system boundaries for deterministic tests. Test behavior, including cancellation, stale results, invalid transitions, and teardown.
 - Make clean cutovers. Delete obsolete callers, state, settings, imports, and files.
+- Finish every requested change by running `./build.sh` then `./install.sh`, so the installed Sendpoint always reflects the latest work. Do this before reporting the change as done.
 - Publish only with `./release.sh X.Y.Z --ad-hoc --publish`.

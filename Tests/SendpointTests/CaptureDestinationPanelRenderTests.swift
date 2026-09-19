@@ -7,8 +7,8 @@ import XCTest
 @MainActor
 final class CaptureDestinationPanelRenderTests: XCTestCase {
     func testRetainedVoiceWindowDoesNotPresentTextCaptureDestinationPicker() async throws {
-        let stack = Stack(name: "Default")
-        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -27,7 +27,6 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             }
         }
 
-        // Load both retained view trees while their windows remain hidden.
         for panel in [voice, editor] { panel.contentView?.layoutSubtreeIfNeeded() }
         let textContext = NoteCaptureContext(stackID: stack.id)
         controller.send(.begin(.text, textContext))
@@ -54,20 +53,50 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
                       "Ending capture must remove the destination panel")
     }
 
+    func testBeginningATextCaptureFocusesTheNoteWithNoScrollInset() async throws {
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
+            rootView: CaptureView(model: controller)
+        ))
+        defer {
+            controller.send(.teardown)
+            editor.contentView = nil
+            editor.close()
+        }
+        editor.contentView?.layoutSubtreeIfNeeded()
+        controller.send(.begin(.text, NoteCaptureContext(stackID: stack.id)))
+        try await Task.sleep(for: .milliseconds(150))
+
+        let note = try XCTUnwrap(editor.firstResponder as? NoteTextView)
+        let scroll = try XCTUnwrap(note.enclosingScrollView)
+        XCTAssertFalse(scroll.automaticallyAdjustsContentInsets)
+        XCTAssertEqual(scroll.contentInsets.top, 0)
+        XCTAssertEqual(note.convert(note.textContainerOrigin, to: scroll), .zero,
+                       "the titlebar must not push the note below the top of its editor")
+
+        note.insertText("Follow up", replacementRange: note.selectedRange())
+        XCTAssertEqual(controller.note, "Follow up")
+    }
+
     func testRenderPickerAboveLiveVoicePill() async throws {
         guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
             throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
         }
         let stacks = [
-            Stack(name: "Default", notes: [Note(subject: .standalone, body: "One")]),
-            Stack(name: "Research", notes: [
+            Stack(notes: [Note(subject: .standalone, body: "One")]),
+            Stack(notes: [
                 Note(subject: .standalone, body: "One"),
                 Note(subject: .standalone, body: "Two"),
             ]),
-            Stack(name: "Product notes"),
-            Stack(name: "Follow-ups", notes: [Note(subject: .standalone, body: "One")]),
+            Stack(),
+            Stack(notes: [Note(subject: .standalone, body: "One")]),
         ]
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -113,12 +142,12 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
             throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
         }
         let stacks = [
-            Stack(name: "Research", notes: [
+            Stack(notes: [
                 Note(subject: .standalone, body: "One"),
                 Note(subject: .standalone, body: "Two"),
             ]),
         ]
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -156,8 +185,67 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         try composite([voice, picker], to: directory, name: "voice-capture-card-destination.png")
     }
 
-    /// Composites the actual hosting views at their live window coordinates.
-    /// This includes the real anchor placement, rather than a mock VStack.
+    func testRenderTextCaptureCard() async throws {
+        guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
+            throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce a manual review image.")
+        }
+        let stacks = [Stack(notes: [Note(subject: .standalone, body: "One")])]
+        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { document }, commit: { _ in }
+        ))
+        let controller = makeController(store: store)
+        let context = NoteCaptureContext(stackID: stacks[0].id)
+        controller.send(.begin(.text, context))
+        controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
+        try registerAppFonts()
+        controller.stepTranscriptionPreviewLines(bySteps: 5 - controller.transcriptionPreviewLines)
+        controller.stepTranscriptionPreviewFontSize(bySteps: 15 - controller.transcriptionPreviewFontSize)
+        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
+            rootView: CaptureView(model: controller)
+        ))
+        editor.setContentSize(VoiceCaptureLayout.cardSize(
+            lines: controller.transcriptionPreviewLines,
+            fontSize: CGFloat(controller.transcriptionPreviewFontSize)
+        ))
+        editor.setFrameOrigin(NSPoint(x: 400, y: 160))
+        defer {
+            controller.send(.teardown)
+            editor.contentView = nil
+            editor.close()
+        }
+        editor.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(400))
+        try screenshot(editor, to: directory, name: "text-capture-card-empty.png")
+        func textView(in view: NSView) -> NSTextView? {
+            if let found = view as? NSTextView { return found }
+            for sub in view.subviews { if let found = textView(in: sub) { return found } }
+            return nil
+        }
+        let typed = try XCTUnwrap(textView(in: try XCTUnwrap(editor.contentView)))
+        editor.makeFirstResponder(typed)
+        typed.insertText("Follow up on this before the review.", replacementRange: typed.selectedRange())
+        try await Task.sleep(for: .milliseconds(300))
+        try screenshot(editor, to: directory, name: "text-capture-card.png")
+    }
+
+    private func registerAppFonts() throws {
+        let fonts = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/Fonts")
+        let files = try FileManager.default.contentsOfDirectory(at: fonts, includingPropertiesForKeys: nil)
+        CTFontManagerRegisterFontURLs(files as CFArray, .process, true, nil)
+    }
+
+    private func screenshot(_ window: NSWindow, to directory: String, name: String) throws {
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l\(window.windowNumber)", directory + "/" + name]
+        try capture.run()
+        capture.waitUntilExit()
+        XCTAssertEqual(capture.terminationStatus, 0)
+    }
+
     private func composite(_ windows: [NSWindow], to directory: String, name: String) throws {
         let bounds = windows.map(\.frame).reduce(windows[0].frame) { $0.union($1) }
         let image = NSImage(size: bounds.size)
@@ -188,14 +276,14 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
     }
 
     func testPickerClearsTheWholeCardWhenCaptionsAreOn() async throws {
-        let stack = Stack(name: "Default")
-        let document = StackDocument(stacks: [stack], currentStackID: stack.id)
+        let stack = Stack()
+        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
         let controller = makeController(store: store)
         controller.setTranscriptionPreview(true)
-        controller.setTranscriptionPreviewLines(3)
+        controller.stepTranscriptionPreviewLines(bySteps: 3 - controller.transcriptionPreviewLines)
         let lines = controller.transcriptionPreviewLines
         let fontSize = CGFloat(controller.transcriptionPreviewFontSize)
         let hosting = CaptureHostingView(rootView: VoiceCaptureView(
@@ -246,7 +334,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
                 start: {}, stopAndTranscribe: { "" }, discard: {}, levelMeter: VoiceLevelMeter()
             ),
             surfaces: { _ in CaptureSurfaces(
-                prepare: {}, show: { _ in }, focus: {}, stopEscapeHandling: {}, close: {}, discard: {}
+                prepare: {}, show: { _ in }, focus: {}, close: {}, discard: {}
             ) }
         )
         controller.configure(store: store)

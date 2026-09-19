@@ -17,7 +17,6 @@ public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-/// An injected persistence boundary for the versioned stack document.
 public struct StorePersistence: Sendable {
     public static let fileName = "store.json"
 
@@ -97,8 +96,13 @@ private actor AtomicJSONStore {
         do {
             data = try Data(contentsOf: fileURL)
         } catch {
-            try quarantine(using: fileManager)
-            return nil
+            let code = (error as NSError).code
+            if (error as NSError).domain == NSCocoaErrorDomain,
+               code == NSFileNoSuchFileError || code == NSFileReadNoSuchFileError
+            {
+                return nil
+            }
+            throw StorePersistenceError.unavailable
         }
 
         let version: Int
@@ -132,7 +136,6 @@ private actor AtomicJSONStore {
             throw StorePersistenceError.invalidDocument(error.message)
         }
 
-        // Finish validation and encoding before touching the last committed file.
         let data = try encoder.encode(document)
         let fileManager = FileManager.default
         try fileManager.createDirectory(

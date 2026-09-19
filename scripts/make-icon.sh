@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 
 SOURCE="${1:-Resources/AppIcon.png}"
 WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 ICONSET="${WORK}/AppIcon.iconset"
 RENDER="${WORK}/render.swift"
 mkdir -p "$ICONSET"
@@ -48,5 +49,4 @@ cp "${WORK}/512.png"  "${ICONSET}/icon_512x512.png"
 cp "${WORK}/1024.png" "${ICONSET}/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET" -o Resources/AppIcon.icns
 cp "${WORK}/1024.png" "${SCRATCH_PREVIEW:-/dev/null}" 2>/dev/null || true
-rm -rf "$WORK"
 echo "Wrote Resources/AppIcon.icns"

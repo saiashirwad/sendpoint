@@ -105,7 +105,6 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
         ))
     }
 
-
     func testPendingSettlementCanObserveDelayedClipboardWrite() {
         var tracker = AutomaticSelectionTracker()
         tracker.mouseDown(processIdentifier: 42, pasteboardChangeCount: 10)

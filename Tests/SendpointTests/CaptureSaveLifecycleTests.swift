@@ -3,8 +3,6 @@ import Foundation
 import XCTest
 @testable import Sendpoint
 
-/// The save half of the capture reducer: a typed note becomes one exact
-/// request, and only that request's outcome can move the capture on.
 final class CaptureSaveLifecycleTests: XCTestCase {
     private let context = NoteCaptureContext(
         stackID: UUID(), createdAt: Date(timeIntervalSince1970: 123)
@@ -78,47 +76,26 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(state.session?.phase, .saving(request))
 
         XCTAssertEqual(
-            state.update(.saved(request, .commitFailed("disk full"), destinationExists: true)),
+            state.update(.saved(request, .commitFailed("disk full"))),
             [.show(.editor)]
         )
         XCTAssertEqual(state.session?.phase, .saveFailed(
-            request, message: "Couldn’t save the note: disk full", retryable: true, targetMissing: false
+            request, message: "Couldn’t save the note: disk full", retryable: true
         ))
-        XCTAssertEqual(state.update(.retarget(UUID())), [], "a retryable failure keeps its destination")
 
         XCTAssertEqual(state.update(.retry), [.retry])
         XCTAssertEqual(state.session?.phase, .saving(request))
-        XCTAssertEqual(state.update(.saved(request, .committed, destinationExists: true)), [.close])
+        XCTAssertEqual(state.update(.saved(request, .committed)), [.close])
         XCTAssertEqual(state.lifecycle, .idle)
     }
 
-    func testMissingDestinationKeepsTheNoteForAnExplicitRetarget() throws {
+    func testARejectedSaveCannotRetryAndDismissCloses() throws {
         var (state, request) = try saving()
-        XCTAssertEqual(
-            state.update(.saved(request, .rejected("The target stack no longer exists."), destinationExists: false)),
-            [.show(.editor)]
-        )
+        _ = state.update(.saved(request, .rejected("The note already exists.")))
         XCTAssertEqual(state.session?.phase, .saveFailed(
-            request, message: "That stack was deleted.", retryable: false, targetMissing: true
+            request, message: "The note already exists.", retryable: false
         ))
         XCTAssertEqual(state.update(.retry), [])
-
-        let destination = UUID()
-        let retargeted = CaptureSaveRequest(
-            target: request.target, destinationStackID: destination, note: request.note
-        )
-        XCTAssertEqual(state.update(.retarget(destination)), [.commit(retargeted)])
-        XCTAssertEqual(state.session?.phase, .saving(retargeted))
-        XCTAssertEqual(state.update(.saved(retargeted, .committed, destinationExists: true)), [.close])
-    }
-
-    func testRejectedExistingDestinationCannotRetargetAndDismissCloses() throws {
-        var (state, request) = try saving()
-        _ = state.update(.saved(request, .rejected("The note already exists."), destinationExists: true))
-        XCTAssertEqual(state.session?.phase, .saveFailed(
-            request, message: "The note already exists.", retryable: false, targetMissing: false
-        ))
-        XCTAssertEqual(state.update(.retarget(UUID())), [])
         XCTAssertEqual(state.update(.dismiss), [.close])
     }
 
@@ -133,7 +110,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
                 note: otherNote
             ),
         ] {
-            XCTAssertEqual(state.update(.saved(stale, .committed, destinationExists: true)), [])
+            XCTAssertEqual(state.update(.saved(stale, .committed)), [])
             XCTAssertEqual(state.session?.phase, .saving(request))
         }
     }
@@ -141,11 +118,10 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     func testNoOpAndCancellationNeverClaimSuccess() throws {
         for outcome in [StackMutationOutcome.noOp, .cancelled] {
             var (state, request) = try saving()
-            XCTAssertEqual(state.update(.saved(request, outcome, destinationExists: true)), [.show(.editor)])
+            XCTAssertEqual(state.update(.saved(request, outcome)), [.show(.editor)])
             XCTAssertEqual(state.session?.phase, .saveFailed(
-                request, message: "The note wasn’t saved.", retryable: false, targetMissing: false
+                request, message: "The note wasn’t saved.", retryable: false
             ))
-            XCTAssertEqual(state.update(.retarget(UUID())), [])
             XCTAssertEqual(state.update(.retry), [])
         }
     }
@@ -160,11 +136,11 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         var (queued, request) = try saving()
         XCTAssertEqual(queued.update(.begin(.text, context)), [.beep])
         XCTAssertEqual(queued.update(.dismiss), [.close])
-        XCTAssertEqual(queued.update(.saved(request, .committed, destinationExists: true)), [])
+        XCTAssertEqual(queued.update(.saved(request, .committed)), [])
         XCTAssertEqual(queued.lifecycle, .idle)
 
         var (failed, failedRequest) = try saving()
-        _ = failed.update(.saved(failedRequest, .commitFailed("offline"), destinationExists: true))
+        _ = failed.update(.saved(failedRequest, .commitFailed("offline")))
         XCTAssertEqual(failed.update(.dismiss), [.close])
     }
 

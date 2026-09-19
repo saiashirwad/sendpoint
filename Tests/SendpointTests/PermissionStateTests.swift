@@ -60,28 +60,6 @@ final class PermissionStateTests: XCTestCase {
         }
     }
 
-    private final class BoolBox: @unchecked Sendable {
-        private let lock = NSLock()
-        private var storedValue: Bool
-
-        init(_ value: Bool) {
-            storedValue = value
-        }
-
-        var value: Bool {
-            get {
-                lock.lock()
-                defer { lock.unlock() }
-                return storedValue
-            }
-            set {
-                lock.lock()
-                storedValue = newValue
-                lock.unlock()
-            }
-        }
-    }
-
     private func services(
         accessibility: AccessibilityPermissionState = .granted,
         requestAccessibility: Bool = true,
@@ -132,10 +110,6 @@ final class PermissionStateTests: XCTestCase {
                     ))
 
                     XCTAssertEqual(state.isTextCaptureReady, accessibility == .granted)
-                    XCTAssertEqual(
-                        state.isVoiceReady,
-                        accessibility == .granted && microphone == .granted && modelReady
-                    )
                     state.teardown()
                 }
             }
@@ -288,8 +262,6 @@ final class PermissionStateTests: XCTestCase {
         await Task.detached {
             NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
         }.value
-        // A main-queue observer runs after the posting thread returns, so
-        // give the main queue a beat before reading the state.
         try? await Task.sleep(for: .milliseconds(100))
 
         XCTAssertEqual(state.localVoiceModel, .ready)
@@ -297,7 +269,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testVisibleWatcherPicksUpDiskChangesBothWays() async {
-        let files = BoolBox(false)
+        let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value }
         ))
@@ -316,7 +288,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testFailedDownloadSurvivesRefreshAndRecoversWhenFilesAppear() async {
-        let files = BoolBox(false)
+        let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value },
             downloadModel: { _ in throw TestError.failed }
