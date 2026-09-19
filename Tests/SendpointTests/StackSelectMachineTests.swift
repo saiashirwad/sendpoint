@@ -13,9 +13,11 @@ final class StackSelectMachineTests: XCTestCase {
         XCTAssertEqual(machine.state, .showing(stacks[2], generation: 1))
     }
 
-    func testSelectingTheCurrentStackOnlyShowsWhereYouAre() {
+    func testSelectingTheCurrentStackStillQueuesTheSwitchSoTheLatestPressWins() {
         var machine = StackSelectMachine()
-        XCTAssertEqual(send(.select(1), to: &machine), [.showReadout(number: 1), .startTimer(generation: 1)])
+        XCTAssertEqual(send(.select(1), to: &machine), [
+            .switchTo(stacks[0]), .showReadout(number: 1), .startTimer(generation: 1),
+        ])
     }
 
     func testAnUnknownNumberBeepsAndChangesNothing() {
@@ -78,6 +80,6 @@ final class StackSelectMachineTests: XCTestCase {
     private func send(
         _ event: StackSelectEvent, to machine: inout StackSelectMachine, showsReadout: Bool = true
     ) -> [StackSelectCommand] {
-        machine.handle(event, stacks: stacks, currentStackID: stacks[0], showsReadout: showsReadout)
+        machine.handle(event, stacks: stacks, showsReadout: showsReadout)
     }
 }

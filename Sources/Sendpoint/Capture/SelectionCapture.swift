@@ -145,23 +145,21 @@ struct SelectionCapture {
 
     // MARK: - Clipboard fallback
 
-    private static func copyViaKeystroke(
+    static func copyViaKeystroke(
         pasteboard: NSPasteboard,
         processIdentifier: pid_t,
         fallback: FallbackPolicy,
-        editorMayOpen: @escaping @MainActor @Sendable () -> Void
+        editorMayOpen: @escaping @MainActor @Sendable () -> Void,
+        waitForModifierRelease: (TimeInterval?) async throws -> Void = { try await waitForModifierRelease(timeout: $0) },
+        postCopy: (pid_t?) -> Void = { postCommandKey(CGKeyCode(kVK_ANSI_C), processIdentifier: $0) }
     ) async throws -> String? {
+        if fallback == .patient { editorMayOpen() }
+        try await waitForModifierRelease(fallback.modifierReleaseTimeout)
+        try Task.checkCancellation()
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
-
-        if fallback == .patient { editorMayOpen() }
-        try await waitForModifierRelease(timeout: fallback.modifierReleaseTimeout)
-        try Task.checkCancellation()
         Diag.log("selection: posting copy keystroke")
-        postCommandKey(
-            CGKeyCode(kVK_ANSI_C),
-            processIdentifier: processIdentifier > 0 ? processIdentifier : nil
-        )
+        postCopy(processIdentifier > 0 ? processIdentifier : nil)
         if fallback == .brief { editorMayOpen() }
 
         var copiedChangeCount: Int?

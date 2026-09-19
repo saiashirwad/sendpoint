@@ -37,8 +37,7 @@ final class StackSelector {
     }
 
     private func send(_ event: StackSelectEvent) {
-        let commands = machine.handle(event, stacks: store.stacks.map(\.id),
-            currentStackID: store.currentStackID, showsReadout: showsReadout())
+        let commands = machine.handle(event, stacks: store.stacks.map(\.id), showsReadout: showsReadout())
         for command in commands { run(command) }
     }
 

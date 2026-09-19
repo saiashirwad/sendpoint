@@ -60,6 +60,21 @@ final class StackSelectorTests: XCTestCase {
         XCTAssertEqual(spy.hidden, 1, "an idle teardown has nothing to hide")
     }
 
+    func testSwitchingBackBeforeTheFirstCommitLandsOnTheLatestPress() async throws {
+        let store = try await StackStore(persistence: StorePersistence(load: { nil }, commit: { _ in }))
+        let spy = Spy()
+        let selector = makeSelector(store: store, spy: spy, clock: ManualSleep())
+
+        selector.select(2)
+        selector.select(1)
+        await store.waitForIdle()
+
+        XCTAssertEqual(store.currentStackID, store.stacks[0].id)
+        XCTAssertEqual(spy.selected, [store.stacks[1].id, store.stacks[0].id])
+        XCTAssertEqual(spy.shown, [2, 1])
+        selector.teardown()
+    }
+
     func testAFailedCommitTakesTheReadoutDownAndLeavesTheCurrentStack() async throws {
         let document = StackDocument.empty()
         let store = try await StackStore(persistence: StorePersistence(

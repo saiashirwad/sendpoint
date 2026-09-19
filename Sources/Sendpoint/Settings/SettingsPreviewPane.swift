@@ -44,7 +44,7 @@ struct SettingsPreviewPane: View {
                     )
                 }
             }
-            SettingsSection("Look", footnote: "Sets how see-through the voice card and the text note panel are.") {
+            SettingsSection("Look") {
                 SettingsStepperRow(
                     "Opacity",
                     valueText: "\(voiceSettings.transcriptionPreviewOpacity)%",

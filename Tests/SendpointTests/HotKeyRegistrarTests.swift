@@ -58,6 +58,46 @@ final class HotKeyRegistrarTests: XCTestCase {
         )
     }
 
+    func testAPersistedBindingKeepsItsKeyWhenANewStackDefaultWantsIt() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let optionH = KeyCombo(keyCode: UInt16(kVK_ANSI_H), modifiers: [.option])
+        let optionShiftJ = KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.option, .shift])
+        defaults.set(try JSONEncoder().encode(optionH), forKey: "captureCombo")
+        defaults.set(try JSONEncoder().encode(optionShiftJ), forKey: "copyCombo")
+        let settings = ShortcutSettings(defaults: defaults)
+        var attempts: [(keyCode: UInt32, modifiers: UInt32)] = []
+        let center = HotKeyCenter(
+            registerEvent: { keyCode, carbonModifiers, _ in
+                attempts.append((keyCode, carbonModifiers))
+                return (noErr, EventHotKeyRef(bitPattern: 1))
+            },
+            unregisterEvent: { _ in }
+        )
+        let registrar = HotKeyRegistrar(settings: settings, center: center)
+        let displaced: [ShortcutRegistrationIssue] = [
+            .displaced(slot: .selectStack(1), combo: optionH, by: .capture),
+            .displaced(slot: .selectStack(2),
+                       combo: KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.option]), by: .copy),
+        ]
+
+        XCTAssertEqual(settings.captureCombo, optionH)
+        XCTAssertNil(settings.selectStackCombo(1))
+        XCTAssertNil(settings.selectStackCombo(2))
+        XCTAssertNotNil(settings.selectStackCombo(3))
+        XCTAssertEqual(settings.shortcutRegistrationIssues, displaced)
+        XCTAssertEqual(registrar.register(makeActions()), displaced)
+        for kept in [optionH, optionShiftJ] {
+            XCTAssertEqual(
+                attempts.filter { $0.keyCode == UInt32(kept.keyCode) && $0.modifiers == kept.carbonModifiers }.count, 1
+            )
+        }
+
+        let replacement = KeyCombo(keyCode: UInt16(kVK_ANSI_1), modifiers: [.control, .option])
+        try registrar.rebind(replacement, for: .selectStack(1))
+        XCTAssertEqual(settings.shortcutRegistrationIssues, [displaced[1]])
+    }
+
     func testFailedRegistrationYieldsUnavailableForEveryBoundSlot() {
         let (defaults, suite) = makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }

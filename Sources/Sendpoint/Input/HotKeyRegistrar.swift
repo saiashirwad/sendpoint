@@ -28,7 +28,10 @@ final class HotKeyRegistrar {
         var issues: [ShortcutRegistrationIssue] = []
         for slot in ShortcutSlot.allCases {
             center.unregister(name: slot.hotKeyName)
-            guard let combo = settings.combo(for: slot) else { continue }
+            guard let combo = settings.combo(for: slot) else {
+                if let displaced = settings.displacedDefault(for: slot) { issues.append(displaced) }
+                continue
+            }
             guard combo.isValid else {
                 issues.append(.invalid(slot: slot, combo: combo))
                 continue

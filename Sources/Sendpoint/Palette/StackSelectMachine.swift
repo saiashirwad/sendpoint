@@ -26,7 +26,7 @@ nonisolated struct StackSelectMachine: Equatable {
     private var generation = 0
 
     mutating func handle(
-        _ event: StackSelectEvent, stacks: [UUID], currentStackID: UUID, showsReadout: Bool
+        _ event: StackSelectEvent, stacks: [UUID], showsReadout: Bool
     ) -> [StackSelectCommand] {
         guard state != .tornDown else { return [] }
         switch event {
@@ -38,7 +38,7 @@ nonisolated struct StackSelectMachine: Equatable {
         case let .select(number):
             guard stacks.indices.contains(number - 1) else { return [.beep] }
             let id = stacks[number - 1]
-            var commands: [StackSelectCommand] = id == currentStackID ? [] : [.switchTo(id)]
+            var commands: [StackSelectCommand] = [.switchTo(id)]
             if showsReadout {
                 generation += 1
                 state = .showing(id, generation: generation)
