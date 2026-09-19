@@ -4,7 +4,7 @@ import Foundation
 struct Microphone {
     var requestAccess: () async -> Bool
     var prepare: () -> Void
-    var start: (_ deviceUID: String?) throws -> PreviewAudioQueue
+    var start: (MicrophoneOrder) throws -> PreviewAudioQueue
     var stop: () -> Void
 
     static func live(meter: VoiceLevelMeter) -> Microphone {
@@ -12,7 +12,7 @@ struct Microphone {
         return Microphone(
             requestAccess: { await PermissionCheck.requestMicrophoneAccess() },
             prepare: { microphone.prepare() },
-            start: { try microphone.start(deviceUID: $0) },
+            start: { try microphone.start($0) },
             stop: { microphone.stop() }
         )
     }
@@ -21,7 +21,7 @@ struct Microphone {
 private enum MicrophoneError: LocalizedError {
     case noInputDevice
 
-    var errorDescription: String? { "No microphone is available." }
+    var errorDescription: String? { "No microphone is available. Check the list in Settings › Capture." }
 }
 
 private final class LiveMicrophone {
@@ -41,12 +41,12 @@ private final class LiveMicrophone {
         spareEngine = engine
     }
 
-    func start(deviceUID: String?) throws -> PreviewAudioQueue {
+    func start(_ order: MicrophoneOrder) throws -> PreviewAudioQueue {
         stop()
         let engine = spareEngine ?? AVAudioEngine()
         spareEngine = nil
         let input = engine.inputNode
-        selectInputDevice(uid: deviceUID, on: input)
+        guard AudioInputDeviceQuery.bind(order, to: input) else { throw MicrophoneError.noInputDevice }
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw MicrophoneError.noInputDevice }
 
@@ -80,16 +80,5 @@ private final class LiveMicrophone {
         engine.stop()
         self.engine = nil
         Diag.log("voice recording stopped")
-    }
-
-    private func selectInputDevice(uid: String?, on input: AVAudioInputNode) {
-        let device = InputDeviceChoice.resolve(
-            preferredUID: uid,
-            available: AudioInputDeviceQuery.allInputs()
-        ) ?? AudioInputDeviceQuery.defaultInput()
-        guard let device else { return }
-        if AudioInputDeviceQuery.select(device, on: input) {
-            Diag.log("voice input device: \(device.name)")
-        }
     }
 }

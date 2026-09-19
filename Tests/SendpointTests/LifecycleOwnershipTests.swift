@@ -59,6 +59,12 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
         )
     }
 
+    private func order(_ uid: String) -> MicrophoneOrder {
+        var order = MicrophoneOrder()
+        order.absorb([AudioInputDevice(id: 1, uid: uid, name: uid, transport: .other)], systemDefault: nil)
+        return order
+    }
+
     private func waitUntil(
         _ predicate: @escaping @MainActor () async -> Bool
     ) async {
@@ -157,7 +163,8 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
         gate: StartGate
     ) -> MicrophonePreviewOwner {
         MicrophonePreviewOwner(engine: .init(
-            start: { uid in
+            start: { order in
+                let uid = order.entries.first?.uid
                 recorder.startedUIDs.append(uid)
                 recorder.running = true
                 if let uid, gatedUIDs.contains(uid) {
@@ -171,6 +178,12 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
             isRunning: { recorder.running },
             level: { 0 }
         ))
+    }
+
+    private func order(_ uid: String) -> MicrophoneOrder {
+        var order = MicrophoneOrder()
+        order.absorb([AudioInputDevice(id: 1, uid: uid, name: uid, transport: .other)], systemDefault: nil)
+        return order
     }
 
     private func waitUntil(
@@ -188,7 +201,7 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
         let recorder = Recorder()
         let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
 
-        owner.start(uid: "a")
+        owner.start(order("a"))
         await waitUntil { recorder.startedUIDs.count == 1 }
         XCTAssertEqual(recorder.stopCount, 1)
         owner.stop()
@@ -206,9 +219,9 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
         let recorder = Recorder()
         let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
 
-        owner.start(uid: "a")
+        owner.start(order("a"))
         await waitUntil { recorder.startedUIDs.count == 1 }
-        owner.start(uid: "b")
+        owner.start(order("b"))
 
         await gate.release()
         await waitUntil { recorder.startedUIDs.count == 2 }

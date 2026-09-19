@@ -4,18 +4,127 @@ import CoreAudio
 import Foundation
 import Observation
 
+nonisolated enum AudioInputTransport: Equatable, Sendable {
+    case builtIn
+    case bluetooth
+    case other
+}
+
 nonisolated struct AudioInputDevice: Identifiable, Equatable, Sendable {
     let id: AudioDeviceID
     let uid: String
     let name: String
+    let transport: AudioInputTransport
 }
 
-nonisolated enum InputDeviceChoice {
-    static func resolve(
-        preferredUID: String?, available: @autoclosure () -> [AudioInputDevice]
-    ) -> AudioInputDevice? {
-        guard let preferredUID else { return nil }
-        return available().first { $0.uid == preferredUID }
+nonisolated struct RankedMicrophone: Codable, Equatable, Sendable {
+    let uid: String
+    var name: String
+    var isEnabled = true
+}
+
+nonisolated struct MicrophoneOrder: Codable, Equatable, Sendable {
+    private(set) var entries: [RankedMicrophone] = []
+
+    mutating func absorb(_ devices: [AudioInputDevice], systemDefault: AudioInputDevice?) {
+        for device in devices {
+            guard let index = entries.firstIndex(where: { $0.uid == device.uid }) else { continue }
+            entries[index].name = device.name
+        }
+        let seedsFromDefault = entries.isEmpty
+        let fresh = devices.filter { device in !entries.contains { $0.uid == device.uid } }
+        func rank(_ device: AudioInputDevice) -> Int {
+            switch device.transport {
+            case .bluetooth: 3
+            case _ where seedsFromDefault && device == systemDefault: 0
+            case .builtIn: 1
+            case .other: 2
+            }
+        }
+        let ranked = fresh.enumerated().sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+        entries.insert(
+            contentsOf: ranked.map { RankedMicrophone(uid: $0.element.uid, name: $0.element.name) },
+            at: enabledCount
+        )
+    }
+
+    mutating func move(uid: String, toIndex index: Int) {
+        guard let from = entries.firstIndex(where: { $0.uid == uid && $0.isEnabled }) else { return }
+        let entry = entries.remove(at: from)
+        entries.insert(entry, at: min(max(index, 0), enabledCount))
+    }
+
+    mutating func setEnabled(_ isEnabled: Bool, uid: String) {
+        guard let index = entries.firstIndex(where: { $0.uid == uid && $0.isEnabled != isEnabled }) else { return }
+        var entry = entries.remove(at: index)
+        entry.isEnabled = isEnabled
+        entries.insert(entry, at: enabledCount)
+    }
+
+    private var enabledCount: Int {
+        entries.prefix(while: \.isEnabled).count
+    }
+
+    mutating func forget(uid: String) {
+        entries.removeAll { $0.uid == uid }
+    }
+
+    func active(among available: [AudioInputDevice], systemDefault: AudioInputDevice?) -> AudioInputDevice? {
+        var order = self
+        order.absorb(available, systemDefault: systemDefault)
+        for entry in order.entries where entry.isEnabled {
+            if let device = available.first(where: { $0.uid == entry.uid }) { return device }
+        }
+        return nil
+    }
+}
+
+nonisolated struct MicrophoneListFacts: Equatable {
+    struct Row: Equatable, Identifiable {
+        let id: String
+        let name: String
+        let isEnabled: Bool
+        let isConnected: Bool
+        let isActive: Bool
+
+        var status: String? {
+            if isActive { return "In use" }
+            return isConnected ? nil : "Not connected"
+        }
+    }
+
+    static let nothingUsable = "No connected microphone is switched on, so nothing can be recorded."
+
+    let rows: [Row]
+    let tucked: [Row]
+    let footnote: String?
+
+    init(order: MicrophoneOrder, devices: [AudioInputDevice], systemDefault: AudioInputDevice?) {
+        var order = order
+        order.absorb(devices, systemDefault: systemDefault)
+        let active = order.active(among: devices, systemDefault: systemDefault)
+        let all = order.entries.map { entry in
+            Row(
+                id: entry.uid,
+                name: entry.name,
+                isEnabled: entry.isEnabled,
+                isConnected: devices.contains { $0.uid == entry.uid },
+                isActive: entry.uid == active?.uid
+            )
+        }
+        rows = all.filter(\.isEnabled)
+        tucked = all.filter { !$0.isEnabled }
+        footnote = active == nil ? Self.nothingUsable : nil
+    }
+
+    static func tuckedLabel(count: Int) -> String {
+        "\(count) switched off"
+    }
+
+    static func dropIndex(from origin: Int, translation: CGFloat, rowHeight: CGFloat, count: Int) -> Int {
+        guard rowHeight > 0, count > 0 else { return origin }
+        let shift = Int((translation / rowHeight).rounded())
+        return min(max(origin + shift, 0), count - 1)
     }
 }
 
@@ -24,11 +133,11 @@ enum AudioInputDeviceQuery {
 
     static func allInputs() -> [AudioInputDevice] {
         deviceIDs().compactMap { id in
-            guard inputChannelCount(of: id) > 0,
+            guard inputChannelCount(of: id) > 0, !isPrivateAggregate(id),
                   let uid = string(kAudioDevicePropertyDeviceUID, of: id),
                   let name = string(kAudioObjectPropertyName, of: id)
             else { return nil }
-            return AudioInputDevice(id: id, uid: uid, name: name)
+            return AudioInputDevice(id: id, uid: uid, name: name, transport: transport(of: id))
         }
     }
 
@@ -40,11 +149,18 @@ enum AudioInputDeviceQuery {
               let uid = string(kAudioDevicePropertyDeviceUID, of: id),
               let name = string(kAudioObjectPropertyName, of: id)
         else { return nil }
-        return AudioInputDevice(id: id, uid: uid, name: name)
+        return AudioInputDevice(id: id, uid: uid, name: name, transport: transport(of: id))
     }
 
-    @discardableResult
-    static func select(_ device: AudioInputDevice, on input: AVAudioInputNode) -> Bool {
+    static func bind(_ order: MicrophoneOrder, to input: AVAudioInputNode) -> Bool {
+        guard let device = order.active(among: allInputs(), systemDefault: defaultInput()),
+              select(device, on: input)
+        else { return false }
+        Diag.log("input device: \(device.name)")
+        return true
+    }
+
+    private static func select(_ device: AudioInputDevice, on input: AVAudioInputNode) -> Bool {
         guard let unit = input.audioUnit else { return false }
         var id = device.id
         let status = AudioUnitSetProperty(
@@ -127,6 +243,29 @@ enum AudioInputDeviceQuery {
         guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw) == noErr else { return 0 }
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    private static func isPrivateAggregate(_ id: AudioDeviceID) -> Bool {
+        var address = globalAddress(kAudioAggregateDevicePropertyComposition)
+        var size = UInt32(MemoryLayout<CFDictionary?>.size)
+        var value: Unmanaged<CFDictionary>?
+        let status = withUnsafeMutablePointer(to: &value) { pointer in
+            AudioObjectGetPropertyData(id, &address, 0, nil, &size, pointer)
+        }
+        guard status == noErr, let composition = value?.takeRetainedValue() as? [String: Any] else { return false }
+        return composition[kAudioAggregateDeviceIsPrivateKey] as? Int == 1
+    }
+
+    private static func transport(of id: AudioDeviceID) -> AudioInputTransport {
+        var address = globalAddress(kAudioDevicePropertyTransportType)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &value) == noErr else { return .other }
+        switch value {
+        case kAudioDeviceTransportTypeBuiltIn: return .builtIn
+        case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE: return .bluetooth
+        default: return .other
+        }
     }
 
     private static func string(_ selector: AudioObjectPropertySelector, of id: AudioDeviceID) -> String? {

@@ -121,12 +121,15 @@ final class SettingsIntentTests: XCTestCase {
         voice.send(.transcriptionPreviewOpacity(54))
         XCTAssertEqual(voice.transcriptionPreviewOpacity, 50)
 
-        voice.send(.inputDevice(uid: "mic-1", name: "Mic"))
-        XCTAssertEqual(voice.inputDeviceUID, "mic-1")
-        XCTAssertEqual(voice.inputDeviceName, "Mic")
-        voice.send(.inputDevice(uid: nil, name: "Mic"))
-        XCTAssertNil(voice.inputDeviceUID)
-        XCTAssertNil(voice.inputDeviceName, "clearing the UID clears the stored name")
+        let desk = AudioInputDevice(id: 1, uid: "mic-1", name: "Desk", transport: .other)
+        let builtIn = AudioInputDevice(id: 2, uid: "mic-2", name: "Built-in", transport: .builtIn)
+        voice.send(.microphonesSeen([desk, builtIn], systemDefault: desk))
+        voice.send(.moveMicrophone(uid: "mic-2", toIndex: 0))
+        voice.send(.microphoneEnabled(uid: "mic-1", false))
+        XCTAssertEqual(voice.microphones.entries.map(\.uid), ["mic-2", "mic-1"])
+        XCTAssertEqual(voice.microphones.entries.map(\.isEnabled), [true, false])
+        voice.send(.forgetMicrophone(uid: "mic-1"))
+        XCTAssertEqual(voice.microphones.entries.map(\.uid), ["mic-2"])
 
         let reloaded = VoiceSettings(defaults: defaults)
         XCTAssertEqual(reloaded.voiceMode, .tap)
@@ -134,7 +137,7 @@ final class SettingsIntentTests: XCTestCase {
         XCTAssertEqual(reloaded.transcriptionPreviewLines, VoiceSettings.previewLinesMax)
         XCTAssertEqual(reloaded.transcriptionPreviewFontSize, VoiceSettings.previewFontSizeMin)
         XCTAssertEqual(reloaded.transcriptionPreviewOpacity, 50)
-        XCTAssertNil(reloaded.inputDeviceUID)
+        XCTAssertEqual(reloaded.microphones, voice.microphones)
     }
 
     func testShortcutIntentPreservesBindingsAndFeedbackText() {
