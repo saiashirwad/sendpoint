@@ -11,18 +11,13 @@ final class InputLevelMonitor {
     private var engine: AVAudioEngine?
     @ObservationIgnored private let pump = LatestValuePump<Float>()
 
-    func start(preferredUID: String?) {
+    func start(_ order: MicrophoneOrder) {
         stop()
         guard PermissionCheck.isMicrophoneAuthorized else { return }
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        if let device = InputDeviceChoice.resolve(
-            preferredUID: preferredUID,
-            available: AudioInputDeviceQuery.allInputs()
-        ) {
-            _ = AudioInputDeviceQuery.select(device, on: input)
-        }
+        guard AudioInputDeviceQuery.bind(order, to: input) else { return }
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { return }
 
@@ -56,14 +51,14 @@ final class InputLevelMonitor {
 
 final class MicrophonePreviewOwner {
     struct Engine {
-        var start: (String?) async -> Void
+        var start: (MicrophoneOrder) async -> Void
         var stop: () -> Void
         var isRunning: () -> Bool
         var level: () -> Float
 
         static func live(_ monitor: InputLevelMonitor) -> Engine {
             Engine(
-                start: { monitor.start(preferredUID: $0) },
+                start: { monitor.start($0) },
                 stop: { monitor.stop() },
                 isRunning: { monitor.isRunning },
                 level: { monitor.level }
@@ -86,7 +81,7 @@ final class MicrophonePreviewOwner {
         self.init(engine: .live(monitor))
     }
 
-    func start(uid: String?) {
+    func start(_ order: MicrophoneOrder) {
         generation += 1
         let active = generation
         let previous = task
@@ -95,7 +90,7 @@ final class MicrophonePreviewOwner {
             await previous?.value
             guard let self, !Task.isCancelled, active == self.generation else { return }
             self.engine.stop()
-            await self.engine.start(uid)
+            await self.engine.start(order)
             guard !Task.isCancelled, active == self.generation else {
                 self.engine.stop()
                 return

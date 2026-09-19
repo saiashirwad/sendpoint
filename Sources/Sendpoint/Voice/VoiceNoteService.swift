@@ -20,7 +20,7 @@ final class VoiceNoteService {
     private var isDraining = false
 
     let levelMeter: VoiceLevelMeter
-    var preferredInputDeviceUID: String?
+    var microphones = MicrophoneOrder()
     var onOutput: ((VoiceOutput) -> Void)?
 
     init(
@@ -92,7 +92,7 @@ final class VoiceNoteService {
                 return
             }
             do {
-                let queue = try microphone.start(self.preferredInputDeviceUID)
+                let queue = try microphone.start(self.microphones)
                 self.queue = queue
                 self.stream(queue, take: take)
                 self.send(.micStarted(take, self.now()))

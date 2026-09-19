@@ -3,7 +3,10 @@ import Observation
 
 enum VoiceSettingsEvent: Equatable {
     case voiceMode(VoiceRecordingMode)
-    case inputDevice(uid: String?, name: String?)
+    case microphonesSeen([AudioInputDevice], systemDefault: AudioInputDevice?)
+    case moveMicrophone(uid: String, toIndex: Int)
+    case microphoneEnabled(uid: String, Bool)
+    case forgetMicrophone(uid: String)
     case transcriptionPreview(Bool)
     case transcriptionPreviewLines(Int)
     case transcriptionPreviewFontSize(Int)
@@ -14,8 +17,7 @@ enum VoiceSettingsEvent: Equatable {
 final class VoiceSettings {
     private enum Key {
         static let voiceMode = "voiceMode"
-        static let inputDeviceUID = "inputDeviceUID"
-        static let inputDeviceName = "inputDeviceName"
+        static let microphones = "microphones"
         static let transcriptionPreview = "transcriptionPreview"
         static let transcriptionPreviewLines = "transcriptionPreviewLines"
         static let transcriptionPreviewFontSize = "transcriptionPreviewFontSize"
@@ -35,8 +37,7 @@ final class VoiceSettings {
 
     private let defaults: UserDefaults
     private(set) var voiceMode: VoiceRecordingMode
-    private(set) var inputDeviceUID: String?
-    private(set) var inputDeviceName: String?
+    private(set) var microphones: MicrophoneOrder
     private(set) var transcriptionPreview: Bool
     private(set) var transcriptionPreviewLines: Int
     private(set) var transcriptionPreviewFontSize: Int
@@ -45,9 +46,8 @@ final class VoiceSettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         voiceMode = defaults.string(forKey: Key.voiceMode).flatMap(VoiceRecordingMode.init(rawValue:)) ?? .hold
-        let storedUID = defaults.string(forKey: Key.inputDeviceUID)
-        inputDeviceUID = storedUID
-        inputDeviceName = storedUID == nil ? nil : defaults.string(forKey: Key.inputDeviceName)
+        microphones = defaults.data(forKey: Key.microphones)
+            .flatMap { try? JSONDecoder().decode(MicrophoneOrder.self, from: $0) } ?? MicrophoneOrder()
         transcriptionPreview = defaults.object(forKey: Key.transcriptionPreview) as? Bool ?? true
         transcriptionPreviewLines = Self.clampedPreviewLines(
             defaults.object(forKey: Key.transcriptionPreviewLines) as? Int
@@ -109,17 +109,29 @@ final class VoiceSettings {
         return min(max(stepped, previewOpacityMin), previewOpacityMax)
     }
 
-    private func setInputDevice(uid: String?, name: String?) {
-        inputDeviceUID = uid
-        inputDeviceName = uid == nil ? nil : name
-        defaults.set(inputDeviceUID, forKey: Key.inputDeviceUID)
-        defaults.set(inputDeviceName, forKey: Key.inputDeviceName)
+    private func setMicrophones(_ order: MicrophoneOrder) {
+        guard order != microphones else { return }
+        microphones = order
+        defaults.set(try? JSONEncoder().encode(order), forKey: Key.microphones)
+    }
+
+    private func updateMicrophones(_ change: (inout MicrophoneOrder) -> Void) {
+        var order = microphones
+        change(&order)
+        setMicrophones(order)
     }
 
     func send(_ event: VoiceSettingsEvent) {
         switch event {
         case .voiceMode(let mode): setVoiceMode(mode)
-        case .inputDevice(let uid, let name): setInputDevice(uid: uid, name: name)
+        case .microphonesSeen(let devices, let systemDefault):
+            updateMicrophones { $0.absorb(devices, systemDefault: systemDefault) }
+        case .moveMicrophone(let uid, let index):
+            updateMicrophones { $0.move(uid: uid, toIndex: index) }
+        case .microphoneEnabled(let uid, let on):
+            updateMicrophones { $0.setEnabled(on, uid: uid) }
+        case .forgetMicrophone(let uid):
+            updateMicrophones { $0.forget(uid: uid) }
         case .transcriptionPreview(let on): setTranscriptionPreview(on)
         case .transcriptionPreviewLines(let lines): setTranscriptionPreviewLines(lines)
         case .transcriptionPreviewFontSize(let size): setTranscriptionPreviewFontSize(size)

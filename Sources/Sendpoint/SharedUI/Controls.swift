@@ -347,38 +347,6 @@ private struct SwitchTrack: View {
     }
 }
 
-struct ChoiceMenu<Choices: View>: View {
-    let title: String
-    let width: CGFloat
-    @ViewBuilder let choices: () -> Choices
-    @State private var hovering = false
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Menu(content: choices) {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.ui(12.5, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 11)
-            .frame(width: width, height: 28)
-            .background(Capsule().fill(Color.primary.opacity(hovering ? 0.09 : 0.055)))
-            .contentShape(Capsule())
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .onHover { hovering = $0 }
-    }
-}
-
 // MARK: - Previews
 
 #Preview("Chip") {

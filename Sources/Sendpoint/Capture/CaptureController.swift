@@ -7,7 +7,7 @@ struct VoiceRecorder {
     var stop: (UUID) -> Void
     var discard: () -> Void
     var levelMeter: VoiceLevelMeter
-    var chooseMicrophone: (String?) -> Void = { _ in }
+    var rankMicrophones: (MicrophoneOrder) -> Void = { _ in }
     var observe: (@escaping (VoiceOutput) -> Void) -> Void = { _ in }
     var warmUp: () -> Void = {}
 
@@ -17,7 +17,7 @@ struct VoiceRecorder {
             stop: { service.stop($0) },
             discard: { service.discard() },
             levelMeter: service.levelMeter,
-            chooseMicrophone: { service.preferredInputDeviceUID = $0 },
+            rankMicrophones: { service.microphones = $0 },
             observe: { service.onOutput = $0 },
             warmUp: { service.warmUp() }
         )
@@ -137,7 +137,7 @@ final class CaptureController {
 
     func warmUp() {
         guard !state.isTornDown else { return }
-        recorder.chooseMicrophone(voiceSettings.inputDeviceUID)
+        recorder.rankMicrophones(voiceSettings.microphones)
         recorder.warmUp()
         surfaces.prepare()
     }
@@ -170,10 +170,9 @@ final class CaptureController {
         ))
     }
 
-    func chooseMicrophone(uid: String?, devices: [AudioInputDevice]) {
-        let name = uid.flatMap { id in devices.first { $0.uid == id }?.name }
-        voiceSettings.send(.inputDevice(uid: uid, name: name))
-        recorder.chooseMicrophone(uid)
+    func updateMicrophones(_ event: VoiceSettingsEvent) {
+        voiceSettings.send(event)
+        recorder.rankMicrophones(voiceSettings.microphones)
     }
 
     func beginCapture() {
