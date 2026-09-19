@@ -57,7 +57,7 @@ struct PermissionServices: Sendable {
     var openAccessibilitySettings: @MainActor @Sendable () -> Void
     var openMicrophoneSettings: @MainActor @Sendable () -> Void
 
-    static func live(voiceService: VoiceNoteService) -> PermissionServices {
+    static func live(transcriber: any VoiceTranscribing) -> PermissionServices {
         PermissionServices(
             accessibilityStatus: {
                 AXIsProcessTrusted() ? .granted : .notGranted
@@ -70,15 +70,13 @@ struct PermissionServices: Sendable {
                 PermissionCheck.microphonePermissionState
             },
             requestMicrophone: {
-                await voiceService.requestMicrophoneAccess()
+                await PermissionCheck.requestMicrophoneAccess()
             },
             voiceModelFilesExist: {
                 LocalVoiceModelFiles.exist()
             },
             downloadVoiceModel: { onProgress in
-                try await voiceService.downloadVoiceModel(
-                    onProgress: onProgress
-                )
+                try await transcriber.prepare(onProgress: onProgress)
             },
             openAccessibilitySettings: {
                 PermissionCheck.openAccessibilitySettings()

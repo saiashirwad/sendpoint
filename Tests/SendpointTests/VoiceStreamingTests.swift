@@ -6,11 +6,6 @@ import XCTest
 
 @MainActor
 final class VoiceStreamingTests: XCTestCase {
-    private enum Fail: LocalizedError {
-        case failed
-        var errorDescription: String? { "mic busy" }
-    }
-
     @MainActor private final class Surfaces {
         var events: [String] = []
         var boundary: CaptureSurfaces {
@@ -38,34 +33,11 @@ final class VoiceStreamingTests: XCTestCase {
         }
     }
 
-    @MainActor private final class Recorder {
-        var starts = 0
-        var discards = 0
-        var partialHandler: ((String) -> Void)?
-        var partialHandlers: [(String) -> Void] = []
-        let started = Gate<Bool>()
-        var boundary: VoiceRecorder {
-            VoiceRecorder(
-                start: {
-                    self.starts += 1
-                    _ = await self.started.wait()
-                },
-                stopAndTranscribe: { "final transcript" },
-                discard: { self.discards += 1 },
-                levelMeter: VoiceLevelMeter(),
-                observePartials: {
-                    self.partialHandler = $0
-                    self.partialHandlers.append($0)
-                }
-            )
-        }
-    }
-
     private struct Fixture {
         let controller: CaptureController
         let store: StackStore
         let surfaces: Surfaces
-        let recorder: Recorder
+        let recorder: FakeVoiceRecorder
         let selectionGate: Gate<CapturedSelection>
     }
 
@@ -83,7 +55,8 @@ final class VoiceStreamingTests: XCTestCase {
         ))
         let store = try await StackStore(persistence: StorePersistence(load: { nil }, commit: { _ in }))
         let surfaces = Surfaces()
-        let recorder = Recorder()
+        let recorder = FakeVoiceRecorder()
+        recorder.transcript = .success("final transcript")
         let gate = Gate<CapturedSelection>()
         let controller = CaptureController(
             settings: AppSettings(defaults: defaults),
@@ -105,8 +78,9 @@ final class VoiceStreamingTests: XCTestCase {
     }
 
     private func startRecording(_ f: Fixture) async {
+        let starts = f.recorder.starts + 1
         f.controller.send(.voicePressed)
-        await waitUntil { f.recorder.starts == 1 }
+        await waitUntil { f.recorder.starts == starts }
         await f.recorder.started.open(true)
         await f.selectionGate.open(selection)
         await waitUntil { f.controller.state.session?.phase == .recording }

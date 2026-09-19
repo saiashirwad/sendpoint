@@ -26,6 +26,21 @@ enum PermissionCheck {
         }
     }
 
+    static func requestMicrophoneAccess() async -> Bool {
+        switch microphonePermissionState {
+        case .granted:
+            return true
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                AVCaptureDevice.requestAccess(for: .audio) { @Sendable allowed in
+                    continuation.resume(returning: allowed)
+                }
+            }
+        case .denied, .restricted:
+            return false
+        }
+    }
+
     static func openMicrophoneSettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
         NSWorkspace.shared.open(url)

@@ -5,11 +5,6 @@ import XCTest
 
 @MainActor
 final class CaptureControllerTests: XCTestCase {
-    private enum Fail: LocalizedError {
-        case failed
-        var errorDescription: String? { "mic busy" }
-    }
-
     @MainActor private final class Surfaces {
         var events: [String] = []
         var boundary: CaptureSurfaces {
@@ -37,26 +32,6 @@ final class CaptureControllerTests: XCTestCase {
         }
     }
 
-    @MainActor private final class Recorder {
-        var starts = 0
-        var discards = 0
-        var startFails = false
-        var transcript: Result<String, Error> = .success("hello there")
-        let started = Gate<Bool>()
-        var boundary: VoiceRecorder {
-            VoiceRecorder(
-                start: {
-                    self.starts += 1
-                    if self.startFails { throw Fail.failed }
-                    _ = await self.started.wait()
-                },
-                stopAndTranscribe: { try self.transcript.get() },
-                discard: { self.discards += 1 },
-                levelMeter: VoiceLevelMeter()
-            )
-        }
-    }
-
     @MainActor private final class Pasteboard {
         var inserted: [(String, pid_t)] = []
         var pasteSucceeds = true
@@ -66,7 +41,7 @@ final class CaptureControllerTests: XCTestCase {
         let controller: CaptureController
         let store: StackStore
         let surfaces: Surfaces
-        let recorder: Recorder
+        let recorder: FakeVoiceRecorder
         let pasteboard: Pasteboard
         let selectionGate: Gate<CapturedSelection>
         var accessibilityRequests = 0
@@ -90,7 +65,7 @@ final class CaptureControllerTests: XCTestCase {
         ))
         let store = try await StackStore(persistence: StorePersistence(load: { nil }, commit: { _ in }))
         let surfaces = Surfaces()
-        let recorder = Recorder()
+        let recorder = FakeVoiceRecorder()
         let pasteboard = Pasteboard()
         let gate = Gate<CapturedSelection>()
         let frontApp = hasFrontApp ? self.frontApp : nil

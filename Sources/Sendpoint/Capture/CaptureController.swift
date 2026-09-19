@@ -3,36 +3,25 @@ import Observation
 import SendpointDomain
 
 struct VoiceRecorder {
-    var start: () async throws -> Void
-    var stopAndTranscribe: () async throws -> String
+    var start: (UUID) -> Void
+    var stop: (UUID) -> Void
     var discard: () -> Void
     var levelMeter: VoiceLevelMeter
     var chooseMicrophone: (String?) -> Void = { _ in }
-    var observePartials: (@escaping @Sendable (String) -> Void) -> Void = { _ in }
+    var observe: (@escaping (VoiceOutput) -> Void) -> Void = { _ in }
     var warmUp: () -> Void = {}
 
     static func live(_ service: VoiceNoteService) -> Self {
         Self(
-            start: {
-                guard await service.requestMicrophoneAccess() else {
-                    throw VoiceRecorderError.microphoneDenied
-                }
-                try Task.checkCancellation()
-                try await service.startRecording()
-            },
-            stopAndTranscribe: { try await service.stopAndTranscribe() },
-            discard: { service.discardRecording() },
+            start: { service.start($0) },
+            stop: { service.stop($0) },
+            discard: { service.discard() },
             levelMeter: service.levelMeter,
             chooseMicrophone: { service.preferredInputDeviceUID = $0 },
-            observePartials: { service.onPartialTranscript = $0 },
+            observe: { service.onOutput = $0 },
             warmUp: { service.warmUp() }
         )
     }
-}
-
-private enum VoiceRecorderError: LocalizedError {
-    case microphoneDenied
-    var errorDescription: String? { "Microphone access is off. Turn it on in Settings › Voice." }
 }
 
 struct CaptureSurfaces {
@@ -68,9 +57,8 @@ final class CaptureController {
     @ObservationIgnored private var previousApp: NSRunningApplication?
     @ObservationIgnored private var pending: [CaptureAction] = []
     @ObservationIgnored private var isDraining = false
-    private enum Work: Hashable { case selection, selectionDeadline, recording, transcription, insertion, failure }
+    private enum Work: Hashable { case selection, selectionDeadline, insertion, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
-    @ObservationIgnored private let partials = LatestValuePump<String>()
 
     static let selectionDeadline: Duration = .milliseconds(600)
 
@@ -121,6 +109,18 @@ final class CaptureController {
         self.recorder = recorder
         self.frontApp = frontApp
         self.makeSurfaces = surfaces
+        recorder.observe { [weak self] in self?.receive($0) }
+    }
+
+    private func receive(_ output: VoiceOutput) {
+        guard let context = state.session?.context else { return }
+        switch output {
+        case .started(context.noteID): send(.recordingStarted(context))
+        case .partial(context.noteID, let text): send(.voicePartial(context, text))
+        case .transcript(context.noteID, let text): send(.transcript(context, text))
+        case .failed(context.noteID, let message): send(.failed(context, message))
+        default: break
+        }
     }
 
     static func frontmostApp() -> DictationTarget? {
@@ -227,17 +227,8 @@ final class CaptureController {
                 self?.tasks.removeValue(forKey: .selection)?.cancel()
                 return .selection(context, CapturedSelection(text: "", screenRect: nil))
             }
-        case let .startRecording(context):
-            let partials = partials.start { [weak self] in self?.send(.voicePartial(context, $0)) }
-            recorder.observePartials { partials.yield($0) }
-            launch(.recording, context: context) { [recorder] in
-                try await recorder.start()
-                return .recordingStarted(context)
-            }
-        case let .transcribe(context):
-            launch(.transcription, context: context) { [recorder] in
-                .transcript(context, try await recorder.stopAndTranscribe())
-            }
+        case let .startRecording(context): recorder.start(context.noteID)
+        case let .transcribe(context): recorder.stop(context.noteID)
         case let .insert(context, text, target):
             launch(.insertion, context: context) { [selection] in
                 .inserted(context, try await selection.insertText(text, target.processIdentifier))
@@ -295,7 +286,6 @@ final class CaptureController {
     private func cancelWork() {
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
-        partials.stop()
         recorder.discard()
     }
 

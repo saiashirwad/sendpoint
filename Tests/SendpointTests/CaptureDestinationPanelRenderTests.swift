@@ -331,7 +331,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
                 read: { _, _ in CapturedSelection(text: "") }, paste: { _, _ in false }
             ),
             recorder: VoiceRecorder(
-                start: {}, stopAndTranscribe: { "" }, discard: {}, levelMeter: VoiceLevelMeter()
+                start: { _ in }, stop: { _ in }, discard: {}, levelMeter: VoiceLevelMeter()
             ),
             surfaces: { _ in CaptureSurfaces(
                 prepare: {}, show: { _ in }, focus: {}, close: {}, discard: {}
