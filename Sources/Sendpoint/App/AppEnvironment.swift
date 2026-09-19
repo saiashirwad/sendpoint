@@ -22,10 +22,11 @@ struct AppEnvironment {
         let templateSettings = TemplateSettings(defaults: defaults)
         let voiceSettings = VoiceSettings(defaults: defaults)
         let hotKeyCenter = HotKeyCenter.shared
-        let voiceService = VoiceNoteService()
+        let transcriber = LocalStreamingPreview()
+        let voiceService = VoiceNoteService(transcriber: transcriber)
         let selectionMonitor = AutomaticSelectionMonitor()
         let surfaces = SurfaceCoordinator()
-        let permissionState = PermissionState(services: .live(voiceService: voiceService))
+        let permissionState = PermissionState(services: .live(transcriber: transcriber))
         let selection = SelectionCapture.live(monitor: selectionMonitor)
 
         self.appSettings = appSettings
