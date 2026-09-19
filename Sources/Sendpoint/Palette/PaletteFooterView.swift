@@ -58,7 +58,7 @@ struct PaletteFooterView: View {
                 }
             }
         } else if let current = projection.facts.current, let startedAt = current.startedAt {
-            Text("\(current.countLabel) since \(noteTimeLabel(startedAt))")
+            Text("\(current.countLabel) since \(noteTimestampLabel(startedAt))")
                 .font(.ui(12).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

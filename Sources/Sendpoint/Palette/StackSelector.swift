@@ -9,7 +9,6 @@ final class StackSelector {
     private let showsReadout: () -> Bool
     private let showReadout: (Int) -> Void
     private let hideReadout: () -> Void
-    private let onSelected: (UUID) -> Void
     private let sleep: @MainActor (Duration) async throws -> Void
     private var machine = StackSelectMachine()
     private var timer: Task<Void, Never>?
@@ -18,13 +17,11 @@ final class StackSelector {
          showsReadout: @escaping () -> Bool,
          showReadout: @escaping (Int) -> Void,
          hideReadout: @escaping () -> Void,
-         onSelected: @escaping (UUID) -> Void,
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.store = store
         self.showsReadout = showsReadout
         self.showReadout = showReadout
         self.hideReadout = hideReadout
-        self.onSelected = onSelected
         self.sleep = sleep
     }
 
@@ -44,7 +41,6 @@ final class StackSelector {
     private func run(_ command: StackSelectCommand) {
         switch command {
         case let .switchTo(id):
-            onSelected(id)
             store.mutate(.switchStack(stackID: id)) { [weak self] outcome in
                 switch outcome {
                 case .committed, .noOp: break

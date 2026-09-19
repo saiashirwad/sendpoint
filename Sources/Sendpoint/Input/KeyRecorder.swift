@@ -12,7 +12,10 @@ struct KeyRecorder: NSViewRepresentable {
 
     func makeNSView(context: Context) -> KeyRecorderView {
         let view = KeyRecorderView()
-        view.onChange = { combo = $0 }
+        view.onChange = { [weak view] in
+            combo = $0
+            view?.combo = combo
+        }
         view.combo = combo
         view.clearable = clearable
         return view
@@ -98,7 +101,6 @@ final class KeyRecorderView: NSView {
         let plainDelete = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
             && (event.keyCode == 51 || event.keyCode == 117)
         if clearable, plainDelete {
-            combo = nil
             recording = false
             window?.makeFirstResponder(nil)
             onChange?(nil)
@@ -106,7 +108,6 @@ final class KeyRecorderView: NSView {
         }
         let candidate = KeyCombo(keyCode: event.keyCode, modifiers: event.modifierFlags)
         guard candidate.isValid else { NSSound.beep(); return }
-        combo = candidate
         recording = false
         window?.makeFirstResponder(nil)
         onChange?(candidate)

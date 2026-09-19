@@ -46,7 +46,6 @@ public final class StackStore {
 
     public private(set) var error: StackStoreError?
     public private(set) var state: State = .idle
-    public private(set) var didQuarantineCorruptFile = false
 
     public var stacks: [Stack] {
         document.stacks
@@ -54,6 +53,16 @@ public final class StackStore {
 
     public var currentStackID: UUID {
         document.currentStackID
+    }
+
+    public var selectedStackID: UUID {
+        for queued in queuedMutations.reversed() {
+            switch queued.mutation {
+            case let .switchStack(id), let .moveNoteToStack(_, _, id): return id
+            default: continue
+            }
+        }
+        return document.currentStackID
     }
 
     public var currentStack: Stack {
@@ -84,13 +93,10 @@ public final class StackStore {
         let loaded = try await persistence.load()
         try Task.checkCancellation()
         let initialDocument: StackDocument
-        let quarantined: Bool
         if let loaded {
             try StackDocumentMutations.validate(loaded)
             initialDocument = loaded
-            quarantined = false
         } else {
-            quarantined = await persistence.didQuarantineCorruptFile()
             let candidate = StackDocument.empty()
             try StackDocumentMutations.validate(candidate)
             try Task.checkCancellation()
@@ -102,7 +108,6 @@ public final class StackStore {
         self.document = initialDocument
         self.persistence = persistence
         self.onChange = onChange
-        self.didQuarantineCorruptFile = quarantined
     }
 
     public func mutate(
@@ -193,6 +198,7 @@ public final class StackStore {
                     }
                     finishProcessing(nextState: .halted)
                     queuedMutation.outcome?(.commitFailed(message))
+                    onChange()
                     return
                 case .cancelled:
                     finishProcessing()
@@ -205,6 +211,7 @@ public final class StackStore {
                 queuedMutations.removeFirst()
                 error = .mutationRejected(message)
                 queuedMutation.outcome?(.rejected(message))
+                onChange()
             }
         }
 

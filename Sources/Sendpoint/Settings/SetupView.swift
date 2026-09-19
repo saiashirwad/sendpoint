@@ -679,7 +679,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     private let noteCount: () -> Int?
     private var lifecycle: Lifecycle = .active
     private var pollingTask: Task<Void, Never>?
-    private var voiceWatchActive = false
     private var lastStep: Int?
 
     init(
@@ -741,8 +740,8 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     private func present() {
+        tour.send(.presented)
         startPolling()
-        startVoiceWatch()
         if !window.isVisible {
             window.center()
         }
@@ -769,7 +768,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     private func hide() {
         stopPolling()
-        stopVoiceWatch()
         window.orderOut(nil)
         window.close()
     }
@@ -779,7 +777,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         surfaces.unregister(.setup)
         lifecycle = .tornDown
         stopPolling()
-        stopVoiceWatch()
         window.delegate = nil
         window.orderOut(nil)
         window.close()
@@ -813,21 +810,8 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         pollingTask = nil
     }
 
-    private func startVoiceWatch() {
-        guard !voiceWatchActive else { return }
-        voiceWatchActive = true
-        permissionState.startWatchingVoiceModel()
-    }
-
-    private func stopVoiceWatch() {
-        guard voiceWatchActive else { return }
-        voiceWatchActive = false
-        permissionState.stopWatchingVoiceModel()
-    }
-
     func windowWillClose(_ notification: Notification) {
         stopPolling()
-        stopVoiceWatch()
         surfaces.userClosed(.setup)
     }
 }

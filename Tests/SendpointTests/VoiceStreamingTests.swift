@@ -209,7 +209,7 @@ final class VoiceStreamingTests: XCTestCase {
     }
 
     func testPreviewWrapsWithoutReflowingCompletedLines() {
-        let font = NSFont.ui(LiveTranscriptPreview.fontSize)
+        let font = NSFont.ui(CGFloat(VoiceSettings.defaultPreviewFontSize))
         let width = ("aaaaa aaaaa" as NSString).size(withAttributes: [.font: font]).width
         let first = LiveTranscriptPreview.lines(for: "aaaaa aaaaa", width: width, font: font)
         XCTAssertEqual(first, ["aaaaa aaaaa"])
@@ -224,8 +224,9 @@ final class VoiceStreamingTests: XCTestCase {
             font: font
         )
         XCTAssertGreaterThan(many.count, 4)
-        XCTAssertEqual(LiveTranscriptPreview.visible(many).count, 4)
-        XCTAssertEqual(LiveTranscriptPreview.visible(many), Array(many.suffix(4)))
+        let window = LiveTranscriptPreview.window(many, max: 4)
+        XCTAssertEqual(window.rows.map(\.text), Array(many.suffix(4)))
+        XCTAssertTrue(window.overflow)
         XCTAssertTrue(LiveTranscriptPreview.lines(for: "", width: width, font: font).isEmpty)
     }
 }

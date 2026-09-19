@@ -8,7 +8,6 @@ final class StackSelectorTests: XCTestCase {
     private final class Spy {
         var shown: [Int] = []
         var hidden = 0
-        var selected: [UUID] = []
         var showsReadout = true
     }
 
@@ -49,7 +48,6 @@ final class StackSelectorTests: XCTestCase {
         await store.waitForIdle()
 
         XCTAssertEqual(store.currentStackID, store.stacks[2].id)
-        XCTAssertEqual(spy.selected, [store.stacks[2].id])
         XCTAssertEqual(spy.shown, [3])
         XCTAssertEqual(spy.hidden, 0)
 
@@ -70,7 +68,6 @@ final class StackSelectorTests: XCTestCase {
         await store.waitForIdle()
 
         XCTAssertEqual(store.currentStackID, store.stacks[0].id)
-        XCTAssertEqual(spy.selected, [store.stacks[1].id, store.stacks[0].id])
         XCTAssertEqual(spy.shown, [2, 1])
         selector.teardown()
     }
@@ -133,7 +130,6 @@ final class StackSelectorTests: XCTestCase {
             showsReadout: { spy.showsReadout },
             showReadout: { spy.shown.append($0) },
             hideReadout: { spy.hidden += 1 },
-            onSelected: { spy.selected.append($0) },
             sleep: { try await clock.sleep($0) }
         )
     }

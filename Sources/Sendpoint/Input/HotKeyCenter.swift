@@ -3,28 +3,12 @@ import Carbon.HIToolbox
 import SendpointDomain
 
 enum HotKeyName: Hashable {
-    case voiceCapture
-    case capture
-    case dictate
-    case copy
-    case stack
-    case clear
-    case selectStack(Int)
+    case slot(ShortcutSlot)
     case voiceEscape
 
-    static let allCases: [HotKeyName] =
-        [.voiceCapture, .capture, .dictate, .copy, .stack, .clear, .voiceEscape]
-        + (1...StackDocument.stackCount).map(HotKeyName.selectStack)
-
-    var rawValue: String {
+    var label: String {
         switch self {
-        case .voiceCapture: "voiceCapture"
-        case .capture: "capture"
-        case .dictate: "dictate"
-        case .copy: "copy"
-        case .stack: "stack"
-        case .clear: "clear"
-        case let .selectStack(number): "selectStack\(number)"
+        case let .slot(slot): slot.rawValue
         case .voiceEscape: "voiceEscape"
         }
     }
@@ -42,15 +26,13 @@ final class HotKeyCenter {
 
     typealias RegisterEvent = @MainActor (UInt32, UInt32, EventHotKeyID) -> (OSStatus, EventHotKeyRef?)
 
-    private struct Handler {
+    private struct Registration {
+        let id: UInt32
+        let ref: EventHotKeyRef
         let pressed: () -> Void
         let released: (() -> Void)?
     }
-    private var handlers: [UInt32: Handler] = [:]
-    private var refs: [UInt32: EventHotKeyRef] = [:]
-    private var names: [String: UInt32] = [:]
-    private var nextID: UInt32 = 1
-    private var handlerInstalled = false
+    private var registrations: [HotKeyName: Registration] = [:]
     private let registerEvent: RegisterEvent
     private let unregisterEvent: @MainActor (EventHotKeyRef) -> Void
 
@@ -60,6 +42,8 @@ final class HotKeyCenter {
     }
 
     private static var routes: [UInt32: WeakCenter] = [:]
+    private static var nextID: UInt32 = 1
+    private static var handlerInstalled = false
 
     init(
         registerEvent: @escaping RegisterEvent = HotKeyCenter.liveRegisterEvent,
@@ -91,35 +75,36 @@ final class HotKeyCenter {
         released: (() -> Void)? = nil
     ) -> HotKeyRegistrationResult {
         unregister(name: name)
-        installHandlerIfNeeded()
+        Self.installHandlerIfNeeded()
 
-        let id = nextID
-        nextID += 1
+        let id = Self.nextID
+        Self.nextID += 1
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id)
         let (status, ref) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
         guard status == noErr, let ref else {
-            Diag.log("hotkey FAILED name=\(name.rawValue) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
+            Diag.log("hotkey FAILED name=\(name.label) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
             return .failed(status)
         }
-        Diag.log("hotkey ok name=\(name.rawValue) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
-        handlers[id] = Handler(pressed: pressed, released: released)
-        refs[id] = ref
-        names[name.rawValue] = id
+        Diag.log("hotkey ok name=\(name.label) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
+        registrations[name] = Registration(id: id, ref: ref, pressed: pressed, released: released)
         Self.routes[id] = WeakCenter(self)
         return .registered
     }
 
     func unregister(name: HotKeyName) {
-        guard let id = names.removeValue(forKey: name.rawValue) else { return }
-        if let ref = refs.removeValue(forKey: id) { unregisterEvent(ref) }
-        handlers[id] = nil
-        if Self.routes[id]?.value === self { Self.routes.removeValue(forKey: id) }
+        guard let registration = registrations.removeValue(forKey: name) else { return }
+        unregisterEvent(registration.ref)
+        Self.routes.removeValue(forKey: registration.id)
+    }
+
+    func unregisterAll() {
+        for name in Array(registrations.keys) { unregister(name: name) }
     }
 
     func fire(id: UInt32, released: Bool) {
-        guard let handler = handlers[id] else { return }
+        guard let registration = registrations.values.first(where: { $0.id == id }) else { return }
         Diag.log("hotkey fired id=\(id)")
-        if released { handler.released?() } else { handler.pressed() }
+        if released { registration.released?() } else { registration.pressed() }
     }
 
     static func route(id: UInt32, released: Bool) {
@@ -127,7 +112,7 @@ final class HotKeyCenter {
         center.fire(id: id, released: released)
     }
 
-    private func installHandlerIfNeeded() {
+    private static func installHandlerIfNeeded() {
         guard !handlerInstalled else { return }
         handlerInstalled = true
         let pressedSpec = EventTypeSpec(

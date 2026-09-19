@@ -110,10 +110,6 @@ final class PermissionStateTests: XCTestCase {
                     ))
 
                     XCTAssertEqual(state.isTextCaptureReady, accessibility == .granted)
-                    XCTAssertEqual(
-                        state.isVoiceReady,
-                        accessibility == .granted && microphone == .granted && modelReady
-                    )
                     state.teardown()
                 }
             }

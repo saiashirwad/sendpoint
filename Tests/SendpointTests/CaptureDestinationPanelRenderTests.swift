@@ -199,8 +199,8 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         controller.send(.begin(.text, context))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
         try registerAppFonts()
-        controller.setTranscriptionPreviewLines(5)
-        controller.setTranscriptionPreviewFontSize(15)
+        controller.stepTranscriptionPreviewLines(bySteps: 5 - controller.transcriptionPreviewLines)
+        controller.stepTranscriptionPreviewFontSize(bySteps: 15 - controller.transcriptionPreviewFontSize)
         let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
             rootView: CaptureView(model: controller)
         ))
@@ -283,7 +283,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
         ))
         let controller = makeController(store: store)
         controller.setTranscriptionPreview(true)
-        controller.setTranscriptionPreviewLines(3)
+        controller.stepTranscriptionPreviewLines(bySteps: 3 - controller.transcriptionPreviewLines)
         let lines = controller.transcriptionPreviewLines
         let fontSize = CGFloat(controller.transcriptionPreviewFontSize)
         let hosting = CaptureHostingView(rootView: VoiceCaptureView(

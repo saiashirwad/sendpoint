@@ -34,9 +34,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captureController.onAccessibilityRequired = { [weak self] in
             self?.presentPermissionHelpForCapture()
         }
-        captureController.onStatusChange = { [weak self] in
-            self?.refreshStatusItem()
-        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -68,7 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let store, store.state == .processing else { return .terminateNow }
         guard terminationTask == nil else { return .terminateLater }
         terminationTask = Task {
-            // External model loading is cooperatively cancelled, not a barrier to quitting.
             await store.drain(timeout: .seconds(2))
             guard !Task.isCancelled else { return }
             NSApp.reply(toApplicationShouldTerminate: true)

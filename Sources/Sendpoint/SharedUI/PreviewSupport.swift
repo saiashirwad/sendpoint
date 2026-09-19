@@ -25,15 +25,6 @@ extension Note {
         )
     }
 
-    static var sampleLongQuote: Note {
-        Note(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000103")!,
-            subject: .selection(quote: PreviewCopy.longPassage),
-            body: "Why the building metaphor works here.",
-            createdAt: Date(timeIntervalSince1970: 1_727_000_100)
-        )
-    }
-
     static var sampleStandalone: Note {
         Note(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000104")!,

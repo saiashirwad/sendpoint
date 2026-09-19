@@ -34,7 +34,6 @@ tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
 - [ ] In the viewer, highlight a note and press ⇧ with another stack's shortcut. The note lands at the end of that stack, the viewer follows with it highlighted, and the footer says where it went.
 - [ ] The same key while editing a note types into the note and moves nothing.
 - [ ] In the viewer: click a numeral or press ⌘1–⌘5 to switch; clear the stack and undo it.
-- [ ] Launch over a version 3 store. The five most recent stacks arrive with their notes and `store.v3.json` sits beside `store.json`.
 
 ## Templates
 

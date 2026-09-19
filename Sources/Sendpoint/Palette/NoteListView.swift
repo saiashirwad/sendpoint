@@ -25,6 +25,7 @@ struct NoteListView: View {
     @ViewBuilder
     private func noteCards(stack: Stack, projection: PaletteProjection) -> some View {
         let listing = projection.noteListing
+        let today = Calendar.current.startOfDay(for: Date())
         if stack.notes.isEmpty, let undo = projection.undo {
             VStack(spacing: 18) {
                 placeholder(title: "Stack cleared", detail: "\(noteCountLabel(undo.noteCount)) set aside.")
@@ -48,7 +49,7 @@ struct NoteListView: View {
                             if index > 0 {
                                 Hairline().padding(.horizontal, NoteCard.inset)
                             }
-                            noteCard(entry, highlightedNoteID: projection.highlightedNoteID)
+                            noteCard(entry, highlightedNoteID: projection.highlightedNoteID, today: today)
                         }
                     }
                     .padding(.vertical, 6)
@@ -57,7 +58,7 @@ struct NoteListView: View {
             .focusSection()
             .coordinateSpace(name: StackPaletteView.notesSpace)
             .onPreferenceChange(NoteFramesKey.self) { frames in
-                noteFrames.frames.merge(frames) { $1 }
+                noteFrames.frames = frames
                 noteFrames.settle()
             }
             .onChange(of: projection.highlightedNoteID) {
@@ -71,6 +72,7 @@ struct NoteListView: View {
                 }
             }
             .onChange(of: stack.id) {
+                noteFrames.frames = [:]
                 guard let id = listing.notes.last?.id else { return }
                 noteFrames.land(on: id)
             }
@@ -81,11 +83,12 @@ struct NoteListView: View {
         }
     }
 
-    private func noteCard(_ entry: SendpointDomain.Note, highlightedNoteID: UUID?) -> some View {
+    private func noteCard(_ entry: SendpointDomain.Note, highlightedNoteID: UUID?, today: Date) -> some View {
         NoteCard(
             entry: entry,
             isHighlighted: highlightedNoteID == entry.id,
             isEditing: inlineEdit?.noteID == entry.id,
+            today: today,
             draft: Binding(
                 get: {
                     inlineEdit?.noteID == entry.id ? (inlineEdit?.text ?? "") : entry.body

@@ -70,6 +70,10 @@ struct PaletteWorkflow {
         default: return false
         }
     }
+    var hasFailed: Bool {
+        if case .failed = interaction { return true }
+        return false
+    }
     mutating func requestFocus(_ field: PaletteField) {
         focusRequest = (field, focusRequest.generation + 1)
     }
@@ -196,7 +200,7 @@ struct PaletteUpdate {
             if state.shownStackID != context.currentStackID {
                 if case .editing = state.interaction { finishEdit(before: nil) }
                 showCurrentStack()
-                if !state.isBusy { state.requestFocus(.search) }
+                if state.overlay != nil { closeOverlay() } else if !state.isBusy { state.requestFocus(.search) }
                 break
             }
             if !state.isBusy, let edit = state.inlineEdit, !editTargetExists(edit) {
@@ -209,8 +213,9 @@ struct PaletteUpdate {
             state.interaction = .saving(pending)
             effects.append(.retry)
         case .close:
-            if finishEdit(before: event) { break }
+            if !state.hasFailed, finishEdit(before: event) { break }
             state.lifecycle = .closed
+            state.flash = nil
             effects.append(.close)
         case let .key(key, selected): return handle(key, textHasSelection: selected)
         case let .query(query):
@@ -231,8 +236,7 @@ struct PaletteUpdate {
         case let .chooseNote(id): chooseNote(id, editing: false)
         case let .selectStack(number):
             guard let stack = context.stacks.stack(number: number) else { effects.append(.beep); break }
-            guard stack.id != context.currentStackID, !finishEdit(before: event) else { break }
-            state.interaction = .browsing
+            guard !finishEdit(before: event) else { break }
             enqueue(.switchStack(stackID: stack.id))
         case let .perform(action):
             guard !finishEdit(before: event) else { break }
@@ -372,7 +376,9 @@ struct PaletteUpdate {
 
     private mutating func handle(_ key: PaletteKey, textHasSelection: Bool) -> Bool {
         if state.isBusy {
-            if key == .escape { update(.cancelEdit) }
+            if key == .escape {
+                if case .failed(_, _, retryable: true) = state.interaction { update(.close) } else { update(.cancelEdit) }
+            }
             return true
         }
         if let overlay = state.overlay {

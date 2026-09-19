@@ -63,6 +63,7 @@ final class SetupTour {
     }
 
     enum Event {
+        case presented
         case noteCount(Int)
         case skip
     }
@@ -72,6 +73,8 @@ final class SetupTour {
 
     func send(_ event: Event) {
         switch event {
+        case .presented:
+            seenNotes = nil
         case let .noteCount(count):
             if let seen = seenNotes, count > seen { advance() }
             seenNotes = count

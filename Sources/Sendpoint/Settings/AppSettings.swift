@@ -73,13 +73,13 @@ final class AppSettings {
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
-    func setPasteDirectly(_ enabled: Bool) {
+    private func setPasteDirectly(_ enabled: Bool) {
         guard pasteDirectly != enabled else { return }
         pasteDirectly = enabled
         defaults.set(enabled, forKey: Key.pasteDirectly)
     }
 
-    func setRestoreFocusAfterSave(_ enabled: Bool) {
+    private func setRestoreFocusAfterSave(_ enabled: Bool) {
         guard restoreFocusAfterSave != enabled else { return }
         restoreFocusAfterSave = enabled
         defaults.set(enabled, forKey: Key.restoreFocusAfterSave)
@@ -91,7 +91,7 @@ final class AppSettings {
         defaults.set(true, forKey: Key.hasCompletedSetup)
     }
 
-    func setLaunchAtLogin(_ enabled: Bool) {
+    private func setLaunchAtLogin(_ enabled: Bool) {
         guard enabled != launchAtLogin else { return }
         do {
             if enabled { try registerLoginItem() }

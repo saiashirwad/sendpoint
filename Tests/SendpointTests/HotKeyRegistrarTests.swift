@@ -96,6 +96,31 @@ final class HotKeyRegistrarTests: XCTestCase {
         let replacement = KeyCombo(keyCode: UInt16(kVK_ANSI_1), modifiers: [.control, .option])
         try registrar.rebind(replacement, for: .selectStack(1))
         XCTAssertEqual(settings.shortcutRegistrationIssues, [displaced[1]])
+
+        let freed = KeyCombo(keyCode: UInt16(kVK_ANSI_2), modifiers: [.control, .option])
+        try registrar.rebind(freed, for: .copy)
+        XCTAssertEqual(settings.selectStackCombo(2), KeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.option]),
+            "the default goes live as soon as its owner lets go of the key")
+        XCTAssertEqual(settings.shortcutRegistrationIssues, [])
+    }
+
+    func testADisplacedDefaultCanBeLeftUnboundForGood() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let optionH = KeyCombo(keyCode: UInt16(kVK_ANSI_H), modifiers: [.option])
+        defaults.set(try JSONEncoder().encode(optionH), forKey: "captureCombo")
+        let settings = ShortcutSettings(defaults: defaults)
+        let registrar = HotKeyRegistrar(settings: settings, center: HotKeyCenter(
+            registerEvent: { _, _, _ in (noErr, EventHotKeyRef(bitPattern: 1)) },
+            unregisterEvent: { _ in }
+        ))
+        XCTAssertEqual(registrar.register(makeActions()),
+            [.displaced(slot: .selectStack(1), combo: optionH, by: .capture)])
+
+        registrar.clear(.selectStack(1))
+        XCTAssertEqual(settings.shortcutRegistrationIssues, [])
+        XCTAssertEqual(ShortcutSettings(defaults: defaults).shortcutRegistrationIssues, [],
+            "the choice survives a relaunch")
     }
 
     func testFailedRegistrationYieldsUnavailableForEveryBoundSlot() {

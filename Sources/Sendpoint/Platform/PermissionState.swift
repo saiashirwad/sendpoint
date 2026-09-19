@@ -103,7 +103,7 @@ final class PermissionState {
     @ObservationIgnored private var microphoneRequestTask: Task<Void, Never>?
     @ObservationIgnored private var modelDownloadTask: Task<Void, Never>?
     @ObservationIgnored private var voiceModelWatchTask: Task<Void, Never>?
-    @ObservationIgnored private var voiceModelWatchers = 0
+    @ObservationIgnored private let downloadProgress = LatestValuePump<Double>()
     @ObservationIgnored private var readinessObserver: NSObjectProtocol?
 
     var accessibilityAction: PermissionAction? {
@@ -137,12 +137,6 @@ final class PermissionState {
 
     var isTextCaptureReady: Bool {
         accessibility == .granted
-    }
-
-    var isVoiceReady: Bool {
-        isTextCaptureReady
-            && microphone == .granted
-            && localVoiceModel == .ready
     }
 
     init(services: PermissionServices) {
@@ -202,21 +196,15 @@ final class PermissionState {
     var isWatchingVoiceModel: Bool { voiceModelWatchTask != nil }
 
     func startWatchingVoiceModel(interval: Duration = .seconds(2)) {
-        guard !isTornDown else { return }
-        voiceModelWatchers += 1
-        guard voiceModelWatchTask == nil else { return }
+        guard !isTornDown, voiceModelWatchTask == nil else { return }
         voiceModelWatchTask = Task { [weak self] in
             await self?.watchVoiceModel(interval: interval)
         }
     }
 
     func stopWatchingVoiceModel() {
-        guard voiceModelWatchers > 0 else { return }
-        voiceModelWatchers -= 1
-        if voiceModelWatchers == 0 {
-            voiceModelWatchTask?.cancel()
-            voiceModelWatchTask = nil
-        }
+        voiceModelWatchTask?.cancel()
+        voiceModelWatchTask = nil
     }
 
     func requestAccessibility() {
@@ -248,19 +236,20 @@ final class PermissionState {
         let services = services
         localVoiceModel = .downloading(progress: nil)
 
-        let reportProgress: @Sendable (Double) -> Void = { [weak self] fraction in
-            Task { @MainActor in self?.reportModelDownloadProgress(fraction) }
-        }
+        let progress = downloadProgress.start { [weak self] in self?.reportModelDownloadProgress($0) }
+        let reportProgress: @Sendable (Double) -> Void = { progress.yield($0) }
 
         modelDownloadTask = Task { [weak self] in
             do {
                 try await services.downloadVoiceModel(reportProgress)
                 guard !Task.isCancelled, let self else { return }
                 self.modelDownloadTask = nil
+                self.downloadProgress.stop()
                 self.localVoiceModel = .ready
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.modelDownloadTask = nil
+                self.downloadProgress.stop()
                 if case .downloading = self.localVoiceModel {
                     self.localVoiceModel = .failed(VoiceModelDownloadFailure(error))
                 }
@@ -293,9 +282,9 @@ final class PermissionState {
         isTornDown = true
         voiceModelWatchTask?.cancel()
         voiceModelWatchTask = nil
-        voiceModelWatchers = 0
         microphoneRequestTask?.cancel()
         modelDownloadTask?.cancel()
+        downloadProgress.stop()
         microphoneRequestTask = nil
         modelDownloadTask = nil
         if let readinessObserver {

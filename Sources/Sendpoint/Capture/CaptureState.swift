@@ -115,6 +115,7 @@ nonisolated enum CaptureEffect: Equatable {
     case beginVoice
     case beginDictation
     case readSelection(NoteCaptureContext, CaptureMode)
+    case selectionDeadline(NoteCaptureContext)
     case startRecording(NoteCaptureContext)
     case transcribe(NoteCaptureContext)
     case insert(NoteCaptureContext, String, DictationTarget)
@@ -220,8 +221,10 @@ nonisolated struct CaptureState: Equatable {
             }
         case .finishVoice:
             switch session.phase {
-            case .selectingVoice(recording: true, _):
+            case .selectingVoice(recording: true, finishRequested: false):
                 session.phase = .selectingVoice(recording: true, finishRequested: true)
+                effects = [.selectionDeadline(session.context)]
+            case .selectingVoice(recording: true, finishRequested: true): return []
             case .selectingVoice, .startingVoice: return finish(session)
             case .recording:
                 session.phase = .transcribing
@@ -249,7 +252,7 @@ nonisolated struct CaptureState: Equatable {
             session.destinationPicker = .closed
             effects = [.switchStack(destination)]
         case let .stackSelected(destination):
-            guard session.canChooseDestination else { return [] }
+            guard session.canChooseDestination, session.destinationStackID != destination else { return [] }
             session.destinationStackID = destination
             session.destinationPicker = .closed
         case .save, .transcript:

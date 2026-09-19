@@ -69,7 +69,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
         XCTFail("Timed out waiting for asynchronous test work")
     }
 
-    func testRedundantStartsShareOneLoopUntilLastStop() async {
+    func testRedundantStartsShareOneLoopAndOneStopEndsIt() async {
         let files = LockedBool(false)
         let state = PermissionState(services: services(
             modelFilesExist: { files.value }
@@ -80,13 +80,10 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
         state.startWatchingVoiceModel(interval: .milliseconds(5))
         XCTAssertTrue(state.isWatchingVoiceModel)
 
-        state.stopWatchingVoiceModel()
-        XCTAssertTrue(state.isWatchingVoiceModel, "one waiter remains, so the single loop keeps running")
-
         files.value = true
         await waitUntil { state.localVoiceModel == .ready }
-        XCTAssertTrue(state.isWatchingVoiceModel)
 
+        state.stopWatchingVoiceModel()
         state.stopWatchingVoiceModel()
         XCTAssertFalse(state.isWatchingVoiceModel)
 

@@ -23,7 +23,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onShowStack: () -> Void
     private var window: NSWindow?
     private(set) var templateEditor: TemplateEditorState?
-    private var voiceWatchActive = false
 
     init(
         settings: AppSettings,
@@ -89,7 +88,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func teardown() {
         surfaces.unregister(.settings)
-        stopVoiceWatch()
+        permissionState.stopWatchingVoiceModel()
         window?.delegate = nil
         window?.close()
         window = nil
@@ -97,27 +96,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func present() {
-        startVoiceWatch()
+        permissionState.startWatchingVoiceModel()
         let window = self.window ?? makeWindow()
         window.presentActivated()
         window.makeFirstResponder(nil)
     }
 
     private func hide() {
-        stopVoiceWatch()
-        window?.orderOut(nil)
-    }
-
-    private func startVoiceWatch() {
-        guard !voiceWatchActive else { return }
-        voiceWatchActive = true
-        permissionState.startWatchingVoiceModel()
-    }
-
-    private func stopVoiceWatch() {
-        guard voiceWatchActive else { return }
-        voiceWatchActive = false
         permissionState.stopWatchingVoiceModel()
+        window?.orderOut(nil)
     }
 
     private func makeWindow() -> NSWindow {
@@ -187,7 +174,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closed = notification.object as? NSWindow, closed === window else { return }
         surfaces.userClosed(.settings)
-        stopVoiceWatch()
+        permissionState.stopWatchingVoiceModel()
         window = nil
         templateEditor = nil
     }

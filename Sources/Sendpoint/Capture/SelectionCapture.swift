@@ -39,7 +39,7 @@ struct SelectionCapture {
         case brief
 
         var modifierReleaseTimeout: TimeInterval? { self == .patient ? 0.7 : nil }
-        var clipboardTimeout: TimeInterval { self == .patient ? 0.3 : 0.15 }
+        var clipboardTimeout: TimeInterval { self == .patient ? 1 : 0.15 }
     }
 
     private enum AccessibilityAnswer {
@@ -171,12 +171,13 @@ struct SelectionCapture {
                 result = pasteboard.string(forType: .string)
                 break
             }
-            try await Task.sleep(for: .milliseconds(20))
+            guard (try? await Task.sleep(for: .milliseconds(20))) != nil else { break }
         }
 
         if let copiedChangeCount, pasteboard.changeCount == copiedChangeCount {
             restore(saved, to: pasteboard)
         }
+        try Task.checkCancellation()
         return result
     }
 

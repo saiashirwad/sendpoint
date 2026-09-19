@@ -22,24 +22,17 @@ public struct StorePersistence: Sendable {
 
     private let loadOperation: @Sendable () async throws -> StackDocument?
     private let commitOperation: @Sendable (StackDocument) async throws -> Void
-    private let quarantineFlagOperation: @Sendable () async -> Bool
 
     public init(
         load: @escaping @Sendable () async throws -> StackDocument?,
-        commit: @escaping @Sendable (StackDocument) async throws -> Void,
-        quarantineFlag: @escaping @Sendable () async -> Bool = { false }
+        commit: @escaping @Sendable (StackDocument) async throws -> Void
     ) {
         self.loadOperation = load
         self.commitOperation = commit
-        self.quarantineFlagOperation = quarantineFlag
     }
 
     public func load() async throws -> StackDocument? {
         try await loadOperation()
-    }
-
-    public func didQuarantineCorruptFile() async -> Bool {
-        await quarantineFlagOperation()
     }
 
     public func commit(_ document: StackDocument) async throws {
@@ -62,8 +55,7 @@ public struct StorePersistence: Sendable {
         let storage = AtomicJSONStore(directory: baseDirectory, now: now)
         return StorePersistence(
             load: { try await storage.load() },
-            commit: { try await storage.commit($0) },
-            quarantineFlag: { await storage.didQuarantine }
+            commit: { try await storage.commit($0) }
         )
     }
 }
@@ -79,7 +71,6 @@ private actor AtomicJSONStore {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let quarantineDateFormatter: ISO8601DateFormatter
-    private(set) var didQuarantine = false
 
     init(directory: URL, now: @escaping @Sendable () -> Date) {
         self.directory = directory
@@ -99,7 +90,6 @@ private actor AtomicJSONStore {
 
     func load() throws -> StackDocument? {
         let fileManager = FileManager.default
-        didQuarantine = false
         guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
 
         let data: Data
@@ -120,35 +110,18 @@ private actor AtomicJSONStore {
             version = try decoder.decode(VersionEnvelope.self, from: data).version
         } catch {
             try quarantine(using: fileManager)
-            didQuarantine = true
             return nil
         }
-        guard version == StackDocument.currentVersion || version == StackDocumentMigration.legacyVersion else {
+        guard version == StackDocument.currentVersion else {
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
-        if version == StackDocumentMigration.legacyVersion {
-            let backup = directory.appendingPathComponent("store.v\(version).json")
-            if !fileManager.fileExists(atPath: backup.path) {
-                do {
-                    try fileManager.copyItem(at: fileURL, to: backup)
-                } catch {
-                    // A backup failure says nothing about the document's validity.
-                    throw StorePersistenceError.unavailable
-                }
-            }
-        }
-
         do {
-            if version == StackDocumentMigration.legacyVersion {
-                return try StackDocumentMigration.migrate(legacy: data, decoder: decoder)
-            }
             let document = try decoder.decode(StackDocument.self, from: data)
             try StackDocumentMutations.validate(document)
             return document
         } catch {
             try quarantine(using: fileManager)
-            didQuarantine = true
             return nil
         }
     }

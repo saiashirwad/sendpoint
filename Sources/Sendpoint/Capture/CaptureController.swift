@@ -68,16 +68,18 @@ final class CaptureController {
     @ObservationIgnored private var previousApp: NSRunningApplication?
     @ObservationIgnored private var pending: [CaptureAction] = []
     @ObservationIgnored private var isDraining = false
-    private enum Work: Hashable { case selection, recording, transcription, insertion, failure }
+    private enum Work: Hashable { case selection, selectionDeadline, recording, transcription, insertion, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
+    @ObservationIgnored private let partials = LatestValuePump<String>()
+
+    static let selectionDeadline: Duration = .milliseconds(600)
 
     var onAccessibilityRequired: (() -> Void)?
-    var onStatusChange: (() -> Void)?
 
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
-        let id = state.session?.destinationStackID ?? store.currentStackID
+        let id = state.session?.destinationStackID ?? store.selectedStackID
         return StackUIFacts(store: store).stack(id: id)
     }
     var destinationStacks: [StackItemFacts] {
@@ -154,18 +156,6 @@ final class CaptureController {
         voiceSettings.send(.transcriptionPreview(on))
     }
 
-    func setTranscriptionPreviewLines(_ lines: Int) {
-        voiceSettings.send(.transcriptionPreviewLines(lines))
-    }
-
-    func setTranscriptionPreviewFontSize(_ size: Int) {
-        voiceSettings.send(.transcriptionPreviewFontSize(size))
-    }
-
-    func setTranscriptionPreviewOpacity(_ percent: Int) {
-        voiceSettings.send(.transcriptionPreviewOpacity(percent))
-    }
-
     func stepTranscriptionPreviewLines(bySteps steps: Int) {
         voiceSettings.send(.transcriptionPreviewLines(transcriptionPreviewLines + steps))
     }
@@ -201,7 +191,7 @@ final class CaptureController {
             return nil
         }
         if !isOpen { previousApp = NSWorkspace.shared.frontmostApplication }
-        return NoteCaptureContext(stackID: store.currentStackID)
+        return NoteCaptureContext(stackID: store.selectedStackID)
     }
 
     func send(_ action: CaptureAction) {
@@ -212,7 +202,6 @@ final class CaptureController {
             for effect in state.update(pending.removeFirst()) { run(effect) }
         }
         isDraining = false
-        onStatusChange?()
     }
 
     private func run(_ effect: CaptureEffect) {
@@ -232,12 +221,15 @@ final class CaptureController {
                     self?.send(.selectionPending(context))
                 })
             }
-        case let .startRecording(context):
-            recorder.observePartials { [weak self] text in
-                Task { @MainActor [weak self] in
-                    self?.send(.voicePartial(context, text))
-                }
+        case let .selectionDeadline(context):
+            launch(.selectionDeadline, context: context) { [weak self] in
+                try await Task.sleep(for: Self.selectionDeadline)
+                self?.tasks.removeValue(forKey: .selection)?.cancel()
+                return .selection(context, CapturedSelection(text: "", screenRect: nil))
             }
+        case let .startRecording(context):
+            let partials = partials.start { [weak self] in self?.send(.voicePartial(context, $0)) }
+            recorder.observePartials { partials.yield($0) }
             launch(.recording, context: context) { [recorder] in
                 try await recorder.start()
                 return .recordingStarted(context)
@@ -303,6 +295,7 @@ final class CaptureController {
     private func cancelWork() {
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
+        partials.stop()
         recorder.discard()
     }
 
@@ -312,6 +305,5 @@ final class CaptureController {
         surfaces.discard()
         store = nil
         onAccessibilityRequired = nil
-        onStatusChange = nil
     }
 }

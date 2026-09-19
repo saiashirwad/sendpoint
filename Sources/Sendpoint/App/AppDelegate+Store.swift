@@ -32,8 +32,7 @@ extension AppDelegate {
                         return self.surfaces.visible.isDisjoint(with: [.palette, .captureEditor, .captureVoice])
                     },
                     showReadout: { [weak readout] in readout?.show(number: $0) },
-                    hideReadout: { [weak readout] in readout?.hide() },
-                    onSelected: { [weak self] id in self?.captureController.send(.stackSelected(id)) }
+                    hideReadout: { [weak readout] in readout?.hide() }
                 )
                 refreshStatusItem()
             } catch is CancellationError {
@@ -49,6 +48,7 @@ extension AppDelegate {
 
     func storeDidChange() {
         palette?.documentChanged()
+        if let store { captureController.send(.stackSelected(store.selectedStackID)) }
         refreshStatusItem()
     }
 

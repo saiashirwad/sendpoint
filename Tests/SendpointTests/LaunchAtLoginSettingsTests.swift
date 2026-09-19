@@ -18,13 +18,13 @@ final class LaunchAtLoginSettingsTests: XCTestCase {
             registerLoginItem: { try registrar.register() },
             unregisterLoginItem: {}
         )
-        settings.setLaunchAtLogin(false)
+        settings.send(.launchAtLogin(false))
 
-        settings.setLaunchAtLogin(true)
+        settings.send(.launchAtLogin(true))
         XCTAssertFalse(settings.launchAtLogin, "a failed registration rolls the toggle back")
 
         registrar.shouldFail = false
-        settings.setLaunchAtLogin(true)
+        settings.send(.launchAtLogin(true))
         XCTAssertTrue(settings.launchAtLogin)
         XCTAssertEqual(registrar.count, 2)
     }

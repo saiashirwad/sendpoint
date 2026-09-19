@@ -42,18 +42,6 @@ nonisolated enum ShortcutSlot: Hashable, Sendable {
         default: false
         }
     }
-
-    var hotKeyName: HotKeyName {
-        switch self {
-        case .voiceCapture: .voiceCapture
-        case .capture: .capture
-        case .dictate: .dictate
-        case .copy: .copy
-        case .stack: .stack
-        case .clear: .clear
-        case let .selectStack(number): .selectStack(number)
-        }
-    }
 }
 
 enum ShortcutConflict: Error, Equatable, LocalizedError {
@@ -122,7 +110,7 @@ final class ShortcutSettings {
 
     private let defaults: UserDefaults
     private var combos: [ShortcutSlot: KeyCombo]
-    private var displacedDefaults: [ShortcutSlot: ShortcutRegistrationIssue] = [:]
+    private var unsetStackSlots: Set<ShortcutSlot> = []
     private(set) var shortcutRegistrationIssues: [ShortcutRegistrationIssue] = []
 
     var voiceCaptureCombo: KeyCombo { requiredCombo(.voiceCapture) }
@@ -140,23 +128,16 @@ final class ShortcutSettings {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         combos = Self.fixedDefaultCombos
-        var absent: Set<ShortcutSlot> = []
         for slot in ShortcutSlot.allCases {
             switch Self.read(Key.combo(slot), from: defaults) {
-            case .absent: absent.insert(slot)
+            case .absent: if case .selectStack = slot { unsetStackSlots.insert(slot) }
             case .unbound: combos[slot] = nil
             case let .combo(combo): combos[slot] = combo
             }
         }
-        for (slot, combo) in Self.stackDefaultCombos where absent.contains(slot) {
-            if case let .duplicate(owner) = shortcutConflict(for: combo, excluding: slot) {
-                displacedDefaults[slot] = .displaced(slot: slot, combo: combo, by: owner)
-            } else {
-                combos[slot] = combo
-            }
-        }
+        adoptFreeStackDefaults()
         shortcutRegistrationIssues = ShortcutSlot.allCases.compactMap { slot in
-            guard let combo = combos[slot] else { return displacedDefaults[slot] }
+            guard let combo = combos[slot] else { return displacedDefault(for: slot) }
             if let conflict = shortcutConflict(for: combo, excluding: slot) {
                 return .conflict(slot: slot, combo: combo, reason: conflict)
             }
@@ -165,7 +146,13 @@ final class ShortcutSettings {
     }
 
     func combo(for slot: ShortcutSlot) -> KeyCombo? { combos[slot] }
-    func displacedDefault(for slot: ShortcutSlot) -> ShortcutRegistrationIssue? { displacedDefaults[slot] }
+    func displacedDefault(for slot: ShortcutSlot) -> ShortcutRegistrationIssue? {
+        guard unsetStackSlots.contains(slot), combos[slot] == nil,
+              let combo = Self.stackDefaultCombos.first(where: { $0.0 == slot })?.1,
+              case let .duplicate(owner) = shortcutConflict(for: combo, excluding: slot)
+        else { return nil }
+        return .displaced(slot: slot, combo: combo, by: owner)
+    }
 
     func shortcutConflict(for proposed: KeyCombo, excluding slot: ShortcutSlot) -> ShortcutConflict? {
         guard proposed.isValid else { return .invalid }
@@ -187,14 +174,25 @@ final class ShortcutSettings {
     func setShortcut(_ proposed: KeyCombo, for slot: ShortcutSlot) throws {
         if let conflict = shortcutConflict(for: proposed, excluding: slot) { throw conflict }
         combos[slot] = proposed
-        displacedDefaults[slot] = nil
+        unsetStackSlots.remove(slot)
         persist(proposed, key: Key.combo(slot))
+        adoptFreeStackDefaults()
     }
 
     func clearShortcut(for slot: ShortcutSlot) {
-        guard slot.isOptional, combos[slot] != nil else { return }
+        guard slot.isOptional, combos[slot] != nil || unsetStackSlots.contains(slot) else { return }
         combos[slot] = nil
+        unsetStackSlots.remove(slot)
         defaults.set(Self.unboundMarker, forKey: Key.combo(slot))
+        adoptFreeStackDefaults()
+    }
+
+    private func adoptFreeStackDefaults() {
+        for (slot, combo) in Self.stackDefaultCombos
+        where unsetStackSlots.contains(slot) && combos[slot] == nil
+            && shortcutConflict(for: combo, excluding: slot) == nil {
+            combos[slot] = combo
+        }
     }
 
     func updateShortcutRegistrationIssues(_ issues: [ShortcutRegistrationIssue]) {

@@ -26,7 +26,6 @@ nonisolated struct NoteCaptureTarget: Equatable {
         self.captured = captured
     }
 
-    var stackID: UUID { context.stackID }
     var noteID: UUID { context.noteID }
     var createdAt: Date { context.createdAt }
 

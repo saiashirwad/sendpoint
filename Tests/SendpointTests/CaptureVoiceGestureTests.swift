@@ -61,6 +61,33 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.voice, VoiceGesture())
     }
 
+    func testAStoreChangeForTheSameStackLeavesAnOpenPickerAlone() {
+        var state = recording(mode: .tap)
+        _ = state.update(.toggleDestinations(context))
+
+        XCTAssertEqual(state.update(.stackSelected(context.stackID)), [])
+        XCTAssertEqual(state.session?.destinationPicker, .open)
+
+        let other = UUID()
+        XCTAssertEqual(state.update(.stackSelected(other)), [])
+        XCTAssertEqual(state.session?.destinationStackID, other)
+        XCTAssertEqual(state.session?.destinationPicker, .closed)
+    }
+
+    func testFinishingBeforeThePassageArrivesStartsOneDeadlineThenTranscribes() {
+        var state = CaptureState()
+        _ = state.update(.voicePressed)
+        _ = state.update(.begin(.voice, context))
+        _ = state.update(.recordingStarted(context))
+
+        XCTAssertEqual(state.update(.voiceReleased), [.selectionDeadline(context)])
+        XCTAssertEqual(state.update(.finishVoice), [], "a repeated finish starts no second deadline")
+        XCTAssertEqual(state.update(.selection(context, selection)), [.transcribe(context)],
+            "the deadline reports an empty passage, which releases the recording")
+        XCTAssertEqual(state.session?.phase, .transcribing)
+        XCTAssertEqual(state.update(.selection(context, selection)), [], "a late passage is dropped")
+    }
+
     func testTapWaitsForASecondPressAndConsumesItsRelease() {
         var state = CaptureState()
         XCTAssertEqual(state.update(.voiceModeChanged(.tap)), [])

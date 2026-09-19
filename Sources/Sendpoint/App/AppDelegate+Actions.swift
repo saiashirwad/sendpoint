@@ -68,7 +68,7 @@ extension AppDelegate {
             : nil
         exportController.copy(
             store: store,
-            stackID: store.currentStackID,
+            stackID: store.selectedStackID,
             template: templates.activeTemplate,
             pasteTarget: target
         ) { [weak self] message in
@@ -77,9 +77,12 @@ extension AppDelegate {
     }
 
     private func clearStack() {
-        guard let store, !store.currentNotes.isEmpty else { NSSound.beep(); return }
-        Diag.log("clearStack invoked, stack=\(store.currentStackID), count=\(store.currentNotes.count)")
-        clearStack(store.currentStackID)
+        guard let store, let stack = store.stack(id: store.selectedStackID), !stack.notes.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        Diag.log("clearStack invoked, stack=\(stack.id), count=\(stack.notes.count)")
+        clearStack(stack.id)
     }
 
     private func clearStack(_ stackID: UUID) {

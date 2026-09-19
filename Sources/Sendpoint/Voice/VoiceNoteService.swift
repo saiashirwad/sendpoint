@@ -59,12 +59,10 @@ final class VoiceNoteService {
     private var audioQueue: PreviewAudioQueue?
     private var streamTask: Task<Void, Never>?
     private var warmUpTask: Task<Void, Never>?
-    private var meterTask: Task<Void, Never>?
-    private var tapContinuation: AsyncStream<Float>.Continuation?
+    private let levelPump = LatestValuePump<Float>()
     private var abandonment: (id: UUID, task: Task<Void, Never>)?
     private var streamGeneration: Int?
     private var recordingStartedAt: Date?
-    private(set) var recordingEpoch = 0
 
     var preferredInputDeviceUID: String?
     var onPartialTranscript: (@Sendable (String) -> Void)?
@@ -89,8 +87,6 @@ final class VoiceNoteService {
         warmUp?.cancel()
         warmUpTask = nil
         _ = try? stopMicrophone()
-        invalidateTapDelivery()
-        levelMeter.reset()
         spareEngine?.stop()
         spareEngine = nil
         let pump = streamTask
@@ -176,10 +172,7 @@ final class VoiceNoteService {
         meter.reset()
         let queue = PreviewAudioQueue()
         audioQueue = queue
-        recordingEpoch += 1
-        let epoch = recordingEpoch
-        let (levels, continuation) = AsyncStream<Float>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        tapContinuation = continuation
+        let continuation = levelPump.start { meter.push($0) }
         Diag.log("voice tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
         input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable [continuation] buffer, _ in
             if let frame = PreviewAudioFrame(buffer: buffer) {
@@ -193,14 +186,12 @@ final class VoiceNoteService {
         } catch {
             input.removeTap(onBus: 0)
             audioQueue = nil
-            tapContinuation?.finish()
-            tapContinuation = nil
+            levelPump.stop()
             throw error
         }
 
         self.engine = engine
         recordingStartedAt = Date()
-        startMeterPump(levels, epoch: epoch)
         startStreamPump(queue)
         Diag.log("voice recording started")
     }
@@ -217,6 +208,7 @@ final class VoiceNoteService {
     }
 
     static let minimumClipDuration: TimeInterval = 0.3
+    static let streamOpenAttempts = 5
 
     func stopAndTranscribe() async throws -> String {
         try Task.checkCancellation()
@@ -243,7 +235,6 @@ final class VoiceNoteService {
         guard lifecycle == .active else { return }
         let wasLive = isRecording || recordingStartedAt != nil || streamTask != nil
         _ = try? stopMicrophone()
-        invalidateTapDelivery()
         let pump = streamTask
         pump?.cancel()
         streamTask = nil
@@ -259,30 +250,6 @@ final class VoiceNoteService {
         }
         abandonment = (id, task)
         if wasLive { Diag.log("voice recording discarded") }
-    }
-
-    private func invalidateTapDelivery() {
-        recordingEpoch += 1
-        meterTask?.cancel()
-        meterTask = nil
-        tapContinuation?.finish()
-        tapContinuation = nil
-    }
-
-    func applyTapLevel(_ level: Float, epoch: Int) {
-        guard lifecycle == .active, epoch == recordingEpoch else { return }
-        levelMeter.push(level)
-    }
-
-    private func startMeterPump(_ levels: AsyncStream<Float>, epoch: Int) {
-        meterTask?.cancel()
-        meterTask = Task { [weak self] in
-            for await level in levels {
-                guard !Task.isCancelled else { return }
-                guard let self, self.recordingEpoch == epoch else { return }
-                self.applyTapLevel(level, epoch: epoch)
-            }
-        }
     }
 
     private func applyStreamGeneration(_ generation: Int, for queue: PreviewAudioQueue) {
@@ -305,7 +272,7 @@ final class VoiceNoteService {
         streamTask?.cancel()
         streamTask = Task {
             var generation: Int?
-            while !Task.isCancelled, generation == nil {
+            for _ in 0..<Self.streamOpenAttempts where !Task.isCancelled && generation == nil {
                 generation = await transcriber.begin(onPartial: { handler?($0) })
                 if generation == nil {
                     try? await Task.sleep(for: .milliseconds(50))
@@ -338,7 +305,7 @@ final class VoiceNoteService {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         self.engine = nil
-        invalidateTapDelivery()
+        levelPump.stop()
         levelMeter.reset()
         let duration = recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         recordingStartedAt = nil

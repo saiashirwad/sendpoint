@@ -9,9 +9,7 @@ final class InputLevelMonitor {
     var isRunning: Bool { engine != nil }
 
     private var engine: AVAudioEngine?
-    @ObservationIgnored private var meterTask: Task<Void, Never>?
-    @ObservationIgnored private var tapContinuation: AsyncStream<Float>.Continuation?
-    @ObservationIgnored private var tapEpoch = 0
+    @ObservationIgnored private let pump = LatestValuePump<Float>()
 
     func start(preferredUID: String?) {
         stop()
@@ -28,10 +26,10 @@ final class InputLevelMonitor {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { return }
 
-        tapEpoch += 1
-        let epoch = tapEpoch
-        let (levels, continuation) = AsyncStream<Float>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        tapContinuation = continuation
+        let continuation = pump.start { [weak self] sample in
+            guard let self else { return }
+            self.level = max(sample, self.level * 0.82)
+        }
         input.installTap(onBus: 0, bufferSize: 1_024, format: format) { @Sendable [continuation] buffer, _ in
             continuation.yield(VoiceLevelMeter.level(of: buffer))
         }
@@ -39,27 +37,15 @@ final class InputLevelMonitor {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
-            tapContinuation?.finish()
-            tapContinuation = nil
+            pump.stop()
             Diag.log("input level monitor failed to start: \(error.localizedDescription)")
             return
-        }
-        meterTask?.cancel()
-        meterTask = Task { @MainActor [weak self] in
-            for await sample in levels {
-                guard !Task.isCancelled, let self, self.tapEpoch == epoch else { return }
-                self.level = max(sample, self.level * 0.82)
-            }
         }
         self.engine = engine
     }
 
     func stop() {
-        tapEpoch += 1
-        meterTask?.cancel()
-        meterTask = nil
-        tapContinuation?.finish()
-        tapContinuation = nil
+        pump.stop()
         guard let engine else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()

@@ -60,33 +60,33 @@ final class VoiceSettings {
         )
     }
 
-    func setVoiceMode(_ mode: VoiceRecordingMode) {
+    private func setVoiceMode(_ mode: VoiceRecordingMode) {
         guard mode != voiceMode else { return }
         voiceMode = mode
         defaults.set(mode.rawValue, forKey: Key.voiceMode)
     }
 
-    func setTranscriptionPreview(_ on: Bool) {
+    private func setTranscriptionPreview(_ on: Bool) {
         guard on != transcriptionPreview else { return }
         transcriptionPreview = on
         defaults.set(on, forKey: Key.transcriptionPreview)
     }
 
-    func setTranscriptionPreviewLines(_ lines: Int) {
+    private func setTranscriptionPreviewLines(_ lines: Int) {
         let lines = Self.clampedPreviewLines(lines)
         guard lines != transcriptionPreviewLines else { return }
         transcriptionPreviewLines = lines
         defaults.set(lines, forKey: Key.transcriptionPreviewLines)
     }
 
-    func setTranscriptionPreviewFontSize(_ size: Int) {
+    private func setTranscriptionPreviewFontSize(_ size: Int) {
         let size = Self.clampedPreviewFontSize(size)
         guard size != transcriptionPreviewFontSize else { return }
         transcriptionPreviewFontSize = size
         defaults.set(size, forKey: Key.transcriptionPreviewFontSize)
     }
 
-    func setTranscriptionPreviewOpacity(_ percent: Int) {
+    private func setTranscriptionPreviewOpacity(_ percent: Int) {
         let percent = Self.clampedPreviewOpacity(percent)
         guard percent != transcriptionPreviewOpacity else { return }
         transcriptionPreviewOpacity = percent
@@ -109,7 +109,7 @@ final class VoiceSettings {
         return min(max(stepped, previewOpacityMin), previewOpacityMax)
     }
 
-    func setInputDevice(uid: String?, name: String?) {
+    private func setInputDevice(uid: String?, name: String?) {
         inputDeviceUID = uid
         inputDeviceName = uid == nil ? nil : name
         defaults.set(inputDeviceUID, forKey: Key.inputDeviceUID)

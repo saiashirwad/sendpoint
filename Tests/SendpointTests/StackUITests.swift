@@ -130,24 +130,6 @@ final class StackStatusDetailTests: XCTestCase {
     }
 }
 
-final class NoteTimeLabelTests: XCTestCase {
-    private let calendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
-    }()
-
-    private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9) -> Date {
-        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
-    }
-
-    func testTimeLabelIsJustTheTime() {
-        let at = date(2026, 9, 15, 20)
-        XCTAssertEqual(noteTimeLabel(at, calendar: calendar), at.formatted(
-            Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).hour().minute()))
-    }
-}
-
 final class NoteTimestampLabelTests: XCTestCase {
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -180,53 +162,5 @@ final class NoteTimestampLabelTests: XCTestCase {
         let label = noteTimestampLabel(date(2024, 12, 31), now: now, calendar: calendar)
         XCTAssertTrue(label.contains("2024"), label)
         XCTAssertFalse(label.contains(":"), label)
-    }
-}
-
-final class NoteLabelStyleCacheTests: XCTestCase {
-    private func calendar(identifier: Calendar.Identifier, timeZone: String) -> Calendar {
-        var calendar = Calendar(identifier: identifier)
-        calendar.timeZone = TimeZone(identifier: timeZone)!
-        return calendar
-    }
-
-    private func fresh(
-        _ date: Date, calendar: Calendar,
-        _ derive: (Date.FormatStyle) -> Date.FormatStyle
-    ) -> String {
-        let base = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
-        return date.formatted(derive(base))
-    }
-
-    func testCachedStylesMatchFreshFormatting() {
-        let calendars = [
-            calendar(identifier: .gregorian, timeZone: "UTC"),
-            calendar(identifier: .gregorian, timeZone: "America/New_York"),
-            calendar(identifier: .buddhist, timeZone: "Pacific/Auckland"),
-        ]
-        for calendar in calendars {
-            let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 21))!
-            let sameDay = calendar.date(from: DateComponents(year: 2026, month: 9, day: 15, hour: 20, minute: 7))!
-            let sameYear = calendar.date(from: DateComponents(year: 2026, month: 3, day: 2, hour: 9, minute: 5))!
-            let otherYear = calendar.date(from: DateComponents(year: 2024, month: 12, day: 31, hour: 9, minute: 5))!
-            for _ in 0..<2 {
-                XCTAssertEqual(
-                    noteTimeLabel(sameDay, calendar: calendar),
-                    fresh(sameDay, calendar: calendar) { $0.hour().minute() }
-                )
-                XCTAssertEqual(
-                    noteTimestampLabel(sameDay, now: now, calendar: calendar),
-                    fresh(sameDay, calendar: calendar) { $0.hour().minute() }
-                )
-                XCTAssertEqual(
-                    noteTimestampLabel(sameYear, now: now, calendar: calendar),
-                    fresh(sameYear, calendar: calendar) { $0.day().month(.abbreviated) }
-                )
-                XCTAssertEqual(
-                    noteTimestampLabel(otherYear, now: now, calendar: calendar),
-                    fresh(otherYear, calendar: calendar) { $0.day().month(.abbreviated).year() }
-                )
-            }
-        }
     }
 }

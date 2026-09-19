@@ -13,19 +13,16 @@ final class VoiceTeardownTests: XCTestCase {
         service.warmUp()
         await transcriber.waitUntilPreparing()
         service.teardown()
-        let epoch = service.recordingEpoch
         service.teardown()
         service.discardRecording()
         service.warmUp()
         await service.waitForTeardown()
 
-        XCTAssertEqual(service.recordingEpoch, epoch)
         XCTAssertEqual(engineRequests, 1)
         let snapshot = await transcriber.snapshot()
         XCTAssertEqual(snapshot.teardowns, 1)
         XCTAssertTrue(snapshot.cancelled)
         XCTAssertFalse(service.isRecording)
-        service.applyTapLevel(1, epoch: epoch)
         XCTAssertEqual(service.levelMeter.current, 0)
         do {
             try await service.startRecording()

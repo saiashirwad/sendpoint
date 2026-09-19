@@ -91,6 +91,7 @@ final class NoteFrames {
     var frames: [UUID: CGRect] = [:]
     let scroll = ScrollHandle()
     var landing: UUID?
+    private var retryTask: Task<Void, Never>?
 
     func land(on id: UUID) {
         landing = id
@@ -99,22 +100,37 @@ final class NoteFrames {
 
     func disarm() {
         landing = nil
+        retryTask?.cancel()
+        retryTask = nil
     }
 
-    func settle(attempt: Int = 0) {
-        guard let id = landing, let frame = frames[id] else { return }
+    func settle() {
+        retryTask?.cancel()
+        retryTask = nil
+        guard revealLanding() == .pending else { return }
+        retryTask = Task { [weak self] in
+            for delay in Self.retryDelays {
+                do { try await Task.sleep(for: delay) } catch { return }
+                guard !Task.isCancelled else { return }
+                guard let self, self.revealLanding() == .pending else { break }
+            }
+            self?.retryTask = nil
+        }
+    }
+
+    private enum Landing { case idle, pending }
+
+    private func revealLanding() -> Landing {
+        guard let id = landing, let frame = frames[id] else { return .idle }
         if scroll.isAtBottomEdge(frame) {
             landing = nil
-            return
+            return .idle
         }
-        let reached = scroll.reveal(frame, anchor: .bottom)
-        guard !reached, attempt < Self.retryDelays.count else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.retryDelays[attempt]) { [weak self] in
-            self?.settle(attempt: attempt + 1)
-        }
+        return scroll.reveal(frame, anchor: .bottom) ? .idle : .pending
     }
 
-    private static let retryDelays: [TimeInterval] = [0.02, 0.05, 0.1, 0.2, 0.4]
+    private static let retryDelays: [Duration] = [.milliseconds(20), .milliseconds(50), .milliseconds(100),
+                                                  .milliseconds(200), .milliseconds(400)]
 }
 
 struct NoteFramesKey: PreferenceKey {

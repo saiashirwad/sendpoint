@@ -22,6 +22,7 @@ struct NoteCard: View, Equatable {
     let entry: SendpointDomain.Note
     let isHighlighted: Bool
     let isEditing: Bool
+    let today: Date
     @Binding var draft: String
     var focus: FocusState<PaletteField?>.Binding
     let onSelect: () -> Void
@@ -31,6 +32,7 @@ struct NoteCard: View, Equatable {
         lhs.entry == rhs.entry
             && lhs.isHighlighted == rhs.isHighlighted
             && lhs.isEditing == rhs.isEditing
+            && lhs.today == rhs.today
             && lhs.draft == rhs.draft
     }
 
@@ -43,7 +45,7 @@ struct NoteCard: View, Equatable {
         return quote.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var timeLabel: String { "Captured at \(noteTimeLabel(entry.createdAt))" }
+    private var timeLabel: String { noteTimestampLabel(entry.createdAt, now: today) }
 
     var body: some View {
         if isEditing {
@@ -73,11 +75,11 @@ struct NoteCard: View, Equatable {
     private var cardContent: some View {
         HStack(alignment: .top, spacing: 16) {
             noteColumn
-            Text(noteTimeLabel(entry.createdAt))
+            Text(timeLabel)
                 .font(.ui(11).monospacedDigit())
                 .foregroundStyle(.tertiary)
                 .padding(.top, 4)
-                .accessibilityLabel(timeLabel)
+                .accessibilityLabel("Captured \(timeLabel)")
         }
         .padding(.horizontal, Self.inset)
         .padding(.vertical, 14)
@@ -221,6 +223,7 @@ private struct NoteCardPreview: View {
             entry: entry,
             isHighlighted: isHighlighted,
             isEditing: isEditing,
+            today: Calendar.current.startOfDay(for: Date()),
             draft: $draft,
             focus: $focus,
             onSelect: {},

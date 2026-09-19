@@ -64,6 +64,7 @@ struct NoteEditor: NSViewRepresentable {
         }
         if textView.string != text, !textView.hasMarkedText() {
             textView.string = text
+            context.coordinator.undoManager.removeAllActions()
             textView.needsDisplay = true
         }
         textView.isEditable = isEditable
@@ -77,8 +78,11 @@ struct NoteEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: NoteEditor
         var focusRequest = 0
+        let undoManager = UndoManager()
 
         init(_ parent: NoteEditor) { self.parent = parent }
+
+        func undoManager(for view: NSTextView) -> UndoManager? { undoManager }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }

@@ -74,7 +74,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.state, .halted)
         XCTAssertEqual(store.error, .commitFailed("failed"))
         XCTAssertTrue(store.hasPendingMutations)
-        XCTAssertEqual(callbackCount, 0)
+        XCTAssertEqual(callbackCount, 1, "observers hear about the halt so they can offer a retry")
         var attempts = await recorder.documents()
         XCTAssertEqual(attempts.map { $0.stacks[0].notes.map(\.body) }, [["first"]])
 
@@ -91,7 +91,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.currentNotes, [first, second])
         XCTAssertNil(store.error)
         XCTAssertFalse(store.hasPendingMutations)
-        XCTAssertEqual(callbackCount, 2)
+        XCTAssertEqual(callbackCount, 3)
         attempts = await recorder.documents()
         XCTAssertEqual(attempts.map { $0.stacks[0].notes.map(\.body) }, [
             ["first"],
@@ -347,6 +347,29 @@ final class StackStoreTests: XCTestCase {
 
         XCTAssertEqual(store.state, .idle)
         XCTAssertEqual(store.currentNotes, [added])
+    }
+
+    func testSelectedStackFollowsQueuedSwitchesBeforeTheyCommit() async throws {
+        let original = document()
+        let other = original.stacks[1].id
+        let gate = AsyncGate()
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { original },
+            commit: { _ in await gate.wait() }
+        ))
+        XCTAssertEqual(store.selectedStackID, stackID)
+
+        store.mutate(.switchStack(stackID: other))
+        XCTAssertEqual(store.currentStackID, stackID, "the committed stack has not moved yet")
+        XCTAssertEqual(store.selectedStackID, other)
+
+        store.mutate(.switchStack(stackID: stackID))
+        XCTAssertEqual(store.selectedStackID, stackID, "the last press wins")
+
+        await gate.open()
+        await store.waitForIdle()
+        XCTAssertEqual(store.currentStackID, stackID)
+        XCTAssertEqual(store.selectedStackID, stackID)
     }
 
     func testDrainGivesUpAfterTheTimeoutAndLeavesTheStoreProcessing() async throws {

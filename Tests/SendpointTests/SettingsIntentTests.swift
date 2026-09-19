@@ -168,25 +168,6 @@ final class SettingsIntentTests: XCTestCase {
         XCTAssertNil(settings.dictateCombo)
     }
 
-    func testStackSettingsIntentSwitchesAndIgnoresTheCurrentStack() async throws {
-        let store = try await StackStore(
-            persistence: StorePersistence(load: { nil }, commit: { _ in })
-        )
-        let first = store.stacks[0]
-        let second = store.stacks[1]
-
-        StackSettingsIntent.switchTo(stackID: second.id).send(to: store)
-        await store.waitForIdle()
-        XCTAssertEqual(store.currentStackID, second.id)
-
-        StackSettingsIntent.switchTo(stackID: first.id).send(to: store)
-        await store.waitForIdle()
-        XCTAssertEqual(store.currentStackID, first.id)
-
-        StackSettingsIntent.switchTo(stackID: first.id).send(to: store)
-        XCTAssertFalse(store.hasPendingMutations, "switching to the current stack enqueues nothing")
-    }
-
     // MARK: - Helpers
 
     private func makeActions() -> HotKeyRegistrar.Actions {

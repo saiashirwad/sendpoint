@@ -154,7 +154,7 @@ final class AudioInputDeviceList {
         for selector in [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultInputDevice] {
             var address = AudioInputDeviceQuery.globalAddress(selector)
             let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-                Task { @MainActor [weak self] in self?.refresh() }
+                MainActor.assumeIsolated { self?.refresh() }
             }
             AudioObjectAddPropertyListenerBlock(
                 AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block

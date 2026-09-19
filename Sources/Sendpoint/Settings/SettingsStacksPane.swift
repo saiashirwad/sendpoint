@@ -1,18 +1,6 @@
 import SendpointDomain
 import SwiftUI
 
-enum StackSettingsIntent: Equatable {
-    case switchTo(stackID: UUID)
-
-    func send(to store: StackStore) {
-        switch self {
-        case .switchTo(let stackID):
-            guard stackID != store.currentStackID else { return }
-            store.mutate(.switchStack(stackID: stackID))
-        }
-    }
-}
-
 struct SettingsStacksPane: View {
     @Bindable var shortcuts: ShortcutSettings
     let storeHandle: SettingsStoreHandle
@@ -31,7 +19,7 @@ struct SettingsStacksPane: View {
                     onSettingsChanged: onSettingsChanged
                 ) { spec in
                     StackShortcutLabel(title: spec.title, stack: facts?.stack(for: spec.slot)) { id in
-                        if let store { StackSettingsIntent.switchTo(stackID: id).send(to: store) }
+                        store?.mutate(.switchStack(stackID: id))
                     }
                 }
             }

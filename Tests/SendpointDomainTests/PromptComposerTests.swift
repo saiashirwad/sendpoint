@@ -27,6 +27,19 @@ final class PromptComposerTests: XCTestCase {
         XCTAssertTrue(output.contains("_\(expectedTime)_"))
     }
 
+    func testTimestampsCarryTheDateOnceAStackSpansDays() {
+        let nextDay = date.addingTimeInterval(86_400)
+        let stack = Stack(notes: [
+            Note(subject: .standalone, body: "Thursday", createdAt: date),
+            Note(subject: .standalone, body: "Friday", createdAt: nextDay),
+        ])
+        let output = compose(stack: stack, template: .coherent)
+
+        XCTAssertTrue(output.contains("Jan 2, 2025"), output)
+        XCTAssertTrue(output.contains("Jan 3, 2025"), output)
+        XCTAssertFalse(compose(template: .coherent).contains("Jan 2, 2025"), "one day needs only the time")
+    }
+
     func testComposerNumbersEntriesOnlyWhenTheTemplateEnablesIt() {
         let numbered = compose(template: .pointByPoint)
         XCTAssertTrue(numbered.contains("## 1"))

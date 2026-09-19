@@ -66,7 +66,7 @@ struct VoiceCaptureView: View {
     var body: some View {
         Group {
             if showsCard {
-                card
+                card(transcript)
             } else {
                 pill
             }
@@ -90,7 +90,7 @@ struct VoiceCaptureView: View {
         HStack(spacing: 10) {
             leading(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
             CaptureTether(text: tether, ink: palette.ink)
-            orb
+            orb(transcript: [])
                 .padding(.leading, 2)
             failure
         }
@@ -105,10 +105,12 @@ struct VoiceCaptureView: View {
 
     // MARK: - Card
 
-    private var card: some View {
+    private typealias Transcript = (rows: [VoiceTranscriptRow], overflow: Bool)
+
+    private func card(_ transcript: Transcript) -> some View {
         let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
         return VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
-            transcriptBody
+            transcriptBody(transcript)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: VoiceCaptureLayout.transcriptHeight(lines: lineCount, fontSize: fontSize),
@@ -123,7 +125,7 @@ struct VoiceCaptureView: View {
                 CaptureTether(text: tether, ink: palette.ink)
                 Spacer(minLength: 8)
                 failure
-                orb
+                orb(transcript: transcript.rows)
             }
             .font(.uiBody)
             .frame(height: VoiceCaptureLayout.cardFooterHeight)
@@ -139,7 +141,7 @@ struct VoiceCaptureView: View {
     }
 
     @ViewBuilder
-    private var transcriptBody: some View {
+    private func transcriptBody(_ transcript: Transcript) -> some View {
         if transcript.rows.isEmpty {
             VoiceTranscriptWaiting(ink: palette.ink, animates: animates && (orbMode == .idle || orbMode == .live))
         } else {
@@ -152,7 +154,7 @@ struct VoiceCaptureView: View {
         }
     }
 
-    private var transcript: (rows: [VoiceTranscriptRow], overflow: Bool) {
+    private var transcript: Transcript {
         LiveTranscriptPreview.window(
             LiveTranscriptPreview.lines(
                 for: model.state.session?.liveTranscript ?? "",
@@ -182,11 +184,11 @@ struct VoiceCaptureView: View {
         }
     }
 
-    private var orb: some View {
+    private func orb(transcript: [VoiceTranscriptRow]) -> some View {
         MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
             .frame(width: 22, height: 22)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel)
+            .accessibilityLabel(accessibilityLabel(transcript: transcript))
     }
 
     @ViewBuilder
@@ -222,16 +224,16 @@ struct VoiceCaptureView: View {
         return nil
     }
 
-    private var accessibilityLabel: String {
+    private func accessibilityLabel(transcript rows: [VoiceTranscriptRow]) -> String {
         let destination: String
         if let target = model.state.session?.dictationTarget {
             destination = " Pasting into \(target.appName ?? "the front app")."
         } else {
             destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
         }
-        let transcript = showsCard && !self.transcript.rows.isEmpty
-            ? " Live transcript: \(self.transcript.rows.map(\.text).joined(separator: " "))"
-            : ""
+        let transcript = rows.isEmpty
+            ? ""
+            : " Live transcript: \(rows.map(\.text).joined(separator: " "))"
         switch model.state.session?.phase {
         case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)\(transcript)"
         case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
@@ -353,9 +355,6 @@ enum VoiceOverlayCopy {
 }
 
 enum LiveTranscriptPreview {
-    static let fontSize: CGFloat = CGFloat(VoiceSettings.defaultPreviewFontSize)
-    static let maxVisibleLines = VoiceSettings.defaultPreviewLines
-
     static func lines(
         for text: String,
         width: CGFloat,
@@ -376,10 +375,6 @@ enum LiveTranscriptPreview {
         }
         if !current.isEmpty { lines.append(current) }
         return lines
-    }
-
-    static func visible(_ lines: [String], max: Int = maxVisibleLines) -> [String] {
-        window(lines, max: max).rows.map(\.text)
     }
 
     static func window(_ lines: [String], max: Int) -> (rows: [VoiceTranscriptRow], overflow: Bool) {

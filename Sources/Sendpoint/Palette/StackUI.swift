@@ -1,4 +1,3 @@
-import AppKit
 import SendpointDomain
 import Foundation
 import SwiftUI
@@ -7,57 +6,17 @@ nonisolated func noteCountLabel(_ count: Int) -> String {
     "\(count) note\(count == 1 ? "" : "s")"
 }
 
-nonisolated struct NoteLabelStyles: Sendable {
-    let time: Date.FormatStyle
-    let dayMonth: Date.FormatStyle
-    let dayMonthYear: Date.FormatStyle
-
-    init(calendar: Calendar) {
-        let base = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
-        time = base.hour().minute()
-        dayMonth = base.day().month(.abbreviated)
-        dayMonthYear = base.day().month(.abbreviated).year()
-    }
-}
-
-nonisolated final class NoteLabelStyleCache: @unchecked Sendable {
-    static let shared = NoteLabelStyleCache()
-    private static let maxEntries = 8
-
-    private let lock = NSLock()
-    private var entries: [Calendar: NoteLabelStyles] = [:]
-
-    func styles(for calendar: Calendar) -> NoteLabelStyles {
-        lock.lock()
-        let hit = entries[calendar]
-        lock.unlock()
-        if let hit { return hit }
-        let made = NoteLabelStyles(calendar: calendar)
-        lock.lock()
-        entries[calendar] = made
-        if entries.count > Self.maxEntries {
-            entries = [calendar: made]
-        }
-        lock.unlock()
-        return made
-    }
-}
-
 nonisolated func noteTimestampLabel(
     _ date: Date, now: Date = Date(), calendar: Calendar = .current
 ) -> String {
-    let styles = NoteLabelStyleCache.shared.styles(for: calendar)
+    let style = Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
     if calendar.isDate(date, inSameDayAs: now) {
-        return date.formatted(styles.time)
+        return date.formatted(style.hour().minute())
     }
     if calendar.isDate(date, equalTo: now, toGranularity: .year) {
-        return date.formatted(styles.dayMonth)
+        return date.formatted(style.day().month(.abbreviated))
     }
-    return date.formatted(styles.dayMonthYear)
-}
-
-nonisolated func noteTimeLabel(_ date: Date, calendar: Calendar = .current) -> String {
-    date.formatted(NoteLabelStyleCache.shared.styles(for: calendar).time)
+    return date.formatted(style.day().month(.abbreviated).year())
 }
 
 nonisolated func stackStatusDetail(
@@ -164,27 +123,6 @@ nonisolated struct StackUIFacts: Equatable {
 
     func stack(number: Int) -> StackItemFacts? {
         stacks.first(where: { $0.number == number })
-    }
-}
-
-enum StackDialogs {
-    static func confirmsDeletion(of name: String, informative: String) -> Bool {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Delete “\(name)”?"
-        alert.informativeText = informative
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
-    }
-
-    static func inform(title: String, message: String) {
-        let alert = NSAlert()
-        alert.alertStyle = .informational
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 }
 

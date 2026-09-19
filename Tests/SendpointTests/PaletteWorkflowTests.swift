@@ -98,9 +98,11 @@ final class PaletteWorkflowTests: XCTestCase {
         harness = makeHarness()
         harness.send(.open)
         harness.send(.selectStack(1))
-        XCTAssertNil(harness.mutation, "the current stack needs no switch")
-        XCTAssertFalse(harness.state.isBusy)
+        XCTAssertEqual(harness.mutation, .switchStack(stackID: firstStackID),
+            "a queued switch elsewhere may be pending, so the store decides what is a no-op")
 
+        harness = makeHarness()
+        harness.send(.open)
         harness.send(.key(.commandDigit(StackDocument.stackCount + 1), textHasSelection: false))
         XCTAssertNil(harness.mutation)
         XCTAssertEqual(harness.beepCount, 1)
@@ -120,6 +122,19 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.state.query, "", "a search belongs to the stack it was typed in")
         XCTAssertEqual(harness.state.noteState.highlight, fourthNoteID)
         XCTAssertTrue(harness.effects.isEmpty)
+    }
+
+    func testAStackSwitchMadeElsewhereClosesAnOpenOverlay() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.toggleOverlay(.actions))
+        XCTAssertEqual(harness.state.focusRequest.field, .overlay)
+
+        harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+        harness.send(.documentChanged)
+
+        XCTAssertNil(harness.state.overlay, "the search field is disabled under an overlay, so it cannot take focus")
+        XCTAssertEqual(harness.state.focusRequest.field, .search)
     }
 
     func testADraftIsSavedToTheStackItBeganInWhenTheCurrentStackChanges() throws {
@@ -142,6 +157,29 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertNil(harness.state.inlineEdit)
         XCTAssertFalse(harness.state.isBusy)
         XCTAssertEqual(harness.projection.shownStack?.id, secondStackID)
+    }
+
+    func testEscapeClosesAViewerStuckOnARetryableFailure() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.deleteNote(secondNoteID)))
+        let id = try XCTUnwrap(harness.mutationID)
+        harness.send(.mutationResult(id, .commitFailed("disk full")))
+
+        XCTAssertTrue(harness.send(.key(.escape, textHasSelection: false)))
+        XCTAssertEqual(harness.state.lifecycle, .closed, "the store keeps the pending change, so nothing is lost")
+        XCTAssertEqual(harness.closeCount, 1)
+    }
+
+    func testAFlashDoesNotOutliveTheViewerItWasShownIn() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.flash("Copied 3 notes"))
+        XCTAssertNotNil(harness.state.flash)
+
+        harness.send(.close)
+        harness.send(.open)
+        XCTAssertNil(harness.state.flash)
     }
 
     func testAFailedSaveForAnotherStackIsNamedByItsStack() throws {

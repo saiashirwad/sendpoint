@@ -30,6 +30,16 @@ final class SetupTourTests: XCTestCase {
         XCTAssertEqual(tour.step, .text, "one note after the clear still counts")
     }
 
+    func testNotesCapturedWhileSetupWasClosedDoNotAdvanceTheTour() {
+        let tour = SetupTour()
+        tour.send(.noteCount(3))
+        tour.send(.presented)
+        tour.send(.noteCount(5))
+        XCTAssertEqual(tour.step, .voice, "reopening takes a fresh baseline")
+        tour.send(.noteCount(6))
+        XCTAssertEqual(tour.step, .text)
+    }
+
     func testSkipMovesOnAndStopsAtTheEnd() {
         let tour = SetupTour()
         tour.send(.skip)

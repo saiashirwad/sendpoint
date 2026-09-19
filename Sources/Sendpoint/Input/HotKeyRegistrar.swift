@@ -27,7 +27,7 @@ final class HotKeyRegistrar {
         self.actions = actions
         var issues: [ShortcutRegistrationIssue] = []
         for slot in ShortcutSlot.allCases {
-            center.unregister(name: slot.hotKeyName)
+            center.unregister(name: .slot(slot))
             guard let combo = settings.combo(for: slot) else {
                 if let displaced = settings.displacedDefault(for: slot) { issues.append(displaced) }
                 continue
@@ -51,7 +51,7 @@ final class HotKeyRegistrar {
             case let .selectStack(number): action = { actions.selectStack(number) }
             case .clear: action = actions.clear
             }
-            switch center.register(name: slot.hotKeyName, combo: combo, released: released,
+            switch center.register(name: .slot(slot), combo: combo, released: released,
                                    action: action) {
             case .registered:
                 break
@@ -93,8 +93,6 @@ final class HotKeyRegistrar {
     }
 
     func unregisterAll() {
-        for name in HotKeyName.allCases {
-            center.unregister(name: name)
-        }
+        center.unregisterAll()
     }
 }
