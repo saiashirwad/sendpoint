@@ -28,8 +28,9 @@ nonisolated enum Diag {
     }()
 
     static func log(_ message: String) {
-        let line = "\(clock.string(from: Date())) \(message)\n"
+        let when = Date()
         queue.async {
+            let line = "\(clock.string(from: when)) \(message)\n"
             guard let data = line.data(using: .utf8) else { return }
             if let handle = try? FileHandle(forWritingTo: fileURL) {
                 defer { try? handle.close() }

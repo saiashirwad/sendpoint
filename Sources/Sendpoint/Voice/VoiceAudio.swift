@@ -84,7 +84,7 @@ nonisolated struct PreviewAudioFrame: Sendable {
     }
 }
 
-final class PreviewAudioQueue: @unchecked Sendable {
+nonisolated final class PreviewAudioQueue: @unchecked Sendable {
     private let lock = NSLock()
     private nonisolated(unsafe) var items: [PreviewAudioFrame] = []
 

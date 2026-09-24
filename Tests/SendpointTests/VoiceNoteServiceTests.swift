@@ -6,17 +6,30 @@ final class VoiceNoteServiceTests: XCTestCase {
     @MainActor private final class Mic {
         var starts = 0
         var stops = 0
+        var teardowns = 0
         var prepares = 0
         var allowed = true
+        var suspendStart = false
+        var startGate: CheckedContinuation<Void, Never>?
+
+        func releaseStart() {
+            startGate?.resume()
+            startGate = nil
+        }
+
         var boundary: Microphone {
             Microphone(
                 requestAccess: { self.allowed },
-                prepare: { self.prepares += 1 },
+                prepare: { _ in self.prepares += 1 },
                 start: { _ in
                     self.starts += 1
+                    if self.suspendStart {
+                        await withCheckedContinuation { self.startGate = $0 }
+                    }
                     return PreviewAudioQueue()
                 },
-                stop: { self.stops += 1 }
+                stop: { self.stops += 1 },
+                teardown: { self.teardowns += 1 }
             )
         }
     }
@@ -94,6 +107,47 @@ final class VoiceNoteServiceTests: XCTestCase {
         XCTAssertEqual(f.mic.stops, 1)
     }
 
+    func testDiscardDuringSlowMicrophoneStartKeepsTheAppResponsiveAndRejectsTheLateStart() async {
+        let f = makeFixture()
+        f.mic.suspendStart = true
+        let discarded = UUID()
+        f.service.start(discarded)
+        await waitUntil { f.mic.startGate != nil }
+
+        f.service.discard()
+        XCTAssertEqual(f.service.machine.phase, .idle)
+        XCTAssertTrue(f.outputs.all.isEmpty)
+
+        f.mic.suspendStart = false
+        f.mic.releaseStart()
+        await waitUntil { f.mic.stops == 1 }
+        XCTAssertTrue(f.outputs.all.isEmpty, "a cancelled microphone must not reopen capture")
+
+        let next = UUID()
+        f.service.start(next)
+        await waitUntil { f.outputs.all == [.started(next)] }
+        XCTAssertEqual(f.mic.starts, 2)
+    }
+
+    func testChangedMicrophoneOrderRestartsPendingStartBeforeReportingRecording() async {
+        let f = makeFixture()
+        f.mic.suspendStart = true
+        let take = UUID()
+        f.service.start(take)
+        await waitUntil { f.mic.startGate != nil }
+
+        var order = MicrophoneOrder()
+        order.absorb([AudioInputDevice(id: 1, uid: "new", name: "New", transport: .builtIn)],
+                     systemDefault: nil)
+        f.service.microphones = order
+        f.mic.suspendStart = false
+        f.mic.releaseStart()
+
+        await waitUntil { f.outputs.all == [.started(take)] }
+        XCTAssertEqual(f.mic.starts, 2)
+        XCTAssertEqual(f.mic.stops, 1)
+    }
+
     func testAMissingModelOrDeniedMicrophoneFailsWithoutRecording() async {
         let missing = makeFixture(modelReady: false)
         let take = UUID()
@@ -137,6 +191,7 @@ final class VoiceNoteServiceTests: XCTestCase {
         let teardowns = await f.transcriber.teardowns
         XCTAssertEqual(teardowns, 1)
         XCTAssertEqual(f.service.machine.phase, .tornDown)
+        XCTAssertEqual(f.mic.teardowns, 1)
 
         f.service.start(UUID())
         f.service.warmUp()

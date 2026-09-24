@@ -128,7 +128,7 @@ nonisolated struct MicrophoneListFacts: Equatable {
     }
 }
 
-enum AudioInputDeviceQuery {
+nonisolated enum AudioInputDeviceQuery {
     private static let system = AudioObjectID(kAudioObjectSystemObject)
 
     static func allInputs() -> [AudioInputDevice] {
@@ -153,9 +153,16 @@ enum AudioInputDeviceQuery {
     }
 
     static func bind(_ order: MicrophoneOrder, to input: AVAudioInputNode) -> Bool {
-        guard let device = order.active(among: allInputs(), systemDefault: defaultInput()),
-              select(device, on: input)
-        else { return false }
+        guard let device = preferred(order) else { return false }
+        return bind(device, to: input)
+    }
+
+    static func preferred(_ order: MicrophoneOrder) -> AudioInputDevice? {
+        order.active(among: allInputs(), systemDefault: defaultInput())
+    }
+
+    static func bind(_ device: AudioInputDevice, to input: AVAudioInputNode) -> Bool {
+        guard select(device, on: input) else { return false }
         Diag.log("input device: \(device.name)")
         return true
     }

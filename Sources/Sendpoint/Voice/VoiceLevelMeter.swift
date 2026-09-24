@@ -5,9 +5,14 @@ import Observation
 @Observable
 final class VoiceLevelMeter {
     private(set) var current: Float = 0
+    @ObservationIgnored private let decay: Float
+
+    init(decay: Float = 0.7) {
+        self.decay = decay
+    }
 
     func push(_ level: Float) {
-        current = max(level, current * 0.7)
+        current = max(level, current * decay)
     }
 
     func reset() {

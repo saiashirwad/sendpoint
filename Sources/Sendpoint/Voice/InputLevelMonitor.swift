@@ -1,51 +1,61 @@
-import AudioToolbox
-import AVFoundation
 import Foundation
 import Observation
 
 @Observable
 final class InputLevelMonitor {
-    private(set) var level: Float = 0
-    var isRunning: Bool { engine != nil }
+    private(set) var isRunning = false
+    var level: Float { meter.current }
 
-    private var engine: AVAudioEngine?
-    @ObservationIgnored private let pump = LatestValuePump<Float>()
+    @ObservationIgnored private let meter: VoiceLevelMeter
+    @ObservationIgnored private let microphone: Microphone
+    @ObservationIgnored private let isAuthorized: () -> Bool
+    @ObservationIgnored private var stopTask: Task<Void, Never>?
+    @ObservationIgnored private var generation = 0
 
-    func start(_ order: MicrophoneOrder) {
-        stop()
-        guard PermissionCheck.isMicrophoneAuthorized else { return }
+    init(meter: VoiceLevelMeter = VoiceLevelMeter(decay: 0.82),
+         microphone: Microphone? = nil,
+         isAuthorized: @escaping () -> Bool = { PermissionCheck.isMicrophoneAuthorized }) {
+        self.meter = meter
+        self.microphone = microphone ?? .live(meter: meter, collectFrames: false)
+        self.isAuthorized = isAuthorized
+    }
 
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        guard AudioInputDeviceQuery.bind(order, to: input) else { return }
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { return }
-
-        let continuation = pump.start { [weak self] sample in
-            guard let self else { return }
-            self.level = max(sample, self.level * 0.82)
-        }
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { @Sendable [continuation] buffer, _ in
-            continuation.yield(VoiceLevelMeter.level(of: buffer))
-        }
+    func start(_ order: MicrophoneOrder) async {
+        generation += 1
+        let current = generation
+        scheduleStop()
+        await stopTask?.value
+        guard !Task.isCancelled, current == generation,
+              isAuthorized() else { return }
         do {
-            try engine.start()
+            _ = try await microphone.start(order)
+            guard !Task.isCancelled, current == generation else {
+                await microphone.stop()
+                return
+            }
+            isRunning = true
         } catch {
-            input.removeTap(onBus: 0)
-            pump.stop()
+            guard !Task.isCancelled, current == generation else { return }
             Diag.log("input level monitor failed to start: \(error.localizedDescription)")
-            return
         }
-        self.engine = engine
     }
 
     func stop() {
-        pump.stop()
-        guard let engine else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        self.engine = nil
-        level = 0
+        generation += 1
+        scheduleStop()
+    }
+
+    private func scheduleStop() {
+        isRunning = false
+        meter.reset()
+        let previous = stopTask
+        let current = generation
+        stopTask = Task { [weak self, microphone] in
+            await previous?.value
+            await microphone.stop()
+            guard let self, self.generation == current else { return }
+            self.stopTask = nil
+        }
     }
 }
 
@@ -58,7 +68,7 @@ final class MicrophonePreviewOwner {
 
         static func live(_ monitor: InputLevelMonitor) -> Engine {
             Engine(
-                start: { monitor.start($0) },
+                start: { await monitor.start($0) },
                 stop: { monitor.stop() },
                 isRunning: { monitor.isRunning },
                 level: { monitor.level }
