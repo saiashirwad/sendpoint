@@ -9,7 +9,7 @@ final class SettingsIntentTests: XCTestCase {
     func testTemplateEditorEventsUpdateOnlyTheirField() {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let editor = TemplateEditorState(settings: TemplateSettings(defaults: defaults))
+        let editor = TemplateEditorController(settings: TemplateSettings(defaults: defaults))
         XCTAssertFalse(editor.isDirty)
 
         var expected = Template.plain
@@ -44,7 +44,7 @@ final class SettingsIntentTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
 
         editor.send(.editPreamble("Changed"))
         XCTAssertTrue(editor.isDirty)

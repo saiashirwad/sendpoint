@@ -22,7 +22,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onCheckForUpdates: () -> Void
     private let onShowStack: () -> Void
     private var window: NSWindow?
-    private(set) var templateEditor: TemplateEditorState?
+    private(set) var templateEditor: TemplateEditorController?
 
     init(
         settings: AppSettings,
@@ -92,6 +92,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window?.delegate = nil
         window?.close()
         window = nil
+        templateEditor?.teardown()
         templateEditor = nil
     }
 
@@ -109,7 +110,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = Self.makeWindowFrame()
-        let templateEditor = TemplateEditorState(settings: templates, onChange: onSettingsChanged)
+        let templateEditor = TemplateEditorController(settings: templates, onChange: onSettingsChanged)
         self.templateEditor = templateEditor
         let settingsView = SettingsView(
             settings: settings,
@@ -176,6 +177,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         surfaces.userClosed(.settings)
         permissionState.stopWatchingVoiceModel()
         window = nil
+        templateEditor?.teardown()
         templateEditor = nil
     }
 }

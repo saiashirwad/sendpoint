@@ -82,7 +82,7 @@ final class StackViewerRenderTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(500))
         try write(pane, to: directory, name: "settings-stacks.png")
 
-        let editor = TemplateEditorState(settings: TemplateSettings(defaults: defaults))
+        let editor = TemplateEditorController(settings: TemplateSettings(defaults: defaults))
         editor.send(.editPreamble("Summarise these notes."))
         let templates = NSHostingView(rootView: SettingsTemplatesPane(
             settings: AppSettings(defaults: defaults), editor: editor, onSelectTemplate: { _ in }

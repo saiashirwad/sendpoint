@@ -39,7 +39,7 @@ struct SettingsView: View {
     @Bindable var settings: AppSettings
     @Bindable var shortcuts: ShortcutSettings
     @Bindable var voiceSettings: VoiceSettings
-    @Bindable var templateEditor: TemplateEditorState
+    @Bindable var templateEditor: TemplateEditorController
     @Bindable var permissionState: PermissionController
     let storeHandle: SettingsStoreHandle
     let onSelectTemplate: (UUID) -> Void
@@ -60,7 +60,7 @@ struct SettingsView: View {
         voiceSettings: VoiceSettings,
         hotKeyRegistrar: HotKeyRegistrar,
         captureController: CaptureController,
-        templateEditor: TemplateEditorState,
+        templateEditor: TemplateEditorController,
         permissionState: PermissionController,
         storeHandle: SettingsStoreHandle,
         onSelectTemplate: @escaping (UUID) -> Void,

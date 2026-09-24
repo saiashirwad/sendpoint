@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsTemplatesPane: View {
     @Bindable var settings: AppSettings
-    @Bindable var editor: TemplateEditorState
+    @Bindable var editor: TemplateEditorController
     let onSelectTemplate: (UUID) -> Void
 
     @State private var newTemplate: NameDraft?

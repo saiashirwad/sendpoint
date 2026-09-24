@@ -58,7 +58,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editPreamble("Unsaved external draft"))
 
         XCTAssertEqual(editor.requestSelection(Template.plain.id), .needsDecision)
@@ -75,7 +75,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editName(Template.pointByPoint.name))
 
         XCTAssertFalse(try editor.resolveClose(.cancel))
@@ -91,7 +91,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editPreamble("Discard me"))
 
         XCTAssertTrue(try editor.resolveClose(.discard))
@@ -108,7 +108,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editPreamble("Changed"))
 
         XCTAssertTrue(editor.isDirty)
@@ -128,7 +128,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editPreamble("Unsaved"))
 
         XCTAssertEqual(editor.requestSelection(Template.pointByPoint.id), .needsDecision)
@@ -145,7 +145,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editName("Renamed Coherent"))
 
         XCTAssertEqual(editor.requestSelection(Template.plain.id), .needsDecision)
@@ -161,7 +161,7 @@ final class TemplateSettingsTests: XCTestCase {
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
         let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000099")!
-        let editor = TemplateEditorState(settings: settings, makeID: { newID })
+        let editor = TemplateEditorController(settings: settings, makeID: { newID })
         editor.send(.editPreamble("Clone only"))
 
         let result = try editor.saveAsNew(named: "  My Template  ")
@@ -178,7 +178,7 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnCoherent(defaults)
-        let editor = TemplateEditorState(settings: settings)
+        let editor = TemplateEditorController(settings: settings)
         editor.send(.editPreamble("Dirty"))
         XCTAssertThrowsError(try editor.delete()) {
             XCTAssertEqual($0 as? TemplateEditorError, .unsavedChanges)

@@ -2,7 +2,7 @@ import AppKit
 import SendpointDomain
 
 enum TemplateDialogs {
-    static func resolvePendingSelection(_ editor: TemplateEditorState) -> Bool {
+    static func resolvePendingSelection(_ editor: TemplateEditorController) -> Bool {
         guard editor.pendingTemplateID != nil else { return true }
         guard let decision = dirtyDecision(for: editor) else {
             editor.cancelPendingSelection()
@@ -11,13 +11,13 @@ enum TemplateDialogs {
         return resolve(decision, editor: editor, closesWindow: false)
     }
 
-    static func shouldClose(_ editor: TemplateEditorState) -> Bool {
+    static func shouldClose(_ editor: TemplateEditorController) -> Bool {
         guard editor.isDirty else { return true }
         guard let decision = dirtyDecision(for: editor) else { return false }
         return resolve(decision, editor: editor, closesWindow: true)
     }
 
-    static func delete(_ editor: TemplateEditorState) {
+    static func delete(_ editor: TemplateEditorController) {
         guard let stored = editor.storedTemplate else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -43,7 +43,7 @@ enum TemplateDialogs {
     }
 
     private static func dirtyDecision(
-        for editor: TemplateEditorState
+        for editor: TemplateEditorController
     ) -> TemplateEditorState.DirtyDecision? {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -69,7 +69,7 @@ enum TemplateDialogs {
 
     private static func resolve(
         _ decision: TemplateEditorState.DirtyDecision,
-        editor: TemplateEditorState,
+        editor: TemplateEditorController,
         closesWindow: Bool
     ) -> Bool {
         do {
@@ -84,7 +84,7 @@ enum TemplateDialogs {
         }
     }
 
-    private static func requestNewName(for editor: TemplateEditorState) -> String? {
+    private static func requestNewName(for editor: TemplateEditorController) -> String? {
         var proposedName = "\(editor.draft.name) Copy"
         while true {
             let alert = NSAlert()

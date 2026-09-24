@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 
 final class SetupPanel: NSPanel {

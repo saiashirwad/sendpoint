@@ -1,19 +1,11 @@
 import AppKit
+import SendpointDomain
 
 extension NSWindow {
     func presentActivated() {
         NSApp.activate(ignoringOtherApps: true)
         makeKeyAndOrderFront(nil)
     }
-}
-
-enum Surface: CaseIterable, Hashable {
-    case palette
-    case settings
-    case setup
-    case captureEditor
-    case captureVoice
-    case latestNoteEditor
 }
 
 final class SurfaceCoordinator {
@@ -23,11 +15,14 @@ final class SurfaceCoordinator {
         var focus: (() -> Void)?
     }
 
+    private var state = SurfaceState()
     private var transitions: [Surface: Transitions] = [:]
-    private(set) var visible: Set<Surface> = []
     private let hasModalWindow: () -> Bool
     private let setRegularActivation: (Bool) -> Void
-    private var usesRegularActivation = false
+    private var pending: [SurfaceEvent] = []
+    private var isDraining = false
+
+    var visible: Set<Surface> { state.visible }
 
     init(
         hasModalWindow: @escaping () -> Bool = { NSApp.modalWindow != nil },
@@ -49,59 +44,54 @@ final class SurfaceCoordinator {
     }
 
     func present(_ surface: Surface) {
-        switch surface {
-        case .captureEditor, .latestNoteEditor:
-            for hidden in [Surface.palette, .settings] {
-                dismiss(hidden)
-            }
-        case .palette, .settings, .setup, .captureVoice:
-            break
-        }
-        guard let transition = transitions[surface] else { return }
-        visible.insert(surface)
-        synchronizeActivation()
-        transition.show()
+        send(.present(surface, registered: transitions[surface] != nil))
     }
 
     func focus(_ surface: Surface) {
-        guard visible.contains(surface) else { return }
-        transitions[surface]?.focus?()
+        send(.focus(surface))
     }
 
     func dismiss(_ surface: Surface) {
-        guard visible.remove(surface) != nil else { return }
-        transitions[surface]?.hide()
-        synchronizeActivation()
+        send(.dismiss(surface))
     }
 
     func userClosed(_ surface: Surface) {
-        visible.remove(surface)
-        synchronizeActivation()
+        send(.userClosed(surface))
     }
 
     func resignedKey(_ surface: Surface) {
-        guard !hasModalWindow() else { return }
-        dismiss(surface)
+        send(.resignedKey(surface, modal: hasModalWindow()))
     }
 
     func teardown() {
-        for surface in Surface.allCases where visible.contains(surface) {
-            dismiss(surface)
-        }
+        guard !state.isTornDown else { return }
+        send(.teardown)
         transitions.removeAll()
     }
 
-    private func synchronizeActivation() {
-        let needsRegularActivation = visible.contains { surface in
-            switch surface {
-            case .settings:
-                true
-            case .palette, .setup, .captureEditor, .captureVoice, .latestNoteEditor:
-                false
-            }
+    private func send(_ event: SurfaceEvent) {
+        pending.append(event)
+        guard !isDraining else { return }
+        isDraining = true
+        while !pending.isEmpty {
+            var next = state
+            let effects = next.update(pending.removeFirst())
+            state = next
+            for effect in effects { run(effect) }
         }
-        guard needsRegularActivation != usesRegularActivation else { return }
-        usesRegularActivation = needsRegularActivation
-        setRegularActivation(needsRegularActivation)
+        isDraining = false
+    }
+
+    private func run(_ effect: SurfaceEffect) {
+        switch effect {
+        case let .show(surface):
+            transitions[surface]?.show()
+        case let .hide(surface):
+            transitions[surface]?.hide()
+        case let .focus(surface):
+            transitions[surface]?.focus?()
+        case let .setRegularActivation(regular):
+            setRegularActivation(regular)
+        }
     }
 }
