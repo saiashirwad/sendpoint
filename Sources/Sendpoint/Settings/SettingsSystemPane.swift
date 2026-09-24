@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsSystemPane: View {
     @Bindable var settings: AppSettings
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     let onSettingsChanged: () -> Void
     let onCheckForUpdates: () -> Void
 

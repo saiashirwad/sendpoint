@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 import XCTest
 @testable import Sendpoint
@@ -36,7 +37,7 @@ final class SetupRenderTests: XCTestCase {
         ]
         for fixture in fixtures {
             let defaults = UserDefaults(suiteName: "SetupRenderTests.\(UUID().uuidString)")!
-            let state = PermissionState(services: PermissionServices(
+            let state = PermissionController(services: PermissionServices(
                 accessibilityStatus: { fixture.accessibility },
                 requestAccessibility: { true },
                 microphoneStatus: { fixture.microphone },

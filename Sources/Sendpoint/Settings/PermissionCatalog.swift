@@ -1,3 +1,4 @@
+import SendpointDomain
 import SwiftUI
 
 struct PermissionItem: Identifiable {
@@ -10,7 +11,7 @@ struct PermissionItem: Identifiable {
 }
 
 enum PermissionCatalog {
-    static func items(state: PermissionState) -> [PermissionItem] {
+    static func items(state: PermissionController) -> [PermissionItem] {
         [
             PermissionItem(
                 id: "accessibility",
@@ -39,14 +40,14 @@ enum PermissionCatalog {
         ]
     }
 
-    private static func accessibilityStatus(_ state: PermissionState) -> CapabilityStatus {
+    private static func accessibilityStatus(_ state: PermissionController) -> CapabilityStatus {
         switch state.accessibility {
         case .notGranted: .attention("Required")
         case .granted: .ready("Granted")
         }
     }
 
-    private static func microphoneStatus(_ state: PermissionState) -> CapabilityStatus {
+    private static func microphoneStatus(_ state: PermissionController) -> CapabilityStatus {
         switch state.microphone {
         case .notDetermined: .neutral("Not enabled")
         case .denied: .attention("Denied")
@@ -55,7 +56,7 @@ enum PermissionCatalog {
         }
     }
 
-    private static func voiceModelStatus(_ state: PermissionState) -> CapabilityStatus {
+    private static func voiceModelStatus(_ state: PermissionController) -> CapabilityStatus {
         switch state.localVoiceModel {
         case .notDownloaded: .neutral("Not downloaded")
         case let .downloading(progress):
@@ -69,14 +70,14 @@ enum PermissionCatalog {
         }
     }
 
-    private static func accessibilityActionTitle(_ state: PermissionState) -> String? {
+    private static func accessibilityActionTitle(_ state: PermissionController) -> String? {
         switch state.accessibilityAction {
         case .requestAccessibility: "Grant"
         default: nil
         }
     }
 
-    private static func microphoneActionTitle(_ state: PermissionState) -> String? {
+    private static func microphoneActionTitle(_ state: PermissionController) -> String? {
         switch state.microphoneAction {
         case .requestMicrophone: "Allow"
         case .openMicrophoneSettings: "Settings"
@@ -84,18 +85,18 @@ enum PermissionCatalog {
         }
     }
 
-    private static func voiceModelActionTitle(_ state: PermissionState) -> String? {
+    private static func voiceModelActionTitle(_ state: PermissionController) -> String? {
         guard state.localVoiceModelAction == .downloadVoiceModel else { return nil }
         if case .failed = state.localVoiceModel { return "Retry" }
         return "Download"
     }
 
-    private static func performAccessibilityAction(_ state: PermissionState) {
+    private static func performAccessibilityAction(_ state: PermissionController) {
         guard state.accessibilityAction == .requestAccessibility else { return }
         state.requestAccessibility()
     }
 
-    private static func performMicrophoneAction(_ state: PermissionState) {
+    private static func performMicrophoneAction(_ state: PermissionController) {
         switch state.microphoneAction {
         case .requestMicrophone:
             state.requestMicrophone()
@@ -106,7 +107,7 @@ enum PermissionCatalog {
         }
     }
 
-    private static func performVoiceModelAction(_ state: PermissionState) {
+    private static func performVoiceModelAction(_ state: PermissionController) {
         guard state.localVoiceModelAction == .downloadVoiceModel else { return }
         state.downloadModel()
     }

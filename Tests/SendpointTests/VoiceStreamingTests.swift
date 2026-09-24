@@ -47,7 +47,7 @@ final class VoiceStreamingTests: XCTestCase {
         let suite = "VoiceStreamingTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(false, forKey: "restoreFocusAfterSave")
-        let permissions = PermissionState(services: PermissionServices(
+        let permissions = PermissionController(services: PermissionServices(
             accessibilityStatus: { .granted }, requestAccessibility: { true },
             microphoneStatus: { .granted }, requestMicrophone: { true },
             voiceModelFilesExist: { true }, downloadVoiceModel: { _ in },

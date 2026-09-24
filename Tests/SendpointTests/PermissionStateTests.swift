@@ -1,3 +1,4 @@
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
@@ -41,6 +42,11 @@ final class PermissionStateTests: XCTestCase {
             continuation?.resume(throwing: error)
             continuation = nil
         }
+    }
+
+    private final class MicrophoneStatus: @unchecked Sendable {
+        var value: MicrophonePermissionState
+        init(_ value: MicrophonePermissionState) { self.value = value }
     }
 
     private actor MicrophoneRequestGate {
@@ -103,7 +109,7 @@ final class PermissionStateTests: XCTestCase {
         for accessibility in accessibilityStates {
             for microphone in microphoneStates {
                 for modelReady in [false, true] {
-                    let state = PermissionState(services: services(
+                    let state = PermissionController(services: services(
                         accessibility: accessibility,
                         microphone: microphone,
                         modelReady: modelReady
@@ -117,7 +123,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testPermissionRequestsPublishSuccessAndDenial() async {
-        let granted = PermissionState(services: services(
+        let granted = PermissionController(services: services(
             accessibility: .notGranted,
             requestAccessibility: true,
             microphone: .notDetermined,
@@ -130,7 +136,7 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(granted.microphone, .granted)
         granted.teardown()
 
-        let denied = PermissionState(services: services(
+        let denied = PermissionController(services: services(
             accessibility: .notGranted,
             requestAccessibility: false,
             microphone: .notDetermined,
@@ -149,7 +155,7 @@ final class PermissionStateTests: XCTestCase {
             var value = 0
         }
         let opened = OpenCount()
-        let granted = PermissionState(services: services(
+        let granted = PermissionController(services: services(
             accessibility: .notGranted,
             requestAccessibility: true,
             openAccessibilitySettings: { opened.value += 1 }
@@ -159,7 +165,7 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(opened.value, 0)
         granted.teardown()
 
-        let denied = PermissionState(services: services(
+        let denied = PermissionController(services: services(
             accessibility: .notGranted,
             requestAccessibility: false,
             openAccessibilitySettings: { opened.value += 1 }
@@ -174,13 +180,21 @@ final class PermissionStateTests: XCTestCase {
 
     func testRefreshDuringMicrophonePromptKeepsPrePromptValue() async {
         let gate = MicrophoneRequestGate()
-        let state = PermissionState(services: services(
-            microphone: .notDetermined,
-            requestMicrophone: { await gate.next() }
+        let reported = MicrophoneStatus(.notDetermined)
+        let state = PermissionController(services: PermissionServices(
+            accessibilityStatus: { .granted },
+            requestAccessibility: { true },
+            microphoneStatus: { reported.value },
+            requestMicrophone: { await gate.next() },
+            voiceModelFilesExist: { true },
+            downloadVoiceModel: { _ in },
+            openAccessibilitySettings: {},
+            openMicrophoneSettings: {}
         ))
 
         state.requestMicrophone()
         await waitUntil { await gate.count == 1 }
+        reported.value = .denied
         state.requestMicrophone()
         state.refresh()
         XCTAssertEqual(state.microphone, .notDetermined)
@@ -195,7 +209,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testModelDownloadFailureCanRetryAndSucceed() async {
         let attempts = Counter()
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelReady: false,
             downloadModel: { _ in
                 let attempt = await attempts.incrementAndGet()
@@ -216,7 +230,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testRefreshDuringDownloadKeepsDownloadingState() async {
         let gate = ModelDownloadGate()
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelReady: false,
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
@@ -239,7 +253,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testReadyNotificationWinsOverOwnedDownloadFailure() async {
         let gate = ModelDownloadGate()
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelReady: false,
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
@@ -256,7 +270,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testVoiceModelReadyNotificationFromBackgroundThreadIsHandledOnMain() async {
-        let state = PermissionState(services: services(modelReady: false))
+        let state = PermissionController(services: services(modelReady: false))
         XCTAssertEqual(state.localVoiceModel, .notDownloaded)
 
         await Task.detached {
@@ -270,7 +284,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testVisibleWatcherPicksUpDiskChangesBothWays() async {
         let files = LockedBool(false)
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelFilesExist: { files.value }
         ))
         let watcher = Task {
@@ -289,7 +303,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testFailedDownloadSurvivesRefreshAndRecoversWhenFilesAppear() async {
         let files = LockedBool(false)
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelFilesExist: { files.value },
             downloadModel: { _ in throw TestError.failed }
         ))
@@ -309,7 +323,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testDownloadProgressIsClampedAndLateProgressIsRejected() async {
         let gate = ModelDownloadGate()
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelReady: false,
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
@@ -331,7 +345,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testActionsRouteFromLivePermissionStates() {
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             accessibility: .notGranted,
             requestAccessibility: false,
             microphone: .notDetermined,
@@ -346,7 +360,7 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(state.accessibilityAction, .requestAccessibility)
         state.teardown()
 
-        let blocked = PermissionState(services: services(
+        let blocked = PermissionController(services: services(
             microphone: .restricted,
             modelReady: true
         ))
@@ -358,7 +372,7 @@ final class PermissionStateTests: XCTestCase {
 
     func testTeardownIsIdempotentAndIgnoresLateWork() async {
         let gate = MicrophoneRequestGate()
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             accessibility: .notGranted,
             microphone: .notDetermined,
             requestMicrophone: { await gate.next() },

@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var templates: TemplateSettings { environment.templateSettings }
     var voiceSettings: VoiceSettings { environment.voiceSettings }
     var captureController: CaptureController { environment.captureController }
-    var permissionState: PermissionState { environment.permissionState }
+    var permissionState: PermissionController { environment.permissionState }
     var hotKeyRegistrar: HotKeyRegistrar { environment.hotKeyRegistrar }
     var exportController: ExportController { environment.exportController }
     var updateController: UpdateController { environment.updateController }

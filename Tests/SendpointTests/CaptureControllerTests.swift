@@ -57,7 +57,7 @@ final class CaptureControllerTests: XCTestCase {
         let suite = "CaptureControllerTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(false, forKey: "restoreFocusAfterSave")
-        let permissions = PermissionState(services: PermissionServices(
+        let permissions = PermissionController(services: PermissionServices(
             accessibilityStatus: { accessibility }, requestAccessibility: { true },
             microphoneStatus: { .granted }, requestMicrophone: { true },
             voiceModelFilesExist: { true }, downloadVoiceModel: { _ in },

@@ -14,11 +14,11 @@
 
 `./check.sh` is the quick verify: it builds and runs the tests. It does not assemble or install. `./build.sh` then `./install.sh` is still how a change reaches the installed app.
 
-**Sources/SendpointDomain.** Pure types. No AppKit. Every file imports Foundation. `StackStore.swift` also imports Observation. `CaptureState.swift` also imports CoreGraphics. `Models.swift` holds `Subject`, `Note`, `Stack`, `ClearedBatch`, and `StackDocument`. `NoteCreation.swift` builds a note from a selection and a body. `NoteListing.swift` filters notes with a query. `TextNormalization.swift` is the shared blank-and-match helpers. `StackDocumentMutations.swift` validates a document and applies one `StackDocumentMutation`. `StackStore.swift` is the observable queue: it loads, mutates, commits, and tears down. `StorePersistence.swift` loads and commits `store.json`. `Template.swift` and `TemplateCollection.swift` are the template value and the collection rules. `PromptComposer.swift` renders a stack, or one note, as Markdown. The pure machines and the action catalog live here: `CaptureState`, `VoiceMachine`, `StackSelectMachine`, `PaletteWorkflow`, `PaletteActions`, and the stack facts they render (`StackUIFacts.swift`).
+**Sources/SendpointDomain.** Pure types. No AppKit. Every file imports Foundation. `StackStore.swift` also imports Observation. `CaptureState.swift` also imports CoreGraphics. `Models.swift` holds `Subject`, `Note`, `Stack`, `ClearedBatch`, and `StackDocument`. `NoteCreation.swift` builds a note from a selection and a body. `NoteListing.swift` filters notes with a query. `TextNormalization.swift` is the shared blank-and-match helpers. `StackDocumentMutations.swift` validates a document and applies one `StackDocumentMutation`. `StackStore.swift` is the observable queue: it loads, mutates, commits, and tears down. `StorePersistence.swift` loads and commits `store.json`. `Template.swift` and `TemplateCollection.swift` are the template value and the collection rules. `PromptComposer.swift` renders a stack, or one note, as Markdown. The pure machines and the action catalog live here: `CaptureState`, `VoiceMachine`, `StackSelectMachine`, `PaletteWorkflow`, `PaletteActions`, `PermissionState`, `LatestNoteState`, and the stack facts they render (`StackUIFacts.swift`).
 
 **Sources/Sendpoint/App.** Process lifecycle. `Main.swift` starts the accessory app and refuses a second instance. `AppDelegate.swift` owns launch, reopen, and termination. `AppDelegate+Actions.swift` performs status-menu actions and registers hotkeys. `AppDelegate+Surfaces.swift` presents the palette, setup, and settings. `AppDelegate+Store.swift` bootstraps `StackStore`, then builds the palette, the latest-note editor, and the stack switcher. `AppEnvironment.swift` constructs the long-lived objects, including `CaptureController`. `StatusItemController`, `StatusMenuModel`, and `MenuBarIcon` are the menu bar. `SurfaceCoordinator` tracks which surfaces are visible and sets the activation policy. `UpdateController` checks for updates through Sparkle. `LaunchPresentation` chooses setup, settings, or nothing.
 
-**Sources/Sendpoint/Capture.** The capture workflow. The capture machine, `CaptureState`, lives in SendpointDomain. `CaptureController` owns it. `CaptureWindows` shows the editor and the voice panel. `SelectionCapture` reads the selection and pastes or inserts text. `AutomaticSelectionMonitor` watches the global mouse so a recent selection can be reused. `LatestNoteEditor` edits the newest note in the current stack. `LatestNoteEditorWindow` hosts it. The SwiftUI is `CaptureView`, `CaptureDestinationPanel`, `NoteEditor`, and `LatestNoteEditorView`.
+**Sources/Sendpoint/Capture.** The capture workflow. The capture machine, `CaptureState`, lives in SendpointDomain. `CaptureController` owns it. `CaptureWindows` shows the editor and the voice panel. `SelectionCapture` reads the selection and pastes or inserts text. `AutomaticSelectionMonitor` watches the global mouse so a recent selection can be reused. The latest-note machine, `LatestNoteState`, lives in SendpointDomain. `LatestNoteEditor` is the controller. `LatestNoteEditorWindow` hosts it. The SwiftUI is `CaptureView`, `CaptureDestinationPanel`, `NoteEditor`, and `LatestNoteEditorView`.
 
 **Sources/Sendpoint/Input.** Global shortcuts. `ShortcutSettings` stores one `KeyCombo` per `ShortcutSlot`. `HotKeyRegistrar` binds those slots to actions. `HotKeyCenter` registers them. `KeyRecorder` is the settings control that records a combo.
 
@@ -26,7 +26,7 @@
 
 **Sources/Sendpoint/StackSwitcher.** The separate app-wide stack switcher. `StackSelectMachine` lives in SendpointDomain and decides. `StackSelector` performs the switch and the readout timer. `StackReadout` shows the number. This is not the palette's own stack switching. `AppDelegate.selectStack` calls `stackSelector.select`.
 
-**Sources/Sendpoint/Platform.** `ExportController` copies or pastes Markdown and can clear the exported notes. `PermissionState` and `PermissionCheck` cover accessibility, the microphone, and the local voice model. `LatestValuePump` keeps the newest progress value.
+**Sources/Sendpoint/Platform.** `ExportController` copies or pastes Markdown and can clear the exported notes. The permission machine, `PermissionState`, lives in SendpointDomain. `PermissionController` and `PermissionCheck` cover accessibility, the microphone, and the local voice model. `LatestValuePump` keeps the newest progress value.
 
 **Sources/Sendpoint/Settings.** The settings window (`SettingsWindowController`, `SettingsView`, and the panes), first-run setup (`SetupWindowController`, `SetupView`, `SetupTour`), and templates (`TemplateSettings`, `TemplateEditorState`, `SettingsTemplatesPane`). `AppSettings` holds the general preferences.
 
@@ -50,10 +50,10 @@ The vocabulary is Event, `update`, Effect, and an XController.
 
 `VoiceMachine` (driven by `VoiceNoteService`), `StackSelectMachine` (driven by `StackSelector`), and `ExportController` (`ExportState` in the same file) already follow this shape. `PaletteWorkflow` is the palette's own machine. Its transition is `PaletteUpdate.update`, which returns `Bool` and appends `PaletteEffect`. Copy Capture for a new machine.
 
+The permission machine and the latest-note machine live in SendpointDomain. `PermissionController` and `LatestNoteEditor` are the controllers.
+
 These files do not follow this shape. Do not copy them:
 
-- `PermissionState`. Several state enums (`AccessibilityPermissionState`, `MicrophonePermissionState`, `LocalVoiceModelState`), an `isTornDown` flag, and methods that both change state and start `Task`s (`requestMicrophone`, `downloadModel`, `startWatchingVoiceModel`).
-- `LatestNoteEditor`. `send` reads the store and calls `store.mutate` while deciding.
 - `TemplateEditorState`. `TemplateEditorEvent` covers field edits. Unsaved-changes prompts and switching templates go through throwing methods (`requestSelection`, `resolvePendingSelection`, `resolveClose`, `save`, `delete`).
 - `SurfaceCoordinator`.
 - `AutomaticSelectionMonitor`.

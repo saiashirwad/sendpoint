@@ -9,7 +9,7 @@ struct AppEnvironment {
     let voiceService: VoiceNoteService
     let selectionMonitor: AutomaticSelectionMonitor
     let surfaces: SurfaceCoordinator
-    let permissionState: PermissionState
+    let permissionState: PermissionController
     let hotKeyRegistrar: HotKeyRegistrar
     let exportController: ExportController
     let captureController: CaptureController
@@ -26,7 +26,7 @@ struct AppEnvironment {
         let voiceService = VoiceNoteService(transcriber: transcriber)
         let selectionMonitor = AutomaticSelectionMonitor()
         let surfaces = SurfaceCoordinator()
-        let permissionState = PermissionState(services: .live(transcriber: transcriber))
+        let permissionState = PermissionController(services: .live(transcriber: transcriber))
         let selection = SelectionCapture.live(monitor: selectionMonitor)
 
         self.appSettings = appSettings

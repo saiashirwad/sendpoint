@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import SendpointDomain
 
 enum PermissionCheck {
     static func openAccessibilitySettings() {

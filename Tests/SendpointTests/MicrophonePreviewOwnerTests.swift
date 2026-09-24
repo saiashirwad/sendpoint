@@ -3,48 +3,38 @@ import XCTest
 
 @MainActor
 final class MicrophonePreviewOwnerTests: XCTestCase {
-    private actor StartGate {
-        private var continuation: CheckedContinuation<Void, Never>?
+    @MainActor private final class ScriptedMicrophone {
+        var stops = 0
+        var started: [String?] = []
+        var finished = 0
+        private var gates: [String: CheckedContinuation<Void, Never>] = [:]
+        private let gated: Set<String>
 
-        func wait() async {
-            await withCheckedContinuation { continuation in
-                self.continuation = continuation
-            }
+        init(gated: Set<String>) {
+            self.gated = gated
         }
 
-        func release() {
-            continuation?.resume()
-            continuation = nil
+        var boundary: Microphone {
+            Microphone(
+                requestAccess: { true },
+                prepare: { _ in },
+                start: { order in
+                    let uid = order.entries.first?.uid
+                    self.started.append(uid)
+                    if let uid, self.gated.contains(uid) {
+                        await withCheckedContinuation { self.gates[uid] = $0 }
+                    }
+                    self.finished += 1
+                    return VoiceAudioQueue()
+                },
+                stop: { self.stops += 1 }
+            )
         }
-    }
 
-    private final class Recorder {
-        var startedUIDs: [String?] = []
-        var stopCount = 0
-        var running = false
-    }
-
-    private func makeOwner(
-        recorder: Recorder,
-        gatedUIDs: Set<String> = [],
-        gate: StartGate
-    ) -> MicrophonePreviewOwner {
-        MicrophonePreviewOwner(engine: .init(
-            start: { order in
-                let uid = order.entries.first?.uid
-                recorder.startedUIDs.append(uid)
-                recorder.running = true
-                if let uid, gatedUIDs.contains(uid) {
-                    await gate.wait()
-                }
-            },
-            stop: {
-                recorder.stopCount += 1
-                recorder.running = false
-            },
-            isRunning: { recorder.running },
-            level: { 0 }
-        ))
+        func release(_ uid: String) {
+            gates[uid]?.resume()
+            gates[uid] = nil
+        }
     }
 
     private func order(_ uid: String) -> MicrophoneOrder {
@@ -53,50 +43,63 @@ final class MicrophonePreviewOwnerTests: XCTestCase {
         return order
     }
 
-    private func waitUntil(
-        _ predicate: @escaping @MainActor () async -> Bool
-    ) async {
+    private func waitUntil(_ predicate: @MainActor () -> Bool) async {
         for _ in 0..<1_000 {
-            if await predicate() { return }
+            if predicate() { return }
             await Task.yield()
         }
         XCTFail("Timed out waiting for asynchronous test work")
     }
 
-    func testStopCancelsPendingStartAndCleansUpStaleBringUp() async {
-        let gate = StartGate()
-        let recorder = Recorder()
-        let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
+    private func owner(for microphone: ScriptedMicrophone) -> (MicrophonePreviewOwner, InputLevelMonitor) {
+        let monitor = InputLevelMonitor(microphone: microphone.boundary, isAuthorized: { true })
+        return (MicrophonePreviewOwner(monitor: monitor), monitor)
+    }
 
+    func testOneStartStopsOnceInsideTheMonitor() async {
+        let microphone = ScriptedMicrophone(gated: [])
+        let (owner, monitor) = owner(for: microphone)
         owner.start(order("a"))
-        await waitUntil { recorder.startedUIDs.count == 1 }
-        XCTAssertEqual(recorder.stopCount, 1)
-        owner.stop()
-        XCTAssertFalse(owner.isActive)
-        XCTAssertEqual(recorder.stopCount, 2)
+        await waitUntil { monitor.isRunning }
+        XCTAssertEqual(microphone.stops, 1, "the adapter must not add a stop before the monitor's stop")
+        XCTAssertEqual(microphone.started, ["a"])
+        XCTAssertTrue(owner.isActive)
+    }
 
-        await gate.release()
-        await waitUntil { recorder.stopCount == 3 }
+    func testStopDuringInFlightStartStopsOnceMore() async {
+        let microphone = ScriptedMicrophone(gated: ["a"])
+        let (owner, monitor) = owner(for: microphone)
+        owner.start(order("a"))
+        await waitUntil { microphone.started == ["a"] }
+        XCTAssertEqual(microphone.stops, 1)
+        XCTAssertFalse(monitor.isRunning)
+
+        owner.stop()
+        await waitUntil { microphone.stops == 2 }
+        microphone.release("a")
+        await waitUntil { microphone.finished == 1 }
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(microphone.stops, 2, "the stale start must not stop again")
         XCTAssertFalse(owner.isActive)
-        XCTAssertEqual(recorder.startedUIDs, ["a"], "the stale bring-up never delivers a tap")
+        XCTAssertFalse(monitor.isRunning)
     }
 
     func testRestartSupersedesInFlightStart() async {
-        let gate = StartGate()
-        let recorder = Recorder()
-        let owner = makeOwner(recorder: recorder, gatedUIDs: ["a"], gate: gate)
-
+        let microphone = ScriptedMicrophone(gated: ["a"])
+        let (owner, monitor) = owner(for: microphone)
         owner.start(order("a"))
-        await waitUntil { recorder.startedUIDs.count == 1 }
+        await waitUntil { microphone.started == ["a"] }
         owner.start(order("b"))
-
-        await gate.release()
-        await waitUntil { recorder.startedUIDs.count == 2 }
-        XCTAssertEqual(recorder.startedUIDs, ["a", "b"])
-        XCTAssertEqual(recorder.stopCount, 3)
+        await waitUntil { monitor.isRunning && microphone.started == ["a", "b"] }
+        let stopsWhenRunning = microphone.stops
         XCTAssertTrue(owner.isActive)
 
-        owner.stop()
-        XCTAssertFalse(owner.isActive)
+        microphone.release("a")
+        await waitUntil { microphone.finished == 2 }
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(microphone.stops, stopsWhenRunning, "the loser must not stop after the winner is running")
+        XCTAssertTrue(monitor.isRunning)
+        XCTAssertTrue(owner.isActive)
+        XCTAssertEqual(microphone.started, ["a", "b"])
     }
 }

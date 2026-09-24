@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 
 enum SetupHeroStage: Equatable {
@@ -11,23 +12,16 @@ enum SetupHeroStage: Equatable {
     case failedOther
     case ready
 
-    static func from(
-        accessibility: AccessibilityPermissionState,
-        microphone: MicrophonePermissionState,
-        model: LocalVoiceModelState
-    ) -> SetupHeroStage {
-        if accessibility != .granted { return .accessibility }
-        switch microphone {
-        case .notDetermined: return .microphone
-        case .denied, .restricted: return .microphoneSettings
-        case .granted: break
-        }
-        switch model {
-        case .notDownloaded: return .voiceModel
-        case let .downloading(progress): return .downloading(progress: progress)
-        case .failed(.offline): return .failedOffline
-        case .failed(.other): return .failedOther
-        case .ready: return .ready
+    init(_ stage: PermissionSetupStage) {
+        switch stage {
+        case .accessibility: self = .accessibility
+        case .microphone: self = .microphone
+        case .microphoneSettings: self = .microphoneSettings
+        case .voiceModel: self = .voiceModel
+        case let .downloading(progress): self = .downloading(progress: progress)
+        case .failedOffline: self = .failedOffline
+        case .failedOther: self = .failedOther
+        case .ready: self = .ready
         }
     }
 
@@ -122,7 +116,7 @@ enum SetupHeroStage: Equatable {
         }
     }
 
-    func perform(on state: PermissionState) {
+    func perform(on state: PermissionController) {
         switch self {
         case .accessibility:
             state.requestAccessibility()
@@ -140,7 +134,7 @@ enum SetupHeroStage: Equatable {
 
 struct SetupView: View {
     @Bindable var settings: AppSettings
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     @Bindable var tour: SetupTour
     @Bindable var shortcuts: ShortcutSettings
     @Bindable var voiceSettings: VoiceSettings
@@ -155,7 +149,7 @@ struct SetupView: View {
 
     init(
         settings: AppSettings,
-        permissionState: PermissionState,
+        permissionState: PermissionController,
         tour: SetupTour,
         shortcuts: ShortcutSettings,
         voiceSettings: VoiceSettings,
@@ -296,28 +290,16 @@ struct SetupView: View {
         onComplete()
     }
 
-    private var stage: SetupHeroStage {
-        SetupHeroStage.from(
-            accessibility: permissionState.accessibility,
-            microphone: permissionState.microphone,
-            model: permissionState.localVoiceModel
-        )
-    }
+    private var stage: SetupHeroStage { permissionState.setupStage }
 }
 
 private struct SetupHeroPill: View {
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     let animates: Bool
     @State private var appeared = false
     @State private var hovering = false
 
-    private var stage: SetupHeroStage {
-        SetupHeroStage.from(
-            accessibility: permissionState.accessibility,
-            microphone: permissionState.microphone,
-            model: permissionState.localVoiceModel
-        )
-    }
+    private var stage: SetupHeroStage { permissionState.setupStage }
 
     var body: some View {
         WordmarkPill(mode: orbMode, animates: animates)

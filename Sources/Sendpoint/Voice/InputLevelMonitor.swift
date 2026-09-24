@@ -29,8 +29,14 @@ final class InputLevelMonitor {
               isAuthorized() else { return }
         do {
             _ = try await microphone.start(order)
-            guard !Task.isCancelled, current == generation else {
-                await microphone.stop()
+            if current != generation {
+                // A newer start or stop already scheduled the microphone stop.
+                await stopTask?.value
+                return
+            }
+            if Task.isCancelled {
+                stop()
+                await stopTask?.value
                 return
             }
             isRunning = true
@@ -78,7 +84,6 @@ final class MicrophonePreviewOwner {
 
     private let engine: Engine
     private var task: Task<Void, Never>?
-    private var generation = 0
 
     var level: Float { engine.level() }
     var isActive: Bool { engine.isRunning() }
@@ -92,25 +97,16 @@ final class MicrophonePreviewOwner {
     }
 
     func start(_ order: MicrophoneOrder) {
-        generation += 1
-        let active = generation
-        let previous = task
         task?.cancel()
         task = Task { @MainActor [weak self] in
-            await previous?.value
-            guard let self, !Task.isCancelled, active == self.generation else { return }
-            self.engine.stop()
+            guard let self, !Task.isCancelled else { return }
             await self.engine.start(order)
-            guard !Task.isCancelled, active == self.generation else {
-                self.engine.stop()
-                return
-            }
         }
     }
 
     func stop() {
-        generation += 1
         task?.cancel()
+        task = nil
         engine.stop()
     }
 }

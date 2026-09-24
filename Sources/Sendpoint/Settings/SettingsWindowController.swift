@@ -14,7 +14,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let voiceSettings: VoiceSettings
     private let hotKeyRegistrar: HotKeyRegistrar
     private let captureController: CaptureController
-    private let permissionState: PermissionState
+    private let permissionState: PermissionController
     private let surfaces: SurfaceCoordinator
     private let storeHandle = SettingsStoreHandle()
     private let onSelectTemplate: (UUID) -> Void
@@ -31,7 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         voiceSettings: VoiceSettings,
         hotKeyRegistrar: HotKeyRegistrar,
         captureController: CaptureController,
-        permissionState: PermissionState,
+        permissionState: PermissionController,
         surfaces: SurfaceCoordinator,
         stackStore: StackStore?,
         onSelectTemplate: @escaping (UUID) -> Void,

@@ -13,7 +13,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     }
 
     private let window: NSPanel
-    private let permissionState: PermissionState
+    private let permissionState: PermissionController
     private let surfaces: SurfaceCoordinator
     private let tour = SetupTour()
     private let noteCount: () -> Int?
@@ -23,7 +23,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     init(
         settings: AppSettings,
-        permissionState: PermissionState,
+        permissionState: PermissionController,
         shortcuts: ShortcutSettings,
         voiceSettings: VoiceSettings,
         surfaces: SurfaceCoordinator,
@@ -88,13 +88,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         window.presentActivated()
     }
 
-    private var currentStage: SetupHeroStage {
-        SetupHeroStage.from(
-            accessibility: permissionState.accessibility,
-            microphone: permissionState.microphone,
-            model: permissionState.localVoiceModel
-        )
-    }
+    private var currentStage: SetupHeroStage { permissionState.setupStage }
 
     private var currentStep: Int {
         let stage = currentStage

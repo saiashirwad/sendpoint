@@ -40,7 +40,7 @@ struct SettingsView: View {
     @Bindable var shortcuts: ShortcutSettings
     @Bindable var voiceSettings: VoiceSettings
     @Bindable var templateEditor: TemplateEditorState
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     let storeHandle: SettingsStoreHandle
     let onSelectTemplate: (UUID) -> Void
     let hotKeyRegistrar: HotKeyRegistrar
@@ -61,7 +61,7 @@ struct SettingsView: View {
         hotKeyRegistrar: HotKeyRegistrar,
         captureController: CaptureController,
         templateEditor: TemplateEditorState,
-        permissionState: PermissionState,
+        permissionState: PermissionController,
         storeHandle: SettingsStoreHandle,
         onSelectTemplate: @escaping (UUID) -> Void,
         onSettingsChanged: @escaping () -> Void,
@@ -155,7 +155,7 @@ struct SettingsView: View {
 
 private struct SettingsSidebar: View {
     @Binding var selection: SettingsTab
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     let storeHandle: SettingsStoreHandle
     let onShowStack: () -> Void
     @Environment(\.colorScheme) private var scheme
@@ -241,19 +241,13 @@ private struct SettingsSidebarItem: View {
 }
 
 private struct SettingsStatusCard: View {
-    @Bindable var permissionState: PermissionState
+    @Bindable var permissionState: PermissionController
     let storeHandle: SettingsStoreHandle
     let onShowStack: () -> Void
     @State private var hovering = false
     @Environment(\.colorScheme) private var scheme
 
-    private var stage: SetupHeroStage {
-        SetupHeroStage.from(
-            accessibility: permissionState.accessibility,
-            microphone: permissionState.microphone,
-            model: permissionState.localVoiceModel
-        )
-    }
+    private var stage: SetupHeroStage { permissionState.setupStage }
 
     private var isActionable: Bool {
         stage == .ready ? storeHandle.store != nil : stage.isActionable

@@ -317,7 +317,7 @@ final class CaptureDestinationPanelRenderTests: XCTestCase {
 
     private func makeController(store: StackStore) -> CaptureController {
         let defaults = UserDefaults(suiteName: "CaptureDestinationPanelRenderTests.\(UUID().uuidString)")!
-        let permissions = PermissionState(services: PermissionServices(
+        let permissions = PermissionController(services: PermissionServices(
             accessibilityStatus: { .granted }, requestAccessibility: { true },
             microphoneStatus: { .granted }, requestMicrophone: { true },
             voiceModelFilesExist: { true }, downloadVoiceModel: { _ in },

@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 import XCTest
 @testable import Sendpoint
@@ -168,54 +169,21 @@ final class CapturePanelTests: XCTestCase {
     }
 
     func testSetupHeroStageWalksPermissionsInOrder() {
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .notGranted,
-                microphone: .notDetermined,
-                model: .notDownloaded
-            ),
-            .accessibility
-        )
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .granted,
-                microphone: .notDetermined,
-                model: .notDownloaded
-            ),
-            .microphone
-        )
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .granted,
-                microphone: .denied,
-                model: .notDownloaded
-            ),
-            .microphoneSettings
-        )
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .granted,
-                microphone: .granted,
-                model: .notDownloaded
-            ),
-            .voiceModel
-        )
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .granted,
-                microphone: .granted,
-                model: .downloading(progress: 0.4)
-            ),
-            .downloading(progress: 0.4)
-        )
-        XCTAssertEqual(
-            SetupHeroStage.from(
-                accessibility: .granted,
-                microphone: .granted,
-                model: .ready
-            ),
-            .ready
-        )
+        func stage(
+            _ accessibility: AccessibilityPermissionState,
+            _ microphone: MicrophonePermissionState,
+            _ model: LocalVoiceModelState
+        ) -> SetupHeroStage {
+            SetupHeroStage(PermissionState(
+                accessibility: accessibility, microphone: microphone, localVoiceModel: model
+            ).setupStage)
+        }
+        XCTAssertEqual(stage(.notGranted, .notDetermined, .notDownloaded), .accessibility)
+        XCTAssertEqual(stage(.granted, .notDetermined, .notDownloaded), .microphone)
+        XCTAssertEqual(stage(.granted, .denied, .notDownloaded), .microphoneSettings)
+        XCTAssertEqual(stage(.granted, .granted, .notDownloaded), .voiceModel)
+        XCTAssertEqual(stage(.granted, .granted, .downloading(progress: 0.4)), .downloading(progress: 0.4))
+        XCTAssertEqual(stage(.granted, .granted, .ready), .ready)
         XCTAssertEqual(SetupHeroStage.accessibility.title, "Accessibility")
         XCTAssertEqual(SetupHeroStage.voiceModel.label, "Voice model")
         XCTAssertTrue(SetupHeroStage.voiceModel.showsDownloadGlyph)

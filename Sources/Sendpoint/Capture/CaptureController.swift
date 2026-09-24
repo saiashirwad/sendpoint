@@ -48,7 +48,7 @@ final class CaptureController {
     @ObservationIgnored private var store: StackStore?
     @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let voiceSettings: VoiceSettings
-    @ObservationIgnored private let permissionState: PermissionState
+    @ObservationIgnored private let permissionState: PermissionController
     @ObservationIgnored private let selection: SelectionCapture
     @ObservationIgnored private let recorder: VoiceRecorder
     @ObservationIgnored private let frontApp: @MainActor () -> DictationTarget?
@@ -98,7 +98,7 @@ final class CaptureController {
         return session.saveAwaitsSelection
     }
 
-    init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionState,
+    init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionController,
          selection: SelectionCapture, recorder: VoiceRecorder,
          frontApp: @escaping @MainActor () -> DictationTarget? = { CaptureController.frontmostApp() },
          surfaces: @escaping (CaptureController) -> CaptureSurfaces) {

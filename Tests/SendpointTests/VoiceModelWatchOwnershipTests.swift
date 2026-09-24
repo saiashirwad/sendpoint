@@ -1,3 +1,4 @@
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 
@@ -39,7 +40,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
 
     func testRedundantStartsShareOneLoopAndOneStopEndsIt() async {
         let files = LockedBool(false)
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelFilesExist: { files.value }
         ))
         XCTAssertFalse(state.isWatchingVoiceModel)
@@ -62,7 +63,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
     }
 
     func testStopWatchingIsNarrowerThanTeardown() async {
-        let state = PermissionState(services: services(
+        let state = PermissionController(services: services(
             modelFilesExist: { false },
             downloadModel: { _ in try? await Task.sleep(for: .milliseconds(50)) }
         ))
@@ -82,7 +83,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
     }
 
     func testTeardownStopsTheWatchAndIgnoresUnbalancedStops() {
-        let state = PermissionState(services: services())
+        let state = PermissionController(services: services())
         state.startWatchingVoiceModel()
         XCTAssertTrue(state.isWatchingVoiceModel)
 
