@@ -145,7 +145,7 @@ struct SetupView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     static let size = NSSize(width: 500, height: 352)
-    private static let inset: CGFloat = 32
+    private static let inset: CGFloat = Spacing.xl
 
     init(
         settings: AppSettings,
@@ -168,11 +168,11 @@ struct SetupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SetupHeroPill(permissionState: permissionState, animates: windowIsVisible)
-                .padding(.top, 30)
+                .padding(.top, Spacing.xl)
             Spacer(minLength: 0)
             steps
             ask
-                .padding(.top, 12)
+                .padding(.top, Spacing.md)
             if inTour, let passage = tour.step.passage {
                 SetupPassage(text: passage)
                     .id(tour.step)
@@ -180,24 +180,24 @@ struct SetupView: View {
             } else if inTour, let tip = tour.step.tip(keys: SetupTourKeys(shortcuts: shortcuts)) {
                 Text(tip)
                     .font(.ui(SetupPassage.fontSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: SetupPassage.height, alignment: .topLeading)
                     .modifier(SetupCard())
             }
             control
-                .padding(.top, inTour ? 20 : 24)
+                .padding(.top, Spacing.xl)
         }
         .padding(.horizontal, Self.inset)
-        .padding(.bottom, Self.inset - 4)
+        .padding(.bottom, Spacing.xl)
         .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
         .background(Aurora(strength: 0.55))
         .background(WindowVisibilityReporter(isVisible: $windowIsVisible))
         .font(.uiBody)
-        .clipShape(RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
                 .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
         }
         .ignoresSafeArea()
@@ -217,7 +217,7 @@ struct SetupView: View {
                 SetupSteps(names: SetupHeroStage.stepNames, step: stage.step)
             }
         }
-        .animation(.snappy(duration: 0.3), value: inTour)
+        .animation(Motion.springy, value: inTour)
     }
 
     private var headline: String {
@@ -234,20 +234,20 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(headline)
                 .font(.ui(22, weight: .semibold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Ink.primaryStyle)
                 .lineLimit(1)
             Text(detail)
                 .font(.ui(13))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.secondaryStyle)
                 .lineLimit(1)
-                .padding(.top, 8)
+                .padding(.top, Spacing.sm)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .id(headline)
         .onChange(of: headline) { announcePolitely("\(headline). \(detail)") }
         .transition(.blurReplace)
-        .animation(.snappy(duration: 0.35), value: headline)
+        .animation(Motion.springy, value: headline)
     }
 
     @ViewBuilder
@@ -257,9 +257,9 @@ struct SetupView: View {
         } else if case let .downloading(progress) = stage {
             Text(progress.map { "\(Int($0 * 100))%" } ?? "Starting")
                 .font(.mono(13, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.secondaryStyle)
                 .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.25), value: progress)
+                .animation(Motion.springy, value: progress)
                 .frame(height: 30)
         } else if let title = stage.actionTitle {
             InkButton(title, keys: "↩") { activate() }
@@ -306,7 +306,7 @@ private struct SetupHeroPill: View {
         .scaleEffect((appeared ? 1 : 0.9) * (hovering && stage.isActionable ? 1.04 : 1))
         .opacity(appeared ? 1 : 0)
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+            withAnimation(Motion.springy) {
                 appeared = true
             }
         }
@@ -338,9 +338,9 @@ private struct SetupSteps: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Spacing.lg) {
             ForEach(Array(names.enumerated()), id: \.offset) { index, name in
-                HStack(spacing: 7) {
+                HStack(spacing: Spacing.sm) {
                     marker(for: index)
                     Text(name)
                         .font(.mono(9.5, weight: .medium))
@@ -348,11 +348,11 @@ private struct SetupSteps: View {
                         .textCase(.uppercase)
                         .lineLimit(1)
                         .fixedSize()
-                        .foregroundStyle(index == step ? Color.primary : Color.secondary.opacity(index < step ? 1 : 0.7))
+                        .foregroundStyle(index == step ? Ink.primary : Ink.secondary.opacity(index < step ? 1 : 0.7))
                 }
             }
         }
-        .animation(.snappy(duration: 0.3), value: step)
+        .animation(Motion.springy, value: step)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Setup progress")
         .accessibilityValue("\(min(step, names.count)) of \(names.count) done")
@@ -362,8 +362,8 @@ private struct SetupSteps: View {
     private func marker(for index: Int) -> some View {
         if index < step {
             Image(systemName: "checkmark")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(Color.secondary)
+                .font(.symbol(8, weight: .bold))
+                .foregroundStyle(Ink.secondary)
                 .frame(width: 8, height: 8)
                 .transition(.scale.combined(with: .opacity))
         } else if index == step {
@@ -373,7 +373,7 @@ private struct SetupSteps: View {
                 .frame(width: 8, height: 8)
         } else {
             Circle()
-                .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1)
+                .strokeBorder(Ink.primary.opacity(0.22), lineWidth: 1)
                 .frame(width: 7, height: 7)
                 .frame(width: 8, height: 8)
         }
@@ -385,17 +385,17 @@ struct SetupCard: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.md)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .fill(Ink.raised(colorScheme))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
             )
-            .padding(.top, 16)
+            .padding(.top, Spacing.lg)
     }
 }
 
@@ -417,7 +417,7 @@ struct SetupPassage: NSViewRepresentable {
         view.isVerticallyResizable = false
         view.isHorizontallyResizable = false
         view.font = .ui(Self.fontSize)
-        view.textColor = .labelColor
+        view.textColor = Ink.nsLabel
         view.string = text
         view.setAccessibilityLabel("Text to select")
         return view

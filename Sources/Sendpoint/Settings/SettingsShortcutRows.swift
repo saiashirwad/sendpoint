@@ -12,13 +12,13 @@ struct ShortcutTitle: View {
     let spec: ShortcutSpec
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
             Text(spec.title)
                 .font(.ui(14, weight: .medium))
             if let hint = spec.hint {
                 Text(hint)
                     .font(.ui(13))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
                     .lineLimit(1)
             }
         }
@@ -44,7 +44,7 @@ struct ShortcutRows<Label: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(specs.enumerated()), id: \.element.id) { index, spec in
                 if index > 0 { SettingsDivider() }
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: Spacing.md) {
                     label(spec)
                     Spacer(minLength: 12)
                     KeyRecorder(combo: binding(for: spec.slot), clearable: spec.slot.isOptional)
@@ -53,7 +53,7 @@ struct ShortcutRows<Label: View>: View {
                 .frame(minHeight: SettingsMetrics.rowHeight)
             }
             if projection.isVisible {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
                     ForEach(projection.issues) { issue in
                         Text(issue.text)
                     }
@@ -64,7 +64,7 @@ struct ShortcutRows<Label: View>: View {
                 .font(.ui(12.5))
                 .foregroundStyle(Ink.amber(scheme))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 10)
+                .padding(.top, Spacing.md)
                 .accessibilityElement(children: .combine)
             }
         }

@@ -4,16 +4,16 @@ import SwiftUI
 
 enum VoiceCaptureLayout {
     static let pillHeight: CGFloat = 32
-    static let shadowPadding: CGFloat = 24
+    static let shadowPadding: CGFloat = Spacing.xl
     static let panelWidth: CGFloat = 680
 
     static let cardWidth: CGFloat = 420
-    static let cardPaddingX: CGFloat = 14
-    static let cardPaddingTop: CGFloat = 10
-    static let cardPaddingBottom: CGFloat = 8
+    static let cardPaddingX: CGFloat = Spacing.lg
+    static let cardPaddingTop: CGFloat = Spacing.md
+    static let cardPaddingBottom: CGFloat = Spacing.sm
     static let cardFooterHeight: CGFloat = 24
-    static let cardFooterGap: CGFloat = 6
-    static let transcriptLineSpacing: CGFloat = 2
+    static let cardFooterGap: CGFloat = Spacing.sm
+    static let transcriptLineSpacing: CGFloat = Spacing.xs
 
     static var transcriptWidth: CGFloat { cardWidth - cardPaddingX * 2 }
 
@@ -74,9 +74,9 @@ struct VoiceCaptureView: View {
         }
         .scaleEffect(appeared ? 1 : 0.92)
         .opacity(appeared ? 1 : 0)
-        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: appeared)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: facts.tether)
-        .animation(.easeOut(duration: 0.18), value: facts.failureText)
+        .animation(Motion.springy, value: appeared)
+        .animation(Motion.springy, value: facts.tether)
+        .animation(Motion.quick, value: facts.failureText)
         .environment(\.colorScheme, .dark)
         .padding(VoiceCaptureLayout.shadowPadding)
         .frame(maxWidth: .infinity)
@@ -88,20 +88,20 @@ struct VoiceCaptureView: View {
     // MARK: - Capsule
 
     private var pill: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.md) {
             leading(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
             CaptureTether(text: facts.tether, ink: palette.ink)
             orb(transcript: [])
-                .padding(.leading, 2)
+                .padding(.leading, Spacing.xs)
             failure
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 10)
+        .padding(.leading, Spacing.lg)
+        .padding(.trailing, Spacing.md)
         .font(.uiBody)
         .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
         .overlay(Capsule().strokeBorder(palette.rim, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+        .shadow(color: Ink.black.opacity(0.45), radius: 14, y: 6)
     }
 
     // MARK: - Card
@@ -109,7 +109,7 @@ struct VoiceCaptureView: View {
     private typealias Transcript = (rows: [VoiceTranscriptRow], overflow: Bool)
 
     private func card(_ transcript: Transcript) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
         return VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
             transcriptBody(transcript)
                 .frame(
@@ -118,7 +118,7 @@ struct VoiceCaptureView: View {
                     maxHeight: VoiceCaptureLayout.transcriptHeight(lines: lineCount, fontSize: fontSize),
                     alignment: .topLeading
                 )
-            HStack(spacing: 10) {
+            HStack(spacing: Spacing.md) {
                 leading(
                     rowHeight: VoiceCaptureLayout.cardFooterHeight,
                     anchorHeight: VoiceCaptureLayout.cardAnchorHeight(lines: lineCount, fontSize: fontSize)
@@ -137,8 +137,8 @@ struct VoiceCaptureView: View {
         .frame(width: VoiceCaptureLayout.cardWidth)
         .background(shape.fill(palette.paper.opacity(paperOpacity)))
         .overlay(shape.strokeBorder(palette.rim, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
-        .animation(.easeOut(duration: 0.22), value: transcript.rows.map(\.id))
+        .shadow(color: Ink.black.opacity(0.45 * paperOpacity), radius: 14, y: 6)
+        .animation(Motion.quick, value: transcript.rows.map(\.id))
     }
 
     @ViewBuilder
@@ -238,13 +238,13 @@ private struct VoiceTranscriptLines: View {
             LinearGradient(
                 stops: overflow
                     ? [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.28),
-                        .init(color: .black, location: 1),
+                        .init(color: Ink.clear, location: 0),
+                        .init(color: Ink.black, location: 0.28),
+                        .init(color: Ink.black, location: 1),
                     ]
                     : [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: 1),
+                        .init(color: Ink.black, location: 0),
+                        .init(color: Ink.black, location: 1),
                     ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -269,11 +269,11 @@ private struct VoiceTranscriptWaiting: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 4)
+        .padding(.top, Spacing.xs)
     }
 
     private func dots(at time: TimeInterval) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: Spacing.xs) {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(ink.opacity(0.22 + 0.5 * (0.5 + 0.5 * sin(time * 4.2 + Double(index) * 0.85))))

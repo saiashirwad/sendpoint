@@ -18,23 +18,23 @@ enum MenuBarIcon {
     }
 
     private static func draw(in context: CGContext) {
-        context.setFillColor(CGColor(gray: 0, alpha: 0.18))
+        context.setFillColor(Ink.templateInk(alpha: 0.18))
         context.addPath(CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil))
         context.fillPath()
 
-        context.setFillColor(CGColor(gray: 0, alpha: 0.46))
+        context.setFillColor(Ink.templateInk(alpha: 0.46))
         context.addPath(pill(x: 292, y: 278, width: 340, height: 48))
         context.addPath(pill(x: 292, y: 368, width: 394, height: 48))
         context.addPath(pill(x: 292, y: 608, width: 394, height: 48))
         context.addPath(pill(x: 292, y: 698, width: 292, height: 48))
         context.fillPath()
 
-        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        context.setFillColor(Ink.templateInk())
         context.addPath(pill(x: 310, y: 480, width: 360, height: 66))
         context.addEllipse(in: CGRect(x: 764, y: 487, width: 54, height: 54))
         context.fillPath()
 
-        context.setStrokeColor(CGColor(gray: 0, alpha: 1))
+        context.setStrokeColor(Ink.templateInk())
         context.setLineWidth(26)
         context.setLineCap(.round)
         context.setLineJoin(.round)

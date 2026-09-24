@@ -14,7 +14,7 @@ struct PaletteOverlaysView: View {
     var body: some View {
         if let overlay {
             ZStack(alignment: .bottomTrailing) {
-                Color.black.opacity(0.001)
+                Ink.black.opacity(0.001)
                     .contentShape(Rectangle())
                     .onTapGesture { onEvent(.closeOverlay) }
                 Group {
@@ -26,8 +26,8 @@ struct PaletteOverlaysView: View {
                     )
                     }
                 }
-                .padding(.trailing, 12)
-                .padding(.bottom, 48)
+                .padding(.trailing, Spacing.md)
+                .padding(.bottom, Spacing.xxl)
             }
             .transition(.opacity)
         }
@@ -91,9 +91,9 @@ struct OverlaySectionLabel: View {
     var body: some View {
         SettingsLabel(section.label)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, PaletteMetrics.horizontalPadding)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, Spacing.sm)
+            .padding(.bottom, Spacing.xs)
     }
 }
 
@@ -115,11 +115,11 @@ struct OverlayPanel<Rows: View>: View {
                         if isEmpty {
                             Text(emptyText)
                                 .font(.uiCallout)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Ink.secondaryStyle)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, Spacing.sm)
                 }
                 .focusSection()
                 .scrollIndicators(.hidden)
@@ -128,17 +128,17 @@ struct OverlayPanel<Rows: View>: View {
                 .onChange(of: highlight) { proxy.scrollTo(highlight) }
             }
             Hairline()
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .font(.symbol(11, weight: .medium))
+                    .foregroundStyle(Ink.tertiaryStyle)
                 TextField(placeholder, text: $query)
                     .textFieldStyle(.plain)
                     .font(.ui(13))
                     .focused(focus, equals: .overlay)
                 Keycap("esc", size: 10, isMuted: true)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, Spacing.lg)
             .frame(height: PaletteMetrics.barHeight)
         }
         .frame(width: PaletteMetrics.overlayWidth)
@@ -152,14 +152,14 @@ private struct OverlaySurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
                     .fill(Ink.raised(scheme))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: PaletteMetrics.overlayRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
                     .strokeBorder(Ink.rim(scheme), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(scheme == .dark ? 0.5 : 0.14), radius: 24, y: 10)
+            .shadow(color: Ink.black.opacity(scheme == .dark ? 0.5 : 0.14), radius: 24, y: 10)
     }
 }
 
@@ -177,15 +177,15 @@ struct PaletteActionRow: View, Equatable {
     var body: some View {
         Button(action: onPerform) {
             RowShell(isHighlighted: isHighlighted, onHoverEnter: onHover) {
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.sm) {
                     Text(item.title)
                         .font(.ui(13, weight: .medium))
-                        .foregroundStyle(item.isDestructive ? Ink.accent(scheme) : Color.primary)
+                        .foregroundStyle(item.isDestructive ? Ink.accent(scheme) : Ink.primary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     Text(item.keys)
                         .font(.mono(10.5))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Ink.tertiaryStyle)
                 }
             }
         }
@@ -211,7 +211,7 @@ struct PaletteTemplateRow: View, Equatable {
     var body: some View {
         Button(action: onSelect) {
             RowShell(isHighlighted: isHighlighted, onHoverEnter: onHover) {
-                HStack(spacing: 10) {
+                HStack(spacing: Spacing.md) {
                     Circle()
                         .fill(Ink.accent(scheme))
                         .frame(width: 5, height: 5)
@@ -223,10 +223,10 @@ struct PaletteTemplateRow: View, Equatable {
                     if template.clearStackAfterExport {
                         Text("clears after copy")
                             .font(.ui(10.5))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Ink.tertiaryStyle)
                     }
                 }
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(Ink.primary)
             }
         }
         .buttonStyle(.plain)
@@ -270,7 +270,7 @@ private struct OverlayPanelPreview: View {
                 onPerform: {}
             )
         }
-        .padding()
+        .padding(Spacing.lg)
     }
 }
 
@@ -304,7 +304,7 @@ private struct OverlayPanelPreview: View {
         )
     }
     .frame(width: 320)
-    .padding()
+    .padding(Spacing.lg)
 }
 
 #Preview("PaletteTemplateRow") {
@@ -332,5 +332,5 @@ private struct OverlayPanelPreview: View {
         )
     }
     .frame(width: 320)
-    .padding()
+    .padding(Spacing.lg)
 }

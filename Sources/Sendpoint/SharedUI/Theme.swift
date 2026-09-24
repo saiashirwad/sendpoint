@@ -1,6 +1,28 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Layout and motion
+
+nonisolated enum Radius {
+    static let panel: CGFloat = 14
+    static let card: CGFloat = 10
+    static let chip: CGFloat = 6
+}
+
+nonisolated enum Spacing {
+    static let xs: CGFloat = 4
+    static let sm: CGFloat = 8
+    static let md: CGFloat = 12
+    static let lg: CGFloat = 16
+    static let xl: CGFloat = 24
+    static let xxl: CGFloat = 48
+}
+
+nonisolated enum Motion {
+    static let quick = Animation.easeOut(duration: 0.18)
+    static let springy = Animation.spring(response: 0.32, dampingFraction: 0.82)
+}
+
 // MARK: - Type
 
 nonisolated enum Typeface {
@@ -21,6 +43,11 @@ nonisolated enum Typeface {
 }
 
 extension Font {
+    // SF Symbols retain system metrics; app text uses Geist or Martian Mono.
+    static func symbol(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: size, weight: weight, design: design)
+    }
+
     static func ui(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .custom(Typeface.sans(weight), size: size)
     }
@@ -43,7 +70,21 @@ extension NSFont {
 // MARK: - Ink
 
 nonisolated enum Ink {
-    static let cornerRadius: CGFloat = 14
+    static let primary = Color.primary
+    static let secondary = Color.secondary
+    static let white = Color.white
+    static let black = Color.black
+    static let clear = Color.clear
+    static let primaryStyle = HierarchicalShapeStyle.primary
+    static let secondaryStyle = HierarchicalShapeStyle.secondary
+    static let tertiaryStyle = HierarchicalShapeStyle.tertiary
+    static let quaternaryStyle = HierarchicalShapeStyle.quaternary
+    static let nsClear = NSColor.clear
+    static let nsLabel = NSColor.labelColor
+    static let nsSecondaryLabel = NSColor.secondaryLabelColor
+    static let nsTertiaryLabel = NSColor.tertiaryLabelColor
+    static let nsBlack = NSColor.black
+    static func templateInk(alpha: CGFloat = 1) -> CGColor { CGColor(gray: 0, alpha: alpha) }
 
     static func paper(_ scheme: ColorScheme) -> Color {
         scheme == .dark
@@ -113,7 +154,7 @@ nonisolated enum Ink {
     }
 
     struct Pill: View {
-        static let inset: CGFloat = 8
+        static let inset: CGFloat = Spacing.sm
         var radius: CGFloat
         var fill: Color
 
@@ -190,19 +231,19 @@ struct WordmarkPill: View {
 
     var body: some View {
         let palette = OverlayPalette.dark
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.md) {
             Text("Sendpoint")
                 .font(.ui(12.5, weight: .semibold))
                 .foregroundStyle(palette.ink.opacity(0.92))
             VoiceOrb(mode: mode, level: 0, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
                 .frame(width: 22, height: 22)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 9)
+        .padding(.leading, Spacing.lg)
+        .padding(.trailing, Spacing.sm)
         .frame(height: VoiceCaptureLayout.pillHeight)
         .background(Capsule().fill(palette.paper))
         .overlay(Capsule().strokeBorder(palette.rim, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.22), radius: 14, y: 7)
+        .shadow(color: Ink.black.opacity(0.22), radius: 14, y: 7)
         .environment(\.colorScheme, .dark)
         .contentShape(Capsule())
     }
@@ -212,7 +253,6 @@ struct EmptyStackGlyph: View {
     @Environment(\.colorScheme) private var scheme
 
     private static let sheet = CGSize(width: 104, height: 66)
-    private static let radius: CGFloat = 12
     private static let lift: CGFloat = 11
     private static let inset: CGFloat = 12
 
@@ -231,14 +271,14 @@ struct EmptyStackGlyph: View {
                 .offset(y: 6)
             ForEach([2, 1, 0], id: \.self) { depth in
                 let d = CGFloat(depth)
-                let shape = RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
+                let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 shape
                     .fill(Ink.paper(scheme))
                     .overlay(shape.strokeBorder(stroke, lineWidth: 1).opacity(1 - Double(depth) * 0.3))
                     .frame(width: Self.sheet.width - d * Self.inset * 2, height: Self.sheet.height)
                     .offset(y: -d * Self.lift)
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
                 Capsule().fill(stroke).frame(width: 40, height: 1.2)
                 Capsule().fill(stroke).frame(width: 24, height: 1.2)
             }

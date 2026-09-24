@@ -49,14 +49,14 @@ private struct StackShortcutLabel: View {
     var body: some View {
         if let stack {
             Button { onSelect(stack.id) } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.lg) {
                     Text("\(stack.number)")
                         .font(.ui(14, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(stack.isCurrent ? AnyShapeStyle(Ink.accent(scheme)) : AnyShapeStyle(.primary))
+                        .foregroundStyle(stack.isCurrent ? AnyShapeStyle(Ink.accent(scheme)) : AnyShapeStyle(Ink.primaryStyle))
                         .frame(width: 12)
                     Text(stack.isEmpty ? "Empty" : stack.countLabel)
                         .font(.ui(14, weight: .medium))
-                        .foregroundStyle(stack.isEmpty ? .secondary : .primary)
+                        .foregroundStyle(stack.isEmpty ? Ink.secondaryStyle : Ink.primaryStyle)
                         .frame(width: 84, alignment: .leading)
                     if stack.isCurrent {
                         SettingsLabel("Current")

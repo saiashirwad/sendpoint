@@ -7,10 +7,10 @@ struct StackStrip: View {
     var accent: Color
     var onSelect: ((Int) -> Void)?
 
-    private static let hitPadding: CGFloat = 6
+    private static let hitPadding: CGFloat = Spacing.sm
 
     var body: some View {
-        HStack(spacing: onSelect == nil ? size * 0.75 : 0) {
+        HStack(spacing: onSelect == nil ? Spacing.sm : 0) {
             ForEach(stacks) { stack in
                 numeral(stack)
             }
@@ -29,7 +29,7 @@ struct StackStrip: View {
             Button { onSelect(stack.number) } label: {
                 label
                     .padding(.horizontal, Self.hitPadding)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, Spacing.sm)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -41,7 +41,7 @@ struct StackStrip: View {
 
     private func color(_ stack: StackItemFacts) -> AnyShapeStyle {
         if stack.isCurrent { return AnyShapeStyle(accent) }
-        return stack.isEmpty ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.primary)
+        return stack.isEmpty ? AnyShapeStyle(Ink.quaternaryStyle) : AnyShapeStyle(Ink.primaryStyle)
     }
 }
 
@@ -51,13 +51,13 @@ struct StackReadoutLabel: View {
     var detailSize: CGFloat
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: numeralSize * 0.4) {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
             Text("\(stack.number)")
                 .font(.ui(numeralSize, weight: .semibold).monospacedDigit())
                 .frame(width: numeralSize * 0.8)
             Text(stack.isEmpty ? "Empty" : stack.countLabel)
                 .font(.ui(detailSize).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.secondaryStyle)
                 .lineLimit(1)
                 .contentTransition(.numericText(value: Double(stack.noteCount)))
                 .frame(width: detailSize * 5.2, alignment: .leading)

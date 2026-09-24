@@ -27,7 +27,7 @@ struct NoteListView: View {
         let listing = projection.noteListing
         let today = Calendar.current.startOfDay(for: Date())
         if stack.notes.isEmpty, let undo = projection.undo {
-            VStack(spacing: 18) {
+            VStack(spacing: Spacing.lg) {
                 placeholder(title: "Stack cleared", detail: "\(noteCountLabel(undo.noteCount)) set aside.")
                     .frame(maxHeight: 120)
                 QuietButton("Undo", keys: "⌘Z") {
@@ -52,7 +52,7 @@ struct NoteListView: View {
                             noteCard(entry, highlightedNoteID: projection.highlightedNoteID, today: today)
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, Spacing.sm)
                     .background(ScrollProbe(handle: noteFrames.scroll))
             }
             .focusSection()
@@ -102,7 +102,7 @@ struct NoteListView: View {
         .equatable()
         .id(entry.id)
         .background(GeometryReader { geometry in
-            Color.clear.preference(
+            Ink.clear.preference(
                 key: NoteFramesKey.self,
                 value: [entry.id: geometry.frame(in: .named(StackPaletteView.notesSpace))]
             )
@@ -110,26 +110,26 @@ struct NoteListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: Spacing.xl) {
             EmptyStackGlyph()
             Readout("Nothing captured yet")
         }
         .multilineTextAlignment(.center)
-        .padding()
+        .padding(Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func placeholder(title: String, detail: String?) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Spacing.md) {
             Readout(title)
             if let detail {
                 Text(detail)
                     .font(.uiCallout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
             }
         }
         .multilineTextAlignment(.center)
-        .padding()
+        .padding(Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

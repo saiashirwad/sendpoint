@@ -62,7 +62,7 @@ struct VoiceOrb: View {
                     .frame(width: restingDiameter, height: restingDiameter)
             }
         }
-        .animation(animates && !reduceMotion ? .linear(duration: 0.05) : nil, value: level)
+        .animation(animates && !reduceMotion ? Motion.quick : nil, value: level)
     }
 
     private func shaped(_ level: Double) -> CGFloat {
@@ -73,23 +73,23 @@ struct VoiceOrb: View {
 // MARK: - Previews
 
 #Preview("VoiceOrb modes") {
-    HStack(spacing: 28) {
-        VStack(spacing: 8) {
-            VoiceOrb(mode: .idle, level: 0, ink: .primary, amber: .orange, accent: .pink)
-            Text("idle").font(.caption).foregroundStyle(.secondary)
+    HStack(spacing: Spacing.xl) {
+        VStack(spacing: Spacing.sm) {
+            VoiceOrb(mode: .idle, level: 0, ink: Ink.primary, amber: Ink.amber(.light), accent: Ink.accent(.light))
+            Text("idle").font(.uiCaption).foregroundStyle(Ink.secondaryStyle)
         }
-        VStack(spacing: 8) {
-            VoiceOrb(mode: .live, level: 0.7, ink: .primary, amber: .orange, accent: .pink)
-            Text("live").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: Spacing.sm) {
+            VoiceOrb(mode: .live, level: 0.7, ink: Ink.primary, amber: Ink.amber(.light), accent: Ink.accent(.light))
+            Text("live").font(.uiCaption).foregroundStyle(Ink.secondaryStyle)
         }
-        VStack(spacing: 8) {
-            VoiceOrb(mode: .thinking, level: 0, ink: .primary, amber: .orange, accent: .pink)
-            Text("thinking").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: Spacing.sm) {
+            VoiceOrb(mode: .thinking, level: 0, ink: Ink.primary, amber: Ink.amber(.light), accent: Ink.accent(.light))
+            Text("thinking").font(.uiCaption).foregroundStyle(Ink.secondaryStyle)
         }
-        VStack(spacing: 8) {
-            VoiceOrb(mode: .flat, level: 0, ink: .primary, amber: .orange, accent: .pink)
-            Text("flat").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: Spacing.sm) {
+            VoiceOrb(mode: .flat, level: 0, ink: Ink.primary, amber: Ink.amber(.light), accent: Ink.accent(.light))
+            Text("flat").font(.uiCaption).foregroundStyle(Ink.secondaryStyle)
         }
     }
-    .padding()
+    .padding(Spacing.lg)
 }

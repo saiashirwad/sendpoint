@@ -8,11 +8,11 @@ struct LatestNoteEditorView: View {
     private let palette = OverlayPalette.dark
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            HStack(spacing: Spacing.sm) {
                 Text("Edit latest note").font(.ui(14, weight: .semibold))
                 Spacer()
-                Text(model.state.draft?.stackName ?? "").foregroundStyle(.secondary)
+                Text(model.state.draft?.stackName ?? "").foregroundStyle(Ink.secondaryStyle)
             }
             if case let .selection(quote) = model.state.draft?.original.subject {
                 DisclosureGroup("Original quote", isExpanded: $quoteExpanded) {
@@ -22,7 +22,7 @@ struct LatestNoteEditorView: View {
                             .textSelection(.enabled)
                     }
                     .frame(maxHeight: 100)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
                 }
             }
             NoteEditor(
@@ -34,16 +34,16 @@ struct LatestNoteEditorView: View {
             .id(model.state.draft?.sessionID)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if case let .failed(_, message, pending) = model.state {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text(message).foregroundStyle(palette.amber)
                     if pending {
                         Text("Your edit is queued. Retry saving before closing.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Ink.secondaryStyle)
                     }
                 }
                 .textSelection(.enabled)
             }
-            HStack {
+            HStack(spacing: Spacing.sm) {
                 if case .confirmingDiscard = model.state {
                     Text("Discard your changes?")
                     Spacer()
@@ -66,10 +66,10 @@ struct LatestNoteEditorView: View {
             }
         }
         .font(.uiBody)
-        .padding(22)
+        .padding(Spacing.xl)
         .foregroundStyle(palette.ink)
-        .background(RoundedRectangle(cornerRadius: Ink.cornerRadius).fill(palette.paper))
-        .overlay(RoundedRectangle(cornerRadius: Ink.cornerRadius).strokeBorder(palette.rim, lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: Radius.panel).fill(palette.paper))
+        .overlay(RoundedRectangle(cornerRadius: Radius.panel).strokeBorder(palette.rim, lineWidth: 0.5))
         .environment(\.colorScheme, .dark)
         .ignoresSafeArea()
     }

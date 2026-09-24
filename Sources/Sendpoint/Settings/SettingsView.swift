@@ -103,7 +103,7 @@ struct SettingsView: View {
         .background(Backdrop())
         .font(.uiBody)
         .ignoresSafeArea()
-        .tint(Color.primary.opacity(0.85))
+        .tint(Ink.primary.opacity(0.85))
     }
 
     @ViewBuilder
@@ -166,12 +166,12 @@ private struct SettingsSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: topInset)
+            Ink.clear.frame(height: topInset)
             wordmark
-                .padding(.leading, 12)
-                .padding(.top, 22)
-                .padding(.bottom, 22)
-            VStack(spacing: 2) {
+                .padding(.leading, Spacing.md)
+                .padding(.top, Spacing.xl)
+                .padding(.bottom, Spacing.xl)
+            VStack(spacing: Spacing.xs) {
                 ForEach(SettingsTab.allCases) { tab in
                     SettingsSidebarItem(tab: tab, isSelected: tab == selection) {
                         selection = tab
@@ -183,14 +183,14 @@ private struct SettingsSidebar: View {
                 permissionState: permissionState, storeHandle: storeHandle, onShowStack: onShowStack
             )
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+        .padding(.horizontal, Spacing.md)
+        .padding(.bottom, Spacing.md)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Ink.well(scheme).opacity(0.85))
     }
 
     private var wordmark: some View {
-        HStack(alignment: .center, spacing: 7) {
+        HStack(alignment: .center, spacing: Spacing.sm) {
             Text("Sendpoint")
                 .font(.ui(17, weight: .semibold))
                 .tracking(-0.2)
@@ -213,28 +213,28 @@ private struct SettingsSidebarItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: Spacing.md) {
                 Image(systemName: tab.symbol)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.symbol(14, weight: .medium))
                     .frame(width: 18)
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
                 Text(tab.title)
                     .font(.ui(14, weight: .medium))
-                    .foregroundStyle(isSelected || hovering ? Color.primary : Color.primary.opacity(0.72))
+                    .foregroundStyle(isSelected || hovering ? Ink.primary : Ink.primary.opacity(0.72))
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Spacing.md)
             .frame(height: 34)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(isSelected ? Ink.raised(scheme) : (hovering ? Ink.hover : .clear))
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .fill(isSelected ? Ink.raised(scheme) : (hovering ? Ink.hover : Ink.clear))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .strokeBorder(Ink.hairline.opacity(isSelected ? 1 : 0), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(isSelected && scheme == .light ? 0.05 : 0), radius: 2, y: 1)
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .shadow(color: Ink.black.opacity(isSelected && scheme == .light ? 0.05 : 0), radius: 2, y: 1)
+            .contentShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -290,7 +290,7 @@ private struct SettingsStatusCard: View {
             if stage == .ready { onShowStack() } else { stage.perform(on: permissionState) }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
+                HStack(spacing: Spacing.sm) {
                     Circle()
                         .fill(stage == .ready ? Ink.accent(scheme) : Ink.amber(scheme))
                         .frame(width: 5, height: 5)
@@ -298,40 +298,40 @@ private struct SettingsStatusCard: View {
                         .font(.mono(9.5, weight: .medium))
                         .tracking(1.3)
                         .textCase(.uppercase)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.secondaryStyle)
                     Spacer(minLength: 0)
                     if isActionable {
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                            .font(.symbol(10, weight: .semibold))
+                            .foregroundStyle(Ink.tertiaryStyle)
                             .opacity(hovering ? 1 : 0)
                     }
                 }
                 Spacer(minLength: 8)
                 Text(copy.title)
                     .font(.ui(15, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Ink.primaryStyle)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(copy.detail)
                     .font(.mono(10.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
                     .lineLimit(1)
-                    .padding(.top, 5)
+                    .padding(.top, Spacing.xs)
             }
-            .padding(14)
+            .padding(Spacing.lg)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 124)
             .background(Aurora())
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
                     .strokeBorder(Ink.hairline, lineWidth: 1)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
             .scaleEffect(hovering && isActionable ? 1.01 : 1)
-            .animation(.snappy(duration: 0.2), value: hovering)
+            .animation(Motion.springy, value: hovering)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

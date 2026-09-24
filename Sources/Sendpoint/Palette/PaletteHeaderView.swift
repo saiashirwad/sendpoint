@@ -11,7 +11,7 @@ struct PaletteHeaderView: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Spacing.lg) {
             TextField("Search notes", text: $query)
                 .textFieldStyle(.plain)
                 .font(.ui(15))
@@ -22,9 +22,9 @@ struct PaletteHeaderView: View {
                 Text(matches)
                     .font(.mono(10.5, weight: .medium))
                     .tracking(1.2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Ink.tertiaryStyle)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.25), value: matches)
+                    .animation(Motion.springy, value: matches)
                     .accessibilityLabel(matches.lowercased())
             }
 
@@ -32,7 +32,7 @@ struct PaletteHeaderView: View {
                 onEvent(.selectStack($0))
             }
         }
-        .padding(.horizontal, PaletteMetrics.horizontalPadding)
+        .padding(.horizontal, Spacing.xl)
         .frame(height: 48)
     }
 

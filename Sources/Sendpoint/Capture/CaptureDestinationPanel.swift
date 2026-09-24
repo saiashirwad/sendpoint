@@ -56,12 +56,12 @@ struct CaptureDestinationButton: View {
         Button {
             model.send(.toggleDestinations(context))
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Spacing.sm) {
                 Text(name)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.symbol(8, weight: .semibold))
                     .opacity(0.6)
             }
             .font(.ui(fontSize, weight: .medium))
@@ -81,8 +81,8 @@ enum CaptureDestinationPanelLayout {
     static let bodyWidth: CGFloat = 250
     static let rowHeight: CGFloat = 32
     static let maximumVisibleRows = 8
-    static let bodyVerticalPadding: CGFloat = 6
-    static let shadowPadding: CGFloat = 10
+    static let bodyVerticalPadding: CGFloat = Spacing.sm
+    static let shadowPadding: CGFloat = Spacing.md
     static let anchorGap: CGFloat = 8
 
     static func bodyHeight(rowCount: Int) -> CGFloat {
@@ -184,7 +184,7 @@ private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
                 defer: false
             )
             panel.isOpaque = false
-            panel.backgroundColor = .clear
+            panel.backgroundColor = Ink.nsClear
             panel.hasShadow = false
             panel.ignoresMouseEvents = false
             panel.becomesKeyOnlyIfNeeded = true
@@ -280,12 +280,12 @@ struct CaptureDestinationPanelSurface: View {
 
     var body: some View {
         CaptureDestinationList(rows: rows, selectedID: selectedID, onSelect: onSelect)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
                     .strokeBorder(Ink.rim(colorScheme), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.35 : 0.14), radius: 14, y: 6)
+            .shadow(color: Ink.black.opacity(colorScheme == .dark ? 0.35 : 0.14), radius: 14, y: 6)
         .padding(CaptureDestinationPanelLayout.shadowPadding)
         .frame(
             width: CaptureDestinationPanelLayout.panelSize(rowCount: rows.count).width,
@@ -339,9 +339,9 @@ private struct CaptureDestinationRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.symbol(10, weight: .semibold))
                     .frame(width: 12)
                     .opacity(selected ? 1 : 0)
                     .accessibilityHidden(true)
@@ -351,11 +351,11 @@ private struct CaptureDestinationRow: View {
                 Spacer(minLength: 8)
                 Text("\(row.noteCount)")
                     .font(.mono(11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Spacing.md)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(hovering ? Ink.hover : .clear)
+            .background(hovering ? Ink.hover : Ink.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

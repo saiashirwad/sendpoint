@@ -12,10 +12,10 @@ struct CaptureView: View {
     private var paperOpacity: Double { Double(model.transcriptionPreviewOpacity) / 100 }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.panel, style: .continuous)
         VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
             noteEditor
-            HStack(spacing: 10) {
+            HStack(spacing: Spacing.md) {
                 CaptureStackLabel(model: model, mode: .text, ink: palette.ink)
                 CaptureTether(text: tether, ink: palette.ink)
                 Spacer(minLength: 8)
@@ -32,7 +32,7 @@ struct CaptureView: View {
         .overlay(shape.strokeBorder(palette.rim, lineWidth: 0.5))
         .environment(\.colorScheme, .dark)
         .ignoresSafeArea()
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
+        .animation(Motion.springy, value: tether)
         .onAppear { focusRequest += 1 }
         .onChange(of: model.state.session?.context) { _, context in
             guard context != nil else { return }

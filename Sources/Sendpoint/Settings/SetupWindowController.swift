@@ -66,7 +66,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         )
         window.title = "Set Up Sendpoint"
         window.isOpaque = false
-        window.backgroundColor = .clear
+        window.backgroundColor = Ink.nsClear
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false

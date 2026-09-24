@@ -21,7 +21,7 @@ struct SettingsTemplatesPane: View {
                     chips
                 }
             }
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
                 SettingsSection("Name") {
                     HStack(alignment: .center, spacing: 0) {
                         TextField("Template name", text: Binding(
@@ -30,12 +30,12 @@ struct SettingsTemplatesPane: View {
                         ))
                             .textFieldStyle(.plain)
                             .font(.ui(14, weight: .medium))
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, Spacing.md)
                             .frame(maxWidth: .infinity)
                             .frame(height: 34)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
+                            .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(Ink.fill))
                             .accessibilityLabel("Template name")
-                            .padding(.trailing, 6)
+                            .padding(.trailing, Spacing.sm)
                         if editor.isDirty {
                             GlyphButton(label: "Save", isProminent: true, action: save) { FloppyGlyph() }
                                 .keyboardShortcut("s", modifiers: .command)
@@ -49,9 +49,9 @@ struct SettingsTemplatesPane: View {
                             .disabled(!editor.canDelete)
                             .help(editor.canDelete ? "Delete this template" : "The last template cannot be deleted")
                     }
-                    .padding(.top, 10)
-                    .padding(.trailing, -8)
-                    .animation(.easeOut(duration: 0.15), value: editor.isDirty)
+                    .padding(.top, Spacing.md)
+                    .padding(.trailing, -Spacing.sm)
+                    .animation(Motion.quick, value: editor.isDirty)
                 }
                 SettingsSection("Prompt") {
                     TextField(
@@ -66,9 +66,9 @@ struct SettingsTemplatesPane: View {
                     .font(.ui(13.5))
                     .lineSpacing(4)
                     .lineLimit(4...14)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
-                    .padding(.top, 10)
+                    .padding(Spacing.md)
+                    .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(Ink.fill))
+                    .padding(.top, Spacing.md)
                     .accessibilityLabel("Prompt")
                 }
             }
@@ -97,7 +97,7 @@ struct SettingsTemplatesPane: View {
     }
 
     private var chips: some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: Spacing.sm) {
             ForEach(editor.templates) { template in
                 let isEdited = template.id == editor.editedTemplateID
                 Chip(

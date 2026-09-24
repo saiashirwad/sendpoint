@@ -20,7 +20,7 @@ struct CaptureStackLabel: View {
             Text("\(stack.noteCount)")
                 .font(.mono(11))
                 .foregroundStyle(ink.opacity(0.5))
-                .padding(.leading, -4)
+                .padding(.leading, -Spacing.xs)
         }
     }
 }

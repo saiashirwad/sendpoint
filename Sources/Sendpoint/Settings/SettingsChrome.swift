@@ -5,10 +5,7 @@ import SwiftUI
 
 nonisolated enum SettingsMetrics {
     static let rowHeight: CGFloat = 44
-    static let sectionSpacing: CGFloat = 28
-    static let labelSpacing: CGFloat = 3
     static let contentMaxWidth: CGFloat = 640
-    static let pageInset: CGFloat = 40
 }
 
 struct SettingsLabel: View {
@@ -21,7 +18,7 @@ struct SettingsLabel: View {
             .font(.mono(10.5, weight: .medium))
             .tracking(1.4)
             .textCase(.uppercase)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Ink.tertiaryStyle)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -36,7 +33,7 @@ struct Readout: View {
             .font(.mono(11.5, weight: .medium))
             .tracking(2.2)
             .textCase(.uppercase)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Ink.secondaryStyle)
             .multilineTextAlignment(.center)
     }
 }
@@ -53,7 +50,7 @@ struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SettingsMetrics.labelSpacing) {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
             SettingsLabel(label)
             VStack(spacing: 0) {
                 content()
@@ -73,7 +70,7 @@ struct SettingsFootnote: View {
     var body: some View {
         Text(text)
             .font(.ui(12.5))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Ink.secondaryStyle)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -97,29 +94,29 @@ struct SettingsRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
                     Text(title)
                         .font(.ui(14, weight: .medium))
                     if let hint {
                         Text(hint)
                             .font(.ui(13))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Ink.secondaryStyle)
                             .lineLimit(1)
                     }
                 }
                 if let detail {
                     Text(detail)
                         .font(.ui(12.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.secondaryStyle)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 12)
             trailing()
         }
-        .padding(.vertical, detail == nil ? 0 : 6)
+        .padding(.vertical, detail == nil ? 0 : Spacing.sm)
         .frame(minHeight: SettingsMetrics.rowHeight)
     }
 }
@@ -134,15 +131,15 @@ struct SettingsStackedRow<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             if let title {
                 Text(title)
                     .font(.ui(14, weight: .medium))
             }
             content()
         }
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.top, Spacing.md)
+        .padding(.bottom, Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -199,7 +196,7 @@ struct SettingsStepperRow: View {
 
     var body: some View {
         SettingsRow(title) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 StepperGlyphButton("minus", enabled: canDecrement, action: decrement)
                 Text(valueText)
                     .font(.mono(12, weight: .medium))
@@ -240,10 +237,10 @@ private struct StepperGlyphButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(enabled ? (hovering ? Color.primary : Color.secondary) : Color.secondary.opacity(0.35))
+                .font(.symbol(10, weight: .semibold))
+                .foregroundStyle(enabled ? (hovering ? Ink.primary : Ink.secondary) : Ink.secondary.opacity(0.35))
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(Color.primary.opacity(hovering && enabled ? 0.09 : 0.055)))
+                .background(Circle().fill(Ink.primary.opacity(hovering && enabled ? 0.09 : 0.055)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -277,19 +274,19 @@ struct NamePopover: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             Text(prompt)
                 .font(.uiCaption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.secondaryStyle)
             TextField(placeholder, text: $name)
                 .textFieldStyle(.plain)
                 .font(.ui(13))
-                .padding(.horizontal, 10)
+                .padding(.horizontal, Spacing.md)
                 .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Ink.fill))
+                .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(Ink.fill))
                 .focused($focused)
                 .onSubmit(onCommit)
-            HStack(spacing: 6) {
+            HStack(spacing: Spacing.sm) {
                 if let problem {
                     Text(problem)
                         .font(.uiCaption)
@@ -298,11 +295,11 @@ struct NamePopover: View {
                     Keycap("↩", size: 10)
                     Text("Create")
                         .font(.uiCaption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Ink.tertiaryStyle)
                 }
             }
         }
-        .padding(14)
+        .padding(Spacing.lg)
         .frame(width: 250)
         .font(.uiBody)
         .onAppear {
@@ -317,13 +314,13 @@ struct SettingsPage<Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: SettingsMetrics.sectionSpacing) {
+                VStack(alignment: .leading, spacing: Spacing.xl) {
                     content()
                 }
                 .frame(maxWidth: SettingsMetrics.contentMaxWidth, alignment: .topLeading)
-                .padding(.horizontal, SettingsMetrics.pageInset)
-                .padding(.top, 52)
-                .padding(.bottom, SettingsMetrics.pageInset)
+                .padding(.horizontal, Spacing.xxl)
+                .padding(.top, Spacing.xxl)
+                .padding(.bottom, Spacing.xxl)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .id(Anchor.top)
             }
@@ -354,5 +351,5 @@ struct SettingsPage<Content: View>: View {
         }
     }
     .frame(width: 480)
-    .padding()
+    .padding(Spacing.lg)
 }

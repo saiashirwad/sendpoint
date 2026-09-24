@@ -199,7 +199,7 @@ final class CaptureWindows {
         panel.animationBehavior = .utilityWindow
 
         panel.isOpaque = false
-        panel.backgroundColor = .clear
+        panel.backgroundColor = Ink.nsClear
         panel.contentView = contentView
         return panel
     }
@@ -250,7 +250,7 @@ final class CaptureWindows {
             defer: false
         )
         panel.isOpaque = false
-        panel.backgroundColor = .clear
+        panel.backgroundColor = Ink.nsClear
         panel.hasShadow = false
         panel.isMovableByWindowBackground = false
         panel.ignoresMouseEvents = false

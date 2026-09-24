@@ -16,13 +16,13 @@ final class StackReadoutModel {
 struct StackReadoutView: View {
     let model: StackReadoutModel
 
-    static let margin: CGFloat = 16
+    static let margin: CGFloat = Spacing.lg
     static let height: CGFloat = 56
 
     var body: some View {
         let palette = OverlayPalette.dark
         let facts = StackUIFacts(store: model.store)
-        HStack(spacing: 24) {
+        HStack(spacing: Spacing.xl) {
             if let stack = facts.stack(number: model.number) {
                 StackReadoutLabel(stack: stack, numeralSize: 26, detailSize: 13)
             }
@@ -32,10 +32,10 @@ struct StackReadoutView: View {
             }, size: 12, accent: palette.accent)
         }
         .fixedSize()
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Spacing.xl)
         .frame(height: Self.height)
         .foregroundStyle(palette.ink)
-        .background(palette.paper, in: RoundedRectangle(cornerRadius: Ink.cornerRadius, style: .continuous))
+        .background(palette.paper, in: RoundedRectangle(cornerRadius: Radius.panel, style: .continuous))
         .environment(\.colorScheme, .dark)
         .padding(Self.margin)
     }
@@ -59,7 +59,7 @@ final class StackReadoutController {
             defer: false
         )
         panel.isOpaque = false
-        panel.backgroundColor = .clear
+        panel.backgroundColor = Ink.nsClear
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.level = .floating

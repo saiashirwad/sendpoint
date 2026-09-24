@@ -107,7 +107,7 @@ struct MicrophoneRows: View {
     private static let rowHeight: CGFloat = 40
     private static let gripWidth: CGFloat = 14
 
-    @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.2))) private var drag: Drag?
+    @GestureState(resetTransaction: Transaction(animation: Motion.springy)) private var drag: Drag?
     @State private var showsTucked = false
     @Environment(\.colorScheme) private var scheme
 
@@ -131,18 +131,18 @@ struct MicrophoneRows: View {
 
     private var tuckedDisclosure: some View {
         Button {
-            withAnimation(.snappy(duration: 0.2)) { showsTucked.toggle() }
+            withAnimation(Motion.springy) { showsTucked.toggle() }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Spacing.md) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.symbol(9, weight: .semibold))
                     .rotationEffect(.degrees(showsTucked ? 90 : 0))
                     .frame(width: Self.gripWidth)
                 Text(MicrophoneListFacts.tuckedLabel(count: tucked.count))
                     .font(.ui(13))
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Ink.secondaryStyle)
             .frame(height: Self.rowHeight)
             .contentShape(Rectangle())
         }
@@ -157,15 +157,15 @@ struct MicrophoneRows: View {
                 rowView(row, isRanked: true)
                     .frame(height: Self.rowHeight)
                     .background {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                             .fill(Ink.raised(scheme))
-                            .shadow(color: .black.opacity(0.14), radius: 8, y: 3)
-                            .padding(.horizontal, -10)
+                            .shadow(color: Ink.black.opacity(0.14), radius: 8, y: 3)
+                            .padding(.horizontal, -Spacing.md)
                             .opacity(isDragged ? 1 : 0)
                     }
                     .offset(y: offset(at: index))
                     .zIndex(isDragged ? 1 : 0)
-                    .animation(isDragged ? nil : .snappy(duration: 0.2), value: target)
+                    .animation(isDragged ? nil : Motion.springy, value: target)
                     .contentShape(Rectangle())
                     .gesture(reorder(row, from: index))
                     .accessibilityElement(children: .combine)
@@ -212,19 +212,19 @@ struct MicrophoneRows: View {
                     rowHeight: Self.rowHeight, count: rows.count
                 )
                 guard destination != index else { return }
-                withAnimation(.snappy(duration: 0.2)) { onMove(row.id, destination) }
+                withAnimation(Motion.springy) { onMove(row.id, destination) }
             }
     }
 
     private func rowView(_ row: MicrophoneListFacts.Row, isRanked: Bool) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: Spacing.md) {
             Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .font(.symbol(11, weight: .medium))
+                .foregroundStyle(Ink.tertiaryStyle)
                 .frame(width: Self.gripWidth)
                 .opacity(isRanked ? 1 : 0)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text(row.name)
                     .font(.ui(14, weight: .medium))
                     .lineLimit(1)
@@ -236,18 +236,18 @@ struct MicrophoneRows: View {
             }
             Spacer(minLength: 12)
             if let status = row.status {
-                HStack(spacing: 6) {
+                HStack(spacing: Spacing.sm) {
                     if row.isActive {
                         Circle().fill(Ink.accent(scheme)).frame(width: 6, height: 6)
                     }
                     Text(status)
                         .font(.ui(12.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Ink.secondaryStyle)
                 }
             }
             if !row.isConnected {
                 QuietButton("Forget") {
-                    withAnimation(.snappy(duration: 0.2)) { onForget(row.id) }
+                    withAnimation(Motion.springy) { onForget(row.id) }
                 }
             }
             Toggle(row.name, isOn: Binding(get: { row.isEnabled }, set: { onToggle(row.id, $0) }))
@@ -264,11 +264,11 @@ struct InputLevelBar: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.08))
+                Capsule().fill(Ink.primary.opacity(0.08))
                 Capsule()
-                    .fill(Color.primary.opacity(0.75))
+                    .fill(Ink.primary.opacity(0.75))
                     .frame(width: max(0, proxy.size.width * CGFloat(isActive ? min(max(level, 0), 1) : 0)))
-                    .animation(.linear(duration: 0.06), value: level)
+                    .animation(Motion.quick, value: level)
             }
         }
         .frame(height: 3)

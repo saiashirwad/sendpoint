@@ -47,7 +47,7 @@ final class KeyRecorderView: NSView {
 
     private static let height: CGFloat = 28
     private static let minimumWidth: CGFloat = 64
-    private static let sidePadding: CGFloat = 11
+    private static let sidePadding: CGFloat = Spacing.md
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -140,9 +140,9 @@ final class KeyRecorderView: NSView {
 
     private var attributes: [NSAttributedString.Key: Any] {
         let color: NSColor = switch look {
-        case .recording: .secondaryLabelColor
-        case .set: NSColor.labelColor.withAlphaComponent(0.85)
-        case .unset: .tertiaryLabelColor
+        case .recording: Ink.nsSecondaryLabel
+        case .set: Ink.nsLabel.withAlphaComponent(0.85)
+        case .unset: Ink.nsTertiaryLabel
         }
         return [
             .font: NSFont.ui(13, weight: look == .unset ? .regular : .medium),
@@ -156,7 +156,7 @@ final class KeyRecorderView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius: CGFloat = 7
+        let radius = Radius.chip
         let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
         let cap = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
@@ -165,7 +165,7 @@ final class KeyRecorderView: NSView {
             if !effectiveAppearance.isDark {
                 NSGraphicsContext.saveGraphicsState()
                 let shadow = NSShadow()
-                shadow.shadowColor = NSColor.black.withAlphaComponent(0.05)
+                shadow.shadowColor = Ink.nsBlack.withAlphaComponent(0.05)
                 shadow.shadowOffset = NSSize(width: 0, height: -1)
                 shadow.shadowBlurRadius = 1.5
                 shadow.set()
@@ -176,11 +176,11 @@ final class KeyRecorderView: NSView {
                 Ink.nsRaised.setFill()
                 cap.fill()
             }
-            (hovering ? NSColor.labelColor.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
+            (hovering ? Ink.nsLabel.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
             cap.lineWidth = 1
             cap.stroke()
         case .unset:
-            (hovering ? NSColor.labelColor.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
+            (hovering ? Ink.nsLabel.withAlphaComponent(0.18) : Ink.nsHairline).setStroke()
             cap.lineWidth = 1
             cap.stroke()
         case .recording:

@@ -32,18 +32,18 @@ struct Keycap: View {
         Text(text)
             .font(.mono(size, weight: .medium))
             .tracking(size * 0.06)
-            .foregroundStyle(isMuted ? Color.secondary : Color.primary.opacity(0.8))
-            .padding(.horizontal, size * 0.8)
+            .foregroundStyle(isMuted ? Ink.secondary : Ink.primary.opacity(0.8))
+            .padding(.horizontal, Spacing.sm)
             .frame(height: size * 2.2)
             .background(
-                RoundedRectangle(cornerRadius: size * 0.5, style: .continuous)
-                    .fill(isMuted ? Color.clear : Ink.raised(scheme))
+                RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                    .fill(isMuted ? Ink.clear : Ink.raised(scheme))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: size * 0.5, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
                     .strokeBorder(Ink.hairline, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(scheme == .dark || isMuted ? 0 : 0.04), radius: 1, y: 1)
+            .shadow(color: Ink.black.opacity(scheme == .dark || isMuted ? 0 : 0.04), radius: 1, y: 1)
     }
 }
 
@@ -61,7 +61,7 @@ struct QuietButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: Spacing.sm) {
                 Text(title)
                     .font(.ui(12.5, weight: .medium))
                     .lineLimit(1)
@@ -72,13 +72,13 @@ struct QuietButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(hovering ? Color.primary : Color.secondary)
+        .foregroundStyle(hovering ? Ink.primary : Ink.secondary)
         .onHover { hovering = $0 }
     }
 }
 
 struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
+    var spacing: CGFloat = Spacing.sm
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
@@ -132,7 +132,7 @@ struct InkButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 Text(title)
                     .font(.ui(12.5, weight: .medium))
                 if let keys {
@@ -141,10 +141,10 @@ struct InkButton: View {
                         .opacity(0.55)
                 }
             }
-            .foregroundStyle(isEnabled ? AnyShapeStyle(Ink.paper(scheme)) : AnyShapeStyle(.primary))
-            .padding(.horizontal, 12)
+            .foregroundStyle(isEnabled ? AnyShapeStyle(Ink.paper(scheme)) : AnyShapeStyle(Ink.primaryStyle))
+            .padding(.horizontal, Spacing.md)
             .frame(height: 28)
-            .background(Capsule().fill(isEnabled ? Color.primary : Color.primary.opacity(0.12)))
+            .background(Capsule().fill(isEnabled ? Ink.primary : Ink.primary.opacity(0.12)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -167,12 +167,12 @@ struct PillButton: View {
         Button(action: action) {
             Text(title)
                 .font(.ui(12, weight: .medium))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, Spacing.md)
                 .frame(height: 28)
-                .foregroundStyle(.primary)
-                .background(Capsule().fill(hovering && isEnabled ? Ink.raised(scheme) : .clear))
+                .foregroundStyle(Ink.primaryStyle)
+                .background(Capsule().fill(hovering && isEnabled ? Ink.raised(scheme) : Ink.clear))
                 .overlay(Capsule().strokeBorder(
-                    Color.primary.opacity(hovering && isEnabled ? 0.22 : 0.14), lineWidth: 1))
+                    Ink.primary.opacity(hovering && isEnabled ? 0.22 : 0.14), lineWidth: 1))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -191,8 +191,8 @@ struct GlyphButton<Glyph: View>: View {
     var body: some View {
         Button(action: action) {
             glyph()
-                .font(.system(size: 16, weight: .regular))
-                .foregroundStyle(isProminent || hovering ? Color.primary : Color.secondary)
+                .font(.symbol(16, weight: .regular))
+                .foregroundStyle(isProminent || hovering ? Ink.primary : Ink.secondary)
                 .opacity(isEnabled ? 1 : 0.35)
                 .frame(width: 34, height: 34)
                 .contentShape(Rectangle())
@@ -253,7 +253,7 @@ struct Chip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: Spacing.sm) {
                 Text(title)
                     .font(.ui(13, weight: .medium))
                     .lineLimit(1)
@@ -263,10 +263,10 @@ struct Chip: View {
                         .frame(width: 5, height: 5)
                 }
             }
-            .foregroundStyle(isSelected ? Ink.paper(scheme) : Color.primary)
-            .padding(.horizontal, 12)
+            .foregroundStyle(isSelected ? Ink.paper(scheme) : Ink.primary)
+            .padding(.horizontal, Spacing.md)
             .frame(height: 28)
-            .background(Capsule().fill(isSelected ? Color.primary : Color.primary.opacity(hovering ? 0.09 : 0.055)))
+            .background(Capsule().fill(isSelected ? Ink.primary : Ink.primary.opacity(hovering ? 0.09 : 0.055)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -283,10 +283,10 @@ struct AddChip: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "plus")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hovering ? Color.primary : Color.secondary)
+                .font(.symbol(11, weight: .semibold))
+                .foregroundStyle(hovering ? Ink.primary : Ink.secondary)
                 .frame(width: 28, height: 28)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(hovering ? 0.24 : 0.14), lineWidth: 1))
+                .overlay(Circle().strokeBorder(Ink.primary.opacity(hovering ? 0.24 : 0.14), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -301,7 +301,7 @@ struct ChoiceChips<Value: Hashable>: View {
     let title: (Value) -> String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Spacing.sm) {
             ForEach(values, id: \.self) { value in
                 Chip(title: title(value), isSelected: value == selection) {
                     selection = value
@@ -314,7 +314,7 @@ struct ChoiceChips<Value: Hashable>: View {
 struct InkToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button {
-            withAnimation(.snappy(duration: 0.2)) {
+            withAnimation(Motion.springy) {
                 configuration.isOn.toggle()
             }
         } label: {
@@ -330,39 +330,39 @@ private struct SwitchTrack: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             if isOn { Spacer(minLength: 0) }
             Circle()
                 .fill(isOn ? Ink.paper(scheme) : Ink.raised(scheme))
-                .overlay(Circle().strokeBorder(Color.primary.opacity(isOn ? 0 : 0.10), lineWidth: 0.75))
+                .overlay(Circle().strokeBorder(Ink.primary.opacity(isOn ? 0 : 0.10), lineWidth: 0.75))
                 .frame(width: 14, height: 14)
             if !isOn { Spacer(minLength: 0) }
         }
-        .padding(2)
+        .padding(2) // Knob travel inset is drawing geometry, not layout spacing.
         .frame(width: 32, height: 18)
-        .background(Capsule().fill(isOn ? Color.primary.opacity(0.9) : Color.primary.opacity(0.08)))
-        .overlay(Capsule().strokeBorder(Color.primary.opacity(isOn ? 0 : 0.10), lineWidth: 1))
+        .background(Capsule().fill(isOn ? Ink.primary.opacity(0.9) : Ink.primary.opacity(0.08)))
+        .overlay(Capsule().strokeBorder(Ink.primary.opacity(isOn ? 0 : 0.10), lineWidth: 1))
         .contentShape(Capsule())
-        .animation(.snappy(duration: 0.2), value: isOn)
+        .animation(Motion.springy, value: isOn)
     }
 }
 
 // MARK: - Previews
 
 #Preview("Chip") {
-    HStack(spacing: 8) {
+    HStack(spacing: Spacing.sm) {
         Chip(title: "Reading", isSelected: true) {}
         Chip(title: "Writing", isSelected: false) {}
         Chip(title: "Draft", isSelected: false, isDirty: true) {}
     }
-    .padding()
+    .padding(Spacing.lg)
 }
 
 #Preview("Keycap") {
-    HStack(spacing: 8) {
+    HStack(spacing: Spacing.sm) {
         Keycap("⌘K")
         Keycap("esc", isMuted: true)
         Keycap("↩", size: 10)
     }
-    .padding()
+    .padding(Spacing.lg)
 }

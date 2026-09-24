@@ -136,10 +136,10 @@ struct CapabilityAccessory: View {
 
     var body: some View {
         if case let .working(label, fraction) = status {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.sm) {
                 Text(label)
                     .font(.mono(11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Ink.secondaryStyle)
                 CapabilityProgress(fraction: fraction)
                     .frame(width: 56)
             }
@@ -150,7 +150,7 @@ struct CapabilityAccessory: View {
         } else {
             Text(status.title)
                 .font(.uiCaption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.secondaryStyle)
         }
     }
 }
@@ -163,22 +163,21 @@ struct ReadyMark: View {
         static let size: CGFloat = 16
         static let check: CGFloat = 8
         static let fromScale: CGFloat = 0.58
-        static let spring = Animation.spring(duration: 0.36, bounce: 0.30)
     }
 
     var body: some View {
         ZStack {
             Circle().fill(ink)
             Image(systemName: "checkmark")
-                .font(.system(size: Metrics.check, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.symbol(Metrics.check, weight: .bold, design: .rounded))
+                .foregroundStyle(Ink.white)
                 .offset(y: 0.4)
         }
         .frame(width: Metrics.size, height: Metrics.size)
         .scaleEffect(appeared ? 1 : Metrics.fromScale)
         .opacity(appeared ? 1 : 0)
         .onAppear {
-            withAnimation(Metrics.spring) { appeared = true }
+            withAnimation(Motion.springy) { appeared = true }
         }
         .accessibilityHidden(true)
     }
@@ -195,11 +194,11 @@ struct CapabilityProgress: View {
         if let fraction {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule().fill(Ink.primary.opacity(0.08))
                     Capsule()
-                        .fill(Color.primary.opacity(0.85))
+                        .fill(Ink.primary.opacity(0.85))
                         .frame(width: max(6, geo.size.width * min(1, max(0, fraction))))
-                        .animation(.linear(duration: 0.2), value: fraction)
+                        .animation(Motion.quick, value: fraction)
                 }
             }
             .frame(height: 4)
