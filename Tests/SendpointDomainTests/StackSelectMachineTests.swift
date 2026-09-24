@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 final class StackSelectMachineTests: XCTestCase {
     private let stacks = (0..<5).map { _ in UUID() }

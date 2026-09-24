@@ -1,5 +1,6 @@
+import Foundation
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 final class VoiceMachineTests: XCTestCase {
     private let take = UUID()

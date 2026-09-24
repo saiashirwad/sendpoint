@@ -1,7 +1,6 @@
-import SendpointDomain
 import Foundation
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 final class PaletteActionsTests: XCTestCase {
     private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!

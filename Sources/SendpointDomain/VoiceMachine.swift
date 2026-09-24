@@ -1,13 +1,13 @@
 import Foundation
 
-nonisolated enum VoiceOutput: Equatable, Sendable {
+public nonisolated enum VoiceOutput: Equatable, Sendable {
     case started(UUID)
     case partial(UUID, String)
     case transcript(UUID, String)
     case failed(UUID, String)
 }
 
-nonisolated enum VoiceEvent: Equatable, Sendable {
+public nonisolated enum VoiceEvent: Equatable, Sendable {
     case warmUp
     case start(UUID, modelReady: Bool)
     case stop(UUID, now: Date)
@@ -20,7 +20,7 @@ nonisolated enum VoiceEvent: Equatable, Sendable {
     case settled
 }
 
-nonisolated enum VoiceEffect: Equatable, Sendable {
+public nonisolated enum VoiceEffect: Equatable, Sendable {
     case prepare
     case startMic(UUID)
     case stopMic
@@ -30,8 +30,8 @@ nonisolated enum VoiceEffect: Equatable, Sendable {
     case emit(VoiceOutput)
 }
 
-nonisolated struct VoiceMachine: Equatable, Sendable {
-    enum Phase: Equatable, Sendable {
+public nonisolated struct VoiceMachine: Equatable, Sendable {
+    public enum Phase: Equatable, Sendable {
         case idle
         case starting(UUID)
         case recording(UUID, since: Date)
@@ -41,18 +41,20 @@ nonisolated struct VoiceMachine: Equatable, Sendable {
     }
 
     static let minimumClipDuration: TimeInterval = 0.3
-    static let modelMissing = "Voice model is missing. Download it in Settings › Voice."
+    public static let modelMissing = "Voice model is missing. Download it in Settings › Voice."
 
-    private(set) var phase = Phase.idle
+    public private(set) var phase = Phase.idle
 
-    var take: UUID? {
+    public init() {}
+
+    public var take: UUID? {
         switch phase {
         case let .starting(take), let .recording(take, _), let .transcribing(take): take
         case .idle, .settling, .tornDown: nil
         }
     }
 
-    mutating func update(_ event: VoiceEvent) -> [VoiceEffect] {
+    public mutating func update(_ event: VoiceEvent) -> [VoiceEffect] {
         guard phase != .tornDown else { return [] }
         switch event {
         case .teardown:

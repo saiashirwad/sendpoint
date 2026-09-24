@@ -1,3 +1,4 @@
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 

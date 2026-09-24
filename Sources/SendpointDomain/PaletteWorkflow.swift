@@ -1,19 +1,24 @@
 import Foundation
-import SendpointDomain
 
-enum PaletteField: Hashable {
+public enum PaletteField: Hashable {
     case search, note(UUID), overlay
 }
 
-struct PaletteEdit: Equatable {
-    let stackID: UUID
-    let noteID: UUID
-    var text: String
+public struct PaletteEdit: Equatable {
+    public let stackID: UUID
+    public let noteID: UUID
+    public var text: String
+
+    public init(stackID: UUID, noteID: UUID, text: String) {
+        self.stackID = stackID
+        self.noteID = noteID
+        self.text = text
+    }
 }
 
-enum PaletteOverlay { case actions, templates }
+public enum PaletteOverlay { case actions, templates }
 
-enum PaletteEvent {
+public enum PaletteEvent {
     case open, close, teardown, documentChanged
     case query(String), chooseNote(UUID)
     case selectStack(Int)
@@ -25,14 +30,14 @@ enum PaletteEvent {
     case retry
 }
 
-struct PalettePending {
+public struct PalettePending {
     let id: UUID
     let stackID: UUID
     let draft: PaletteEdit?
     var continuation: PaletteEvent?
 }
 
-enum PaletteInteraction {
+public enum PaletteInteraction {
     case browsing
     case editing(PaletteEdit)
     case overlay(PaletteOverlay)
@@ -40,31 +45,33 @@ enum PaletteInteraction {
     case failed(PalettePending, String, retryable: Bool)
 }
 
-struct PaletteWorkflow {
-    enum Lifecycle { case closed, open, tornDown }
-    var lifecycle: Lifecycle = .closed
-    var query = ""
-    var shownStackID: UUID?
-    var noteState = NoteHighlightState()
-    var interaction: PaletteInteraction = .browsing
-    var overlayQuery = ""
-    var overlayHighlight = 0
-    var focusRequest: (field: PaletteField, generation: Int) = (.search, 0)
-    var flash: (text: String, generation: Int)?
+public struct PaletteWorkflow {
+    public enum Lifecycle { case closed, open, tornDown }
+    public var lifecycle: Lifecycle = .closed
+    public var query = ""
+    public var shownStackID: UUID?
+    public var noteState = NoteHighlightState()
+    public var interaction: PaletteInteraction = .browsing
+    public var overlayQuery = ""
+    public var overlayHighlight = 0
+    public var focusRequest: (field: PaletteField, generation: Int) = (.search, 0)
+    public var flash: (text: String, generation: Int)?
     var nextFlash = 0
 
-    var inlineEdit: PaletteEdit? {
+    public init() {}
+
+    public var inlineEdit: PaletteEdit? {
         switch interaction {
         case let .editing(edit): return edit
         case let .saving(pending), let .failed(pending, _, _): return pending.draft
         default: return nil
         }
     }
-    var overlay: PaletteOverlay? {
+    public var overlay: PaletteOverlay? {
         if case let .overlay(overlay) = interaction { return overlay }
         return nil
     }
-    var isBusy: Bool {
+    public var isBusy: Bool {
         switch interaction {
         case .saving, .failed: return true
         default: return false
@@ -79,16 +86,32 @@ struct PaletteWorkflow {
     }
 }
 
-struct PaletteContext {
-    let stacks: [Stack]
-    let currentStackID: UUID
-    let lastCleared: ClearedBatch?
-    let templates: [Template]
-    let activeTemplate: Template
-    var moveShortcuts: [Int: String] = [:]
+public struct PaletteContext {
+    public let stacks: [Stack]
+    public let currentStackID: UUID
+    public let lastCleared: ClearedBatch?
+    public let templates: [Template]
+    public let activeTemplate: Template
+    public var moveShortcuts: [Int: String]
+
+    public init(
+        stacks: [Stack],
+        currentStackID: UUID,
+        lastCleared: ClearedBatch?,
+        templates: [Template],
+        activeTemplate: Template,
+        moveShortcuts: [Int: String] = [:]
+    ) {
+        self.stacks = stacks
+        self.currentStackID = currentStackID
+        self.lastCleared = lastCleared
+        self.templates = templates
+        self.activeTemplate = activeTemplate
+        self.moveShortcuts = moveShortcuts
+    }
 }
 
-enum PaletteEffect {
+public enum PaletteEffect {
     case mutate(UUID, StackDocumentMutation)
     case retry
     case copyStack(UUID)
@@ -99,37 +122,43 @@ enum PaletteEffect {
     case beep
 }
 
-struct PaletteProjection {
+public struct PaletteProjection {
     let state: PaletteWorkflow
-    let context: PaletteContext
+    public let context: PaletteContext
+
+    public init(state: PaletteWorkflow, context: PaletteContext) {
+        self.state = state
+        self.context = context
+    }
+
     // MARK: - Derived
 
-    var facts: StackUIFacts {
+    public var facts: StackUIFacts {
         StackUIFacts(stacks: context.stacks, currentStackID: context.currentStackID,
             lastCleared: context.lastCleared)
     }
 
-    var shownStack: Stack? {
+    public var shownStack: Stack? {
         context.stacks.stack(id: context.currentStackID)
     }
 
-    var undo: StackUndoFacts? {
+    public var undo: StackUndoFacts? {
         facts.undo.flatMap { $0.isCurrentStack ? $0 : nil }
     }
 
-    var showsUndoInFooter: Bool {
+    public var showsUndoInFooter: Bool {
         undo != nil && shownStack?.notes.isEmpty == false
     }
 
-    var noteListing: NoteListing {
+    public var noteListing: NoteListing {
         NoteListing(notes: shownStack?.notes ?? [], query: state.query)
     }
 
-    var highlightedNoteID: UUID? { state.noteState.highlight }
+    public var highlightedNoteID: UUID? { state.noteState.highlight }
 
-    var activeTemplate: Template { context.activeTemplate }
+    public var activeTemplate: Template { context.activeTemplate }
 
-    var problem: String? {
+    public var problem: String? {
         guard case let .failed(pending, message, _) = state.interaction else { return nil }
         guard pending.stackID != context.currentStackID,
               let number = context.stacks.number(of: pending.stackID) else { return message }
@@ -156,29 +185,35 @@ struct PaletteProjection {
         )
     }
 
-    var actionItems: [PaletteActionItem] {
+    public var actionItems: [PaletteActionItem] {
         PaletteActionCatalog.items(for: actionContext)
     }
 
-    var filteredActionItems: [PaletteActionItem] {
+    public var filteredActionItems: [PaletteActionItem] {
         PaletteActionCatalog.menu(actionItems, query: state.overlayQuery)
     }
 
-    var filteredTemplates: [Template] {
+    public var filteredTemplates: [Template] {
         context.templates.matching(state.overlayQuery, text: \.name)
     }
 
 }
 
-struct PaletteUpdate {
-    var state: PaletteWorkflow
+public struct PaletteUpdate {
+    public private(set) var state: PaletteWorkflow
     let context: PaletteContext
     let operationID: UUID
-    private(set) var effects: [PaletteEffect] = []
+    public private(set) var effects: [PaletteEffect] = []
     private var view: PaletteProjection { PaletteProjection(state: state, context: context) }
 
+    public init(state: PaletteWorkflow, context: PaletteContext, operationID: UUID) {
+        self.state = state
+        self.context = context
+        self.operationID = operationID
+    }
+
     @discardableResult
-    mutating func update(_ event: PaletteEvent) -> Bool {
+    public mutating func update(_ event: PaletteEvent) -> Bool {
         guard state.lifecycle != .tornDown else { return true }
         switch event {
         case .teardown:

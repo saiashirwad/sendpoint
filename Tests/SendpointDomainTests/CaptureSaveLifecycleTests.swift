@@ -1,7 +1,6 @@
-import SendpointDomain
 import Foundation
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 final class CaptureSaveLifecycleTests: XCTestCase {
     private let context = NoteCaptureContext(

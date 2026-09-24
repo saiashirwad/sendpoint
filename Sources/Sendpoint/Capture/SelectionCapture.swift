@@ -3,11 +3,6 @@ import ApplicationServices
 import Carbon.HIToolbox
 import SendpointDomain
 
-nonisolated struct CapturedSelection: Equatable {
-    var text: String
-    var screenRect: CGRect?
-}
-
 struct SelectionCapture {
     var read: (FallbackPolicy, _ editorMayOpen: @escaping @MainActor @Sendable () -> Void) async throws -> CapturedSelection
     var paste: (_ processIdentifier: pid_t, _ expectedRevision: Int) async throws -> Bool

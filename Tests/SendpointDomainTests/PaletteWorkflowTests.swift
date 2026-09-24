@@ -1,7 +1,6 @@
-import SendpointDomain
 import Foundation
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 @MainActor
 final class PaletteWorkflowTests: XCTestCase {

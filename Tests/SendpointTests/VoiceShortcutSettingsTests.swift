@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SendpointDomain
 import XCTest
 @testable import Sendpoint
 

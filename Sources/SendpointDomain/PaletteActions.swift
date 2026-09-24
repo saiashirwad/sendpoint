@@ -1,14 +1,15 @@
 import Foundation
-import SendpointDomain
 
-nonisolated struct NoteHighlightState: Equatable {
-    private(set) var highlight: UUID?
+public nonisolated struct NoteHighlightState: Equatable {
+    public private(set) var highlight: UUID?
+
+    public init() {}
 
     mutating func select(_ id: UUID?) {
         highlight = id
     }
 
-    mutating func move(by offset: Int, in ids: [UUID]) {
+    public mutating func move(by offset: Int, in ids: [UUID]) {
         guard !ids.isEmpty else { return }
         guard let highlight, let index = ids.firstIndex(of: highlight) else {
             self.highlight = offset < 0 ? ids[ids.count - 1] : ids[0]
@@ -17,13 +18,13 @@ nonisolated struct NoteHighlightState: Equatable {
         self.highlight = ids[wrappedIndex(index, by: offset, count: ids.count)]
     }
 
-    mutating func confine(to ids: [UUID]) {
+    public mutating func confine(to ids: [UUID]) {
         if let highlight, ids.contains(highlight) { return }
         highlight = ids.first
     }
 }
 
-nonisolated enum PaletteAction: Hashable {
+public nonisolated enum PaletteAction: Hashable {
     case clearStack
     case undoClear
     case copyStack
@@ -36,12 +37,12 @@ nonisolated enum PaletteAction: Hashable {
     case moveNoteToStack(UUID, Int)
 }
 
-nonisolated enum PaletteActionSection: Hashable {
+public nonisolated enum PaletteActionSection: Hashable {
     case note
     case stack
     case template
 
-    var label: String {
+    public var label: String {
         switch self {
         case .note: "Note"
         case .stack: "Stack"
@@ -50,14 +51,28 @@ nonisolated enum PaletteActionSection: Hashable {
     }
 }
 
-nonisolated struct PaletteActionItem: Equatable, Identifiable {
-    let action: PaletteAction
-    let title: String
-    let keys: String
-    let section: PaletteActionSection
-    var isDestructive = false
+public nonisolated struct PaletteActionItem: Equatable, Identifiable {
+    public let action: PaletteAction
+    public let title: String
+    public let keys: String
+    public let section: PaletteActionSection
+    public var isDestructive = false
 
-    var id: PaletteAction { action }
+    public init(
+        action: PaletteAction,
+        title: String,
+        keys: String,
+        section: PaletteActionSection,
+        isDestructive: Bool = false
+    ) {
+        self.action = action
+        self.title = title
+        self.keys = keys
+        self.section = section
+        self.isDestructive = isDestructive
+    }
+
+    public var id: PaletteAction { action }
 
     var isPinned: Bool {
         switch action {
@@ -67,25 +82,42 @@ nonisolated struct PaletteActionItem: Equatable, Identifiable {
     }
 }
 
-nonisolated struct PaletteMoveTarget: Equatable {
-    let number: Int
-    let keys: String
+public nonisolated struct PaletteMoveTarget: Equatable {
+    public let number: Int
+    public let keys: String
+
+    public init(number: Int, keys: String) {
+        self.number = number
+        self.keys = keys
+    }
 }
 
-nonisolated struct PaletteActionContext: Equatable {
-    enum Focus: Equatable {
+public nonisolated struct PaletteActionContext: Equatable {
+    public enum Focus: Equatable {
         case note(id: UUID, index: Int, count: Int)
         case nothing
     }
 
-    var focus: Focus
-    var moveTargets: [PaletteMoveTarget] = []
-    var stack: StackItemFacts?
-    var undo: StackUndoFacts?
+    public var focus: Focus
+    public var moveTargets: [PaletteMoveTarget] = []
+    public var stack: StackItemFacts?
+    public var undo: StackUndoFacts?
+
+    public init(
+        focus: Focus,
+        moveTargets: [PaletteMoveTarget] = [],
+        stack: StackItemFacts? = nil,
+        undo: StackUndoFacts? = nil
+    ) {
+        self.focus = focus
+        self.moveTargets = moveTargets
+        self.stack = stack
+        self.undo = undo
+    }
 }
 
-nonisolated enum PaletteActionCatalog {
-    static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
+public nonisolated enum PaletteActionCatalog {
+    public static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
         func add(_ action: PaletteAction, _ title: String, _ keys: String,
                  in section: PaletteActionSection, destructive: Bool = false) {
@@ -111,13 +143,13 @@ nonisolated enum PaletteActionCatalog {
         return items
     }
 
-    static func menu(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
+    public static func menu(_ items: [PaletteActionItem], query: String) -> [PaletteActionItem] {
         items.filter { !$0.isPinned }
             .matching(query) { [$0.title, $0.section.label].joined(separator: " ") }
     }
 }
 
-nonisolated enum PaletteKey: Equatable {
+public nonisolated enum PaletteKey: Equatable {
     case up, down
     case optionUp, optionDown
     case activate

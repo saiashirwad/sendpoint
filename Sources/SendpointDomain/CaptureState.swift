@@ -1,12 +1,22 @@
+import CoreGraphics
 import Foundation
-import SendpointDomain
 
-nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
+public nonisolated struct CapturedSelection: Equatable, Sendable {
+    public var text: String
+    public var screenRect: CGRect?
+
+    public init(text: String, screenRect: CGRect? = nil) {
+        self.text = text
+        self.screenRect = screenRect
+    }
+}
+
+public nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
     case hold
     case tap
 
-    var title: String { self == .hold ? "Hold" : "Tap" }
-    var detail: String {
+    public var title: String { self == .hold ? "Hold" : "Tap" }
+    public var detail: String {
         switch self {
         case .hold: "Hold to speak, release to finish."
         case .tap: "Press to speak, press again to finish."
@@ -14,26 +24,37 @@ nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
     }
 }
 
-nonisolated enum SpeechKey: Equatable, Sendable {
+public nonisolated enum SpeechKey: Equatable, Sendable {
     case note, dictate
 
     var mode: CaptureMode { self == .note ? .voice : .dictation }
 }
 
-nonisolated struct DictationTarget: Equatable, Sendable {
-    let processIdentifier: pid_t
-    let appName: String?
+public nonisolated struct DictationTarget: Equatable, Sendable {
+    public let processIdentifier: pid_t
+    public let appName: String?
+
+    public init(processIdentifier: pid_t, appName: String?) {
+        self.processIdentifier = processIdentifier
+        self.appName = appName
+    }
 }
 
-nonisolated struct CaptureSaveRequest: Equatable {
-    let target: NoteCaptureTarget
-    let destinationStackID: UUID
-    let note: Note
+public nonisolated struct CaptureSaveRequest: Equatable {
+    public let target: NoteCaptureTarget
+    public let destinationStackID: UUID
+    public let note: Note
+
+    public init(target: NoteCaptureTarget, destinationStackID: UUID, note: Note) {
+        self.target = target
+        self.destinationStackID = destinationStackID
+        self.note = note
+    }
 }
 
-nonisolated enum CaptureMode: Equatable, Sendable { case text, voice, dictation }
+public nonisolated enum CaptureMode: Equatable, Sendable { case text, voice, dictation }
 
-nonisolated enum CapturePhase: Equatable {
+public nonisolated enum CapturePhase: Equatable {
     case selectingText
     case selectingVoice(recording: Bool, finishRequested: Bool)
     case startingVoice
@@ -46,20 +67,20 @@ nonisolated enum CapturePhase: Equatable {
     case failed(String)
 }
 
-nonisolated enum CaptureDestinationPicker: Equatable { case closed, open }
+public nonisolated enum CaptureDestinationPicker: Equatable { case closed, open }
 
-nonisolated struct CaptureSession: Equatable {
-    let context: NoteCaptureContext
-    let mode: CaptureMode
-    var target: NoteCaptureTarget?
-    var phase: CapturePhase
-    var liveTranscript: String? = nil
-    var destinationStackID: UUID
-    var destinationPicker: CaptureDestinationPicker = .closed
-    var saveAwaitsSelection = false
-    var dictationTarget: DictationTarget? = nil
+public nonisolated struct CaptureSession: Equatable {
+    public let context: NoteCaptureContext
+    public let mode: CaptureMode
+    public var target: NoteCaptureTarget?
+    public var phase: CapturePhase
+    public var liveTranscript: String? = nil
+    public var destinationStackID: UUID
+    public var destinationPicker: CaptureDestinationPicker = .closed
+    public var saveAwaitsSelection = false
+    public var dictationTarget: DictationTarget? = nil
 
-    var canChooseDestination: Bool {
+    public var canChooseDestination: Bool {
         guard !saveAwaitsSelection, mode != .dictation else { return false }
         switch phase {
         case .selectingText, .startingVoice, .recording, .editing,
@@ -69,14 +90,26 @@ nonisolated struct CaptureSession: Equatable {
     }
 }
 
-nonisolated struct VoiceGesture: Equatable {
-    var mode: VoiceRecordingMode = .hold
-    var keyHeld = false
-    var releasePending = false
-    var key: SpeechKey? = nil
+public nonisolated struct VoiceGesture: Equatable {
+    public var mode: VoiceRecordingMode = .hold
+    public var keyHeld = false
+    public var releasePending = false
+    public var key: SpeechKey? = nil
+
+    public init(
+        mode: VoiceRecordingMode = .hold,
+        keyHeld: Bool = false,
+        releasePending: Bool = false,
+        key: SpeechKey? = nil
+    ) {
+        self.mode = mode
+        self.keyHeld = keyHeld
+        self.releasePending = releasePending
+        self.key = key
+    }
 }
 
-nonisolated enum CaptureEvent {
+public nonisolated enum CaptureEvent {
     case begin(CaptureMode, NoteCaptureContext, DictationTarget? = nil)
     case voiceRefused
     case voicePressed
@@ -109,9 +142,9 @@ nonisolated enum CaptureEvent {
     case teardown
 }
 
-nonisolated enum CaptureSurface { case editor, voice }
+public nonisolated enum CaptureSurface { case editor, voice }
 
-nonisolated enum CaptureEffect: Equatable {
+public nonisolated enum CaptureEffect: Equatable {
     case beginVoice
     case beginDictation
     case readSelection(NoteCaptureContext, CaptureMode)
@@ -129,24 +162,26 @@ nonisolated enum CaptureEffect: Equatable {
     case beep
 }
 
-nonisolated struct CaptureState: Equatable {
-    enum Lifecycle: Equatable {
+public nonisolated struct CaptureState: Equatable {
+    public enum Lifecycle: Equatable {
         case idle
         case active(CaptureSession)
         case tornDown
     }
 
-    var lifecycle: Lifecycle = .idle
-    var voice = VoiceGesture()
+    public var lifecycle: Lifecycle = .idle
+    public var voice = VoiceGesture()
 
-    var session: CaptureSession? {
+    public init() {}
+
+    public var session: CaptureSession? {
         if case let .active(session) = lifecycle { return session }
         return nil
     }
 
-    var isTornDown: Bool { lifecycle == .tornDown }
+    public var isTornDown: Bool { lifecycle == .tornDown }
 
-    mutating func update(_ event: CaptureEvent) -> [CaptureEffect] {
+    public mutating func update(_ event: CaptureEvent) -> [CaptureEffect] {
         guard lifecycle != .tornDown else { return [] }
         switch event {
         case .teardown:
@@ -423,27 +458,27 @@ nonisolated struct CaptureState: Equatable {
     }
 }
 
-nonisolated struct NoteCaptureContext: Equatable {
-    let stackID: UUID
-    let noteID: UUID
-    let createdAt: Date
+public nonisolated struct NoteCaptureContext: Equatable {
+    public let stackID: UUID
+    public let noteID: UUID
+    public let createdAt: Date
 
-    init(stackID: UUID, noteID: UUID = UUID(), createdAt: Date = Date()) {
+    public init(stackID: UUID, noteID: UUID = UUID(), createdAt: Date = Date()) {
         self.stackID = stackID
         self.noteID = noteID
         self.createdAt = createdAt
     }
 
-    func target(captured: CapturedSelection) -> NoteCaptureTarget {
+    public func target(captured: CapturedSelection) -> NoteCaptureTarget {
         NoteCaptureTarget(context: self, captured: captured)
     }
 }
 
-nonisolated struct NoteCaptureTarget: Equatable {
-    let context: NoteCaptureContext
-    let captured: CapturedSelection
+public nonisolated struct NoteCaptureTarget: Equatable {
+    public let context: NoteCaptureContext
+    public let captured: CapturedSelection
 
-    init(context: NoteCaptureContext, captured: CapturedSelection) {
+    public init(context: NoteCaptureContext, captured: CapturedSelection) {
         self.context = context
         self.captured = captured
     }
@@ -451,7 +486,7 @@ nonisolated struct NoteCaptureTarget: Equatable {
     var noteID: UUID { context.noteID }
     var createdAt: Date { context.createdAt }
 
-    func note(body: String) -> Note? {
+    public func note(body: String) -> Note? {
         Note.capturing(
             selection: captured.text,
             body: body,

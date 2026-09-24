@@ -1,4 +1,5 @@
 import Foundation
+import SendpointDomain
 @testable import Sendpoint
 
 @MainActor

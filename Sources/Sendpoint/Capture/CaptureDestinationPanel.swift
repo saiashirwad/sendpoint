@@ -1,4 +1,5 @@
 import AppKit
+import SendpointDomain
 import SwiftUI
 
 struct CaptureDestinationButton: View {

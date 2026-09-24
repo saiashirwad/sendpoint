@@ -1,7 +1,6 @@
 import Foundation
-import SendpointDomain
 import XCTest
-@testable import Sendpoint
+import SendpointDomain
 
 final class CaptureVoiceGestureTests: XCTestCase {
     private let context = NoteCaptureContext(stackID: UUID())

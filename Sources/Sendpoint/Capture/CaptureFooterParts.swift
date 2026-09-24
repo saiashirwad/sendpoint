@@ -1,3 +1,4 @@
+import SendpointDomain
 import SwiftUI
 
 struct CaptureStackLabel: View {

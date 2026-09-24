@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SendpointDomain
 
 enum VoiceSettingsEvent: Equatable {
     case voiceMode(VoiceRecordingMode)
