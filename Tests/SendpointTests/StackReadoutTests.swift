@@ -27,19 +27,6 @@ final class StackReadoutTests: XCTestCase {
             XCTAssertEqual(panel.frame.size.width, hosting.fittingSize.width, accuracy: 0.5)
             XCTAssertEqual(panel.frame.size.height, hosting.fittingSize.height, accuracy: 0.5)
             XCTAssertGreaterThan(panel.frame.width, 200)
-            if let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] {
-                try render(panel, to: directory, name: "stack-readout-\(number).png")
-            }
         }
-    }
-
-    private func render(_ panel: NSPanel, to directory: String, name: String) throws {
-        let view = try XCTUnwrap(panel.contentView)
-        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-        let url = URL(fileURLWithPath: directory).appendingPathComponent(name)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url, options: .atomic)
     }
 }

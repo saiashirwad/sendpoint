@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotKeys()
         permissionState.refresh()
         environment.selectionMonitor.start()
+        environment.updateController.start()
 
         bootstrapStore()
         presentLaunchSurface(kind: .fromCurrentAppleEvent())

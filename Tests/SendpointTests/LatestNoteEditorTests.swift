@@ -178,10 +178,7 @@ final class LatestNoteEditorTests: XCTestCase {
         XCTAssertTrue(model.isOpen)
     }
 
-    func testRenderAndWindowFocusCloseLifecycle() async throws {
-        guard let directory = ProcessInfo.processInfo.environment["SENDPOINT_RENDER_DIR"] else {
-            throw XCTSkip("Set SENDPOINT_RENDER_DIR to produce review images.")
-        }
+    func testWindowFocusCloseLifecycle() async throws {
         let fixture = try await makeStore(notes: [Note(
             subject: .selection(quote: "A capture should preserve the thought, not interrupt it."),
             body: "Keep the editor focused on this note.\n\nThe original quote should stay attached when I correct the wording."
@@ -195,14 +192,12 @@ final class LatestNoteEditorTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(300))
         let panel = try XCTUnwrap(NSApp.windows.first { $0.title == "Edit latest note" && $0.isVisible })
         let textView = try XCTUnwrap(panel.firstResponder as? NSTextView)
-        try write(panel, directory: directory, name: "latest-note-editor")
         textView.insertText("\n\nThis is an unsaved change.",
                             replacementRange: NSRange(location: textView.string.utf16.count, length: 0))
         XCTAssertTrue(model.text.hasSuffix("This is an unsaved change."))
         panel.performClose(nil)
         try await Task.sleep(for: .milliseconds(150))
         guard case .confirmingDiscard = model.state else { return XCTFail("Close must ask before discarding") }
-        try write(panel, directory: directory, name: "latest-note-discard")
         model.send(.keepEditing)
         panel.performClose(nil)
         guard case .confirmingDiscard = model.state else { return XCTFail("Repeated close must still be intercepted") }
@@ -218,31 +213,12 @@ final class LatestNoteEditorTests: XCTestCase {
         XCTAssertTrue(model.hasPendingSave)
         await fixture.store.waitForIdle()
         try await Task.sleep(for: .milliseconds(150))
-        try write(panel, directory: directory, name: "latest-note-save-failed")
         window.teardown()
         XCTAssertFalse(panel.isVisible)
         XCTAssertFalse(surfaces.visible.contains(.latestNoteEditor))
 
-        let standalone = try await makeStore()
-        defer { standalone.store.teardown() }
-        let plainModel = LatestNoteEditor(store: standalone.store)
-        let plainWindow = LatestNoteEditorWindow(model: plainModel, surfaces: surfaces)
-        defer { plainWindow.teardown() }
-        plainModel.send(.open)
-        try await Task.sleep(for: .milliseconds(150))
-        let plainPanel = try XCTUnwrap(NSApp.windows.first { $0.title == "Edit latest note" && $0.isVisible })
-        try write(plainPanel, directory: directory, name: "latest-note-standalone")
     }
 
-    private func write(_ panel: NSWindow, directory: String, name: String) throws {
-        let view = try XCTUnwrap(panel.contentView)
-        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-        let url = URL(fileURLWithPath: directory).appendingPathComponent(name + ".png")
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: url)
-    }
 
     private func makeStore(notes: [Note] = [Note(subject: .standalone, body: "Original")]) async throws
         -> (store: StackStore, disk: EditorDisk) {

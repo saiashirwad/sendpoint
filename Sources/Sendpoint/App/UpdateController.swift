@@ -5,10 +5,14 @@ final class UpdateController {
 
     init() {
         controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: false,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+    }
+
+    func start() {
+        controller.startUpdater()
     }
 
     func checkForUpdates() {

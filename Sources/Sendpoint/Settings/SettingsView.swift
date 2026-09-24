@@ -66,8 +66,10 @@ struct SettingsView: View {
         onSelectTemplate: @escaping (UUID) -> Void,
         onSettingsChanged: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
-        onShowStack: @escaping () -> Void
+        onShowStack: @escaping () -> Void,
+        tab: SettingsTab = .capture
     ) {
+        _tab = State(initialValue: tab)
         _settings = Bindable(wrappedValue: settings)
         _shortcuts = Bindable(wrappedValue: shortcuts)
         _voiceSettings = Bindable(wrappedValue: voiceSettings)

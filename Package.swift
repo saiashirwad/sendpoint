@@ -17,6 +17,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
     ],
     targets: [
         .target(
@@ -60,6 +61,19 @@ let package = Package(
             name: "SendpointTests",
             dependencies: ["Sendpoint", "SendpointDomain"],
             path: "Tests/SendpointTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+                .enableUpcomingFeature("MemberImportVisibility"),
+            ]
+        ),
+        .testTarget(
+            name: "SendpointScreenshotTests",
+            dependencies: [
+                "Sendpoint",
+                "SendpointDomain",
+                .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
+            ],
+            path: "Tests/SendpointScreenshotTests",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .enableUpcomingFeature("MemberImportVisibility"),
