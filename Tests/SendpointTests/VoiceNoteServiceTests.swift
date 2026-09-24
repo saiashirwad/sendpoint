@@ -26,7 +26,7 @@ final class VoiceNoteServiceTests: XCTestCase {
                     if self.suspendStart {
                         await withCheckedContinuation { self.startGate = $0 }
                     }
-                    return PreviewAudioQueue()
+                    return VoiceAudioQueue()
                 },
                 stop: { self.stops += 1 },
                 teardown: { self.teardowns += 1 }
@@ -200,7 +200,7 @@ final class VoiceNoteServiceTests: XCTestCase {
     }
 
     func testLocalTranscriberTeardownIsTerminalWithoutLoadingModels() async {
-        let transcriber = LocalStreamingPreview()
+        let transcriber = LocalStreamingTranscriber()
         await transcriber.teardown()
         await transcriber.teardown()
         await transcriber.abandon()
@@ -241,9 +241,9 @@ private actor FakeTranscriber: VoiceTranscribing {
     func prepare(onProgress: @escaping @Sendable (Double) -> Void) async throws {}
     func prepareIfNeeded() async { prepares += 1 }
     func begin(_ take: UUID, onPartial: @escaping @Sendable (String) -> Void) async -> Bool { true }
-    func feed(_ frames: [PreviewAudioFrame], take: UUID) async {}
+    func feed(_ frames: [VoiceAudioFrame], take: UUID) async {}
 
-    func finish(_ take: UUID, leftover: [PreviewAudioFrame]) async throws -> String {
+    func finish(_ take: UUID, leftover: [VoiceAudioFrame]) async throws -> String {
         await withCheckedContinuation { continuation in
             finishing = continuation
             finishWaiters.forEach { $0.resume() }

@@ -4,7 +4,7 @@ import Foundation
 struct Microphone {
     var requestAccess: () async -> Bool
     var prepare: (MicrophoneOrder) async -> Void
-    var start: (MicrophoneOrder) async throws -> PreviewAudioQueue
+    var start: (MicrophoneOrder) async throws -> VoiceAudioQueue
     var stop: () async -> Void
     var teardown: () async -> Void = {}
 
@@ -71,7 +71,7 @@ private actor MicrophoneHardware {
     }
 
     func start(_ order: MicrophoneOrder, level: AsyncStream<Float>.Continuation,
-               collectFrames: Bool) throws -> PreviewAudioQueue {
+               collectFrames: Bool) throws -> VoiceAudioQueue {
         stop()
         let engine = spareEngine ?? AVAudioEngine()
         let input = engine.inputNode
@@ -87,11 +87,11 @@ private actor MicrophoneHardware {
         spareDevice = nil
         spareFormat = nil
 
-        let queue = PreviewAudioQueue()
+        let queue = VoiceAudioQueue()
         let label = collectFrames ? "voice" : "input preview"
         Diag.log("\(label) tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
         input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable buffer, _ in
-            if collectFrames, let frame = PreviewAudioFrame(buffer: buffer) {
+            if collectFrames, let frame = VoiceAudioFrame(buffer: buffer) {
                 queue.append(frame)
             }
             level.yield(VoiceLevelMeter.level(of: buffer))

@@ -152,8 +152,7 @@ struct PaletteProjection {
             focus: focus,
             moveTargets: targets,
             stack: facts.current,
-            undo: undo,
-            templateName: context.activeTemplate.name
+            undo: undo
         )
     }
 

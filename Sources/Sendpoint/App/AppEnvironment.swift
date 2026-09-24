@@ -22,7 +22,7 @@ struct AppEnvironment {
         let templateSettings = TemplateSettings(defaults: defaults)
         let voiceSettings = VoiceSettings(defaults: defaults)
         let hotKeyCenter = HotKeyCenter.shared
-        let transcriber = LocalStreamingPreview()
+        let transcriber = LocalStreamingTranscriber()
         let voiceService = VoiceNoteService(transcriber: transcriber)
         let selectionMonitor = AutomaticSelectionMonitor()
         let surfaces = SurfaceCoordinator()

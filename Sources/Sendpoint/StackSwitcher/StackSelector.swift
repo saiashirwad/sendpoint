@@ -34,12 +34,12 @@ final class StackSelector {
     }
 
     private func send(_ event: StackSelectEvent) {
-        let commands = machine.handle(event, stacks: store.stacks.map(\.id), showsReadout: showsReadout())
-        for command in commands { run(command) }
+        let effects = machine.update(event, stacks: store.stacks.map(\.id), showsReadout: showsReadout())
+        for effect in effects { run(effect) }
     }
 
-    private func run(_ command: StackSelectCommand) {
-        switch command {
+    private func run(_ effect: StackSelectEffect) {
+        switch effect {
         case let .switchTo(id):
             store.mutate(.switchStack(stackID: id)) { [weak self] outcome in
                 switch outcome {

@@ -1,6 +1,6 @@
 import AVFoundation
 
-nonisolated struct PreviewAudioFrame: Sendable {
+nonisolated struct VoiceAudioFrame: Sendable {
     let samples: [Float]
     let sampleRate: Double
 
@@ -84,17 +84,17 @@ nonisolated struct PreviewAudioFrame: Sendable {
     }
 }
 
-nonisolated final class PreviewAudioQueue: @unchecked Sendable {
+nonisolated final class VoiceAudioQueue: @unchecked Sendable {
     private let lock = NSLock()
-    private nonisolated(unsafe) var items: [PreviewAudioFrame] = []
+    private nonisolated(unsafe) var items: [VoiceAudioFrame] = []
 
-    nonisolated func append(_ frame: PreviewAudioFrame) {
+    nonisolated func append(_ frame: VoiceAudioFrame) {
         lock.lock()
         items.append(frame)
         lock.unlock()
     }
 
-    nonisolated func drain() -> [PreviewAudioFrame] {
+    nonisolated func drain() -> [VoiceAudioFrame] {
         lock.lock()
         let batch = items
         items.removeAll(keepingCapacity: true)

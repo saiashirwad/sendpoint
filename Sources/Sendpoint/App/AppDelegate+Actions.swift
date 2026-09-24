@@ -23,10 +23,10 @@ extension AppDelegate {
     func registerHotKeys() {
         captureController.send(.voiceModeChanged(voiceSettings.voiceMode))
         let actions = HotKeyRegistrar.Actions(
-            voicePressed: { [weak self] in self?.sendCaptureAction(.voicePressed) },
+            voicePressed: { [weak self] in self?.sendCaptureEvent(.voicePressed) },
             voiceReleased: { [weak self] in self?.captureController.send(.voiceReleased) },
             typedNote: { [weak self] in self?.captureSelection() },
-            dictatePressed: { [weak self] in self?.sendCaptureAction(.dictatePressed) },
+            dictatePressed: { [weak self] in self?.sendCaptureEvent(.dictatePressed) },
             dictateReleased: { [weak self] in self?.captureController.send(.dictateReleased) },
             copy: { [weak self] in self?.copyMarkdown() },
             showStack: { [weak self] in self?.showStack() },
@@ -41,9 +41,9 @@ extension AppDelegate {
 
     func perform(_ action: StatusMenuAction) {
         switch action {
-        case .voiceNote: sendCaptureAction(.voiceToggled)
+        case .voiceNote: sendCaptureEvent(.voiceToggled)
         case .typedNote: captureSelection()
-        case .dictate: sendCaptureAction(.dictateToggled)
+        case .dictate: sendCaptureEvent(.dictateToggled)
         case .showStack: showStack()
         case let .selectStack(number): selectStack(number)
         case let .selectTemplate(templateID): requestTemplateSelection(templateID)
@@ -63,9 +63,9 @@ extension AppDelegate {
         captureController.beginCapture()
     }
 
-    private func sendCaptureAction(_ action: CaptureAction) {
+    private func sendCaptureEvent(_ event: CaptureEvent) {
         guard !focusOpenNoteEditor() else { return }
-        captureController.send(action)
+        captureController.send(event)
     }
 
     private func focusOpenNoteEditor() -> Bool {
@@ -143,91 +143,5 @@ extension AppDelegate {
     private func selectStack(_ number: Int) {
         guard let stackSelector else { NSSound.beep(); return }
         stackSelector.select(number)
-    }
-
-    func buildPalette(store: StackStore) {
-        palette = StackPaletteWindowController(
-            store: store,
-            settings: templates,
-            shortcuts: shortcuts,
-            export: exportController,
-            surfaces: surfaces,
-            onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }
-        )
-    }
-
-    func presentPermissionHelpForCapture() {
-        permissionState.refresh()
-        if settings.hasCompletedSetup {
-            permissionState.requestAccessibility()
-        } else {
-            presentSetup()
-        }
-    }
-
-    func presentSetup() {
-        permissionState.refresh()
-        if setupWindowController == nil {
-            setupWindowController = SetupWindowController(
-                settings: settings,
-                permissionState: permissionState,
-                shortcuts: shortcuts,
-                voiceSettings: voiceSettings,
-                surfaces: surfaces,
-                noteCount: { [weak self] in self?.store.map(SetupTour.noteCount(in:)) },
-                onComplete: { [weak self] in
-                    guard let self else { return }
-                    self.surfaces.dismiss(.setup)
-                    self.refreshStatusItem()
-                }
-            )
-        }
-        setupWindowController?.show()
-    }
-
-    func presentLaunchSurface(kind: LaunchPresentation.Kind) {
-        switch LaunchPresentation.decide(hasCompletedSetup: settings.hasCompletedSetup, kind: kind) {
-        case .setup: presentSetup()
-        case .settings: showSettings()
-        case .none: break
-        }
-    }
-
-    func observeUserOpened() {
-        guard userOpenedObserver == nil else { return }
-        userOpenedObserver = DistributedNotificationCenter.default().addObserver(
-            forName: LaunchPresentation.userOpenedNotification,
-            object: Bundle.main.bundleIdentifier,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.presentLaunchSurface(kind: .userOpen)
-            }
-        }
-    }
-
-    private func showSettings() {
-        guard settings.hasCompletedSetup else {
-            presentSetup()
-            return
-        }
-        if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController(
-                settings: settings,
-                shortcuts: shortcuts,
-                templates: templates,
-                voiceSettings: voiceSettings,
-                hotKeyRegistrar: hotKeyRegistrar,
-                captureController: captureController,
-                permissionState: permissionState,
-                surfaces: surfaces,
-                stackStore: store,
-                onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) },
-                onSettingsChanged: { [weak self] in self?.refreshStatusItem() },
-                onCheckForUpdates: { [weak self] in self?.updateController.checkForUpdates() },
-                onShowStack: { [weak self] in self?.showStack() }
-            )
-        }
-        settingsWindowController?.show()
     }
 }

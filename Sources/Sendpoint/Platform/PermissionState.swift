@@ -38,7 +38,7 @@ enum VoiceModelDownloadFailure: Equatable, Sendable {
     }
 }
 
-enum PermissionAction: Equatable, Sendable {
+enum PermissionEvent: Equatable, Sendable {
     case requestAccessibility
     case requestMicrophone
     case openMicrophoneSettings
@@ -104,7 +104,7 @@ final class PermissionState {
     @ObservationIgnored private let downloadProgress = LatestValuePump<Double>()
     @ObservationIgnored private var readinessObserver: NSObjectProtocol?
 
-    var accessibilityAction: PermissionAction? {
+    var accessibilityAction: PermissionEvent? {
         switch accessibility {
         case .granted:
             return nil
@@ -113,7 +113,7 @@ final class PermissionState {
         }
     }
 
-    var microphoneAction: PermissionAction? {
+    var microphoneAction: PermissionEvent? {
         switch microphone {
         case .granted:
             return nil
@@ -124,7 +124,7 @@ final class PermissionState {
         }
     }
 
-    var localVoiceModelAction: PermissionAction? {
+    var localVoiceModelAction: PermissionEvent? {
         switch localVoiceModel {
         case .downloading, .ready:
             return nil
@@ -258,11 +258,6 @@ final class PermissionState {
     func voiceModelBecameReady() {
         guard !isTornDown else { return }
         localVoiceModel = .ready
-    }
-
-    func openAccessibilitySettings() {
-        guard !isTornDown else { return }
-        services.openAccessibilitySettings()
     }
 
     func openMicrophoneSettings() {

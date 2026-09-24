@@ -15,7 +15,7 @@ final class VoiceNoteService {
     private var tasks: [Work: Task<Void, Never>] = [:]
     private var stopGeneration = 0
     private var teardownTask: Task<Void, Never>?
-    private var queue: PreviewAudioQueue?
+    private var queue: VoiceAudioQueue?
     private let partials = LatestValuePump<String>()
     private var pending: [VoiceEvent] = []
     private var isDraining = false
@@ -147,7 +147,7 @@ final class VoiceNoteService {
         }
     }
 
-    private func stream(_ queue: PreviewAudioQueue, take: UUID) {
+    private func stream(_ queue: VoiceAudioQueue, take: UUID) {
         let partial = partials.start { [weak self] text in
             guard let self, self.machine.take == take else { return }
             self.onOutput?(.partial(take, text))

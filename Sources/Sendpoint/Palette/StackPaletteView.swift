@@ -3,7 +3,7 @@ import SendpointDomain
 import SwiftUI
 
 struct StackPaletteView: View {
-    @Bindable var model: StackPaletteModel
+    @Bindable var model: StackPaletteController
     @FocusState private var focus: PaletteField?
 
     static let minimumSize = CGSize(width: 560, height: 460)

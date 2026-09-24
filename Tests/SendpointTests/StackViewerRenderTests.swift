@@ -29,7 +29,7 @@ final class StackViewerRenderTests: XCTestCase {
         let suite = "StackViewerRenderTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let model = StackPaletteModel(
+        let model = StackPaletteController(
             store: store, settings: TemplateSettings(defaults: defaults),
             shortcuts: ShortcutSettings(defaults: defaults),
             export: ExportController(services: ExportServices(write: { _ in 1 }, paste: { _, _ in true })),

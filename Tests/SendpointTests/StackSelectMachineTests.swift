@@ -79,7 +79,7 @@ final class StackSelectMachineTests: XCTestCase {
 
     private func send(
         _ event: StackSelectEvent, to machine: inout StackSelectMachine, showsReadout: Bool = true
-    ) -> [StackSelectCommand] {
-        machine.handle(event, stacks: stacks, showsReadout: showsReadout)
+    ) -> [StackSelectEffect] {
+        machine.update(event, stacks: stacks, showsReadout: showsReadout)
     }
 }

@@ -7,7 +7,7 @@ nonisolated enum StackSelectEvent: Equatable {
     case teardown
 }
 
-nonisolated enum StackSelectCommand: Equatable {
+nonisolated enum StackSelectEffect: Equatable {
     case switchTo(UUID)
     case showReadout(number: Int)
     case hideReadout
@@ -25,9 +25,9 @@ nonisolated struct StackSelectMachine: Equatable {
     private(set) var state: State = .idle
     private var generation = 0
 
-    mutating func handle(
+    mutating func update(
         _ event: StackSelectEvent, stacks: [UUID], showsReadout: Bool
-    ) -> [StackSelectCommand] {
+    ) -> [StackSelectEffect] {
         guard state != .tornDown else { return [] }
         switch event {
         case .teardown:
@@ -38,16 +38,16 @@ nonisolated struct StackSelectMachine: Equatable {
         case let .select(number):
             guard stacks.indices.contains(number - 1) else { return [.beep] }
             let id = stacks[number - 1]
-            var commands: [StackSelectCommand] = [.switchTo(id)]
+            var effects: [StackSelectEffect] = [.switchTo(id)]
             if showsReadout {
                 generation += 1
                 state = .showing(id, generation: generation)
-                commands += [.showReadout(number: number), .startTimer(generation: generation)]
+                effects += [.showReadout(number: number), .startTimer(generation: generation)]
             } else if isShowing {
                 state = .idle
-                commands.append(.hideReadout)
+                effects.append(.hideReadout)
             }
-            return commands
+            return effects
 
         case let .switchFailed(id):
             guard case .showing(id, _) = state else { return [.beep] }

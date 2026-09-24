@@ -12,7 +12,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
     private static let frameAutosaveName = "StackViewer"
 
     private let panel: CapturePanel
-    private let model: StackPaletteModel
+    private let model: StackPaletteController
     private let surfaces: SurfaceCoordinator
     private let noteFrames = NoteFrames()
     private var keyMonitor: Any?
@@ -30,7 +30,7 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
         let panel = Self.makePanel()
         self.panel = panel
 
-        let model = StackPaletteModel(
+        let model = StackPaletteController(
             store: store, settings: settings, shortcuts: shortcuts,
             export: export, onSelectTemplate: onSelectTemplate
         )

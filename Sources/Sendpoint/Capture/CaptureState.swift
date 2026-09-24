@@ -76,7 +76,7 @@ nonisolated struct VoiceGesture: Equatable {
     var key: SpeechKey? = nil
 }
 
-nonisolated enum CaptureAction {
+nonisolated enum CaptureEvent {
     case begin(CaptureMode, NoteCaptureContext, DictationTarget? = nil)
     case voiceRefused
     case voicePressed
@@ -146,9 +146,9 @@ nonisolated struct CaptureState: Equatable {
 
     var isTornDown: Bool { lifecycle == .tornDown }
 
-    mutating func update(_ action: CaptureAction) -> [CaptureEffect] {
+    mutating func update(_ event: CaptureEvent) -> [CaptureEffect] {
         guard lifecycle != .tornDown else { return [] }
-        switch action {
+        switch event {
         case .teardown:
             lifecycle = .tornDown
             return [.close]
@@ -181,7 +181,7 @@ nonisolated struct CaptureState: Equatable {
 
         guard var session else { return [] }
         var effects: [CaptureEffect] = []
-        switch action {
+        switch event {
         case let .selectionPending(context):
             guard context == session.context, session.phase == .selectingText else { return [] }
             session.phase = .editing("")
@@ -257,7 +257,7 @@ nonisolated struct CaptureState: Equatable {
             session.destinationPicker = .closed
         case .save, .transcript:
             let note: String
-            switch action {
+            switch event {
             case let .transcript(context, text):
                 guard context == session.context, session.phase == .transcribing else { return [] }
                 note = text
@@ -420,5 +420,43 @@ nonisolated struct CaptureState: Equatable {
             voice.releasePending = true
         }
         return [.close]
+    }
+}
+
+nonisolated struct NoteCaptureContext: Equatable {
+    let stackID: UUID
+    let noteID: UUID
+    let createdAt: Date
+
+    init(stackID: UUID, noteID: UUID = UUID(), createdAt: Date = Date()) {
+        self.stackID = stackID
+        self.noteID = noteID
+        self.createdAt = createdAt
+    }
+
+    func target(captured: CapturedSelection) -> NoteCaptureTarget {
+        NoteCaptureTarget(context: self, captured: captured)
+    }
+}
+
+nonisolated struct NoteCaptureTarget: Equatable {
+    let context: NoteCaptureContext
+    let captured: CapturedSelection
+
+    init(context: NoteCaptureContext, captured: CapturedSelection) {
+        self.context = context
+        self.captured = captured
+    }
+
+    var noteID: UUID { context.noteID }
+    var createdAt: Date { context.createdAt }
+
+    func note(body: String) -> Note? {
+        Note.capturing(
+            selection: captured.text,
+            body: body,
+            id: noteID,
+            createdAt: createdAt
+        )
     }
 }

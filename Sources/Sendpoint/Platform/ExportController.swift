@@ -10,7 +10,7 @@ struct ExportRequest: Equatable {
     let pasteTarget: pid_t?
 }
 
-enum ExportAction {
+enum ExportEvent {
     case begin(ExportRequest)
     case copied(UUID, revision: Int?)
     case pasted(UUID, dispatched: Bool)
@@ -34,9 +34,9 @@ enum ExportState: Equatable {
     case failed(ExportRequest, String, retryable: Bool)
     case tornDown
 
-    mutating func update(_ action: ExportAction) -> [ExportEffect] {
+    mutating func update(_ event: ExportEvent) -> [ExportEffect] {
         guard self != .tornDown else { return [] }
-        switch action {
+        switch event {
         case .teardown: self = .tornDown; return [.cancelPaste]
         case let .begin(request):
             switch self {
@@ -110,7 +110,7 @@ final class ExportController {
     @ObservationIgnored private var pasteTask: Task<Void, Never>?
     @ObservationIgnored private weak var store: StackStore?
     @ObservationIgnored private var report: (String) -> Void = { _ in }
-    @ObservationIgnored private var pending: [ExportAction] = []
+    @ObservationIgnored private var pending: [ExportEvent] = []
     @ObservationIgnored private var isDraining = false
 
     init(services: ExportServices) { self.services = services }
@@ -136,8 +136,8 @@ final class ExportController {
         report(services.write(PromptComposer.noteMarkdown(note)) == nil ? "Couldn’t copy the note." : "Copied note")
     }
 
-    func send(_ action: ExportAction) {
-        pending.append(action)
+    func send(_ event: ExportEvent) {
+        pending.append(event)
         guard !isDraining else { return }
         isDraining = true
         while !pending.isEmpty { run(state.update(pending.removeFirst())) }

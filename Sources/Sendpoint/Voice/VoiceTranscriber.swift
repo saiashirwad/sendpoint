@@ -40,8 +40,8 @@ nonisolated protocol VoiceTranscribing: Sendable {
     func prepare(onProgress: @escaping @Sendable (Double) -> Void) async throws
     func prepareIfNeeded() async
     func begin(_ take: UUID, onPartial: @escaping @Sendable (String) -> Void) async -> Bool
-    func feed(_ frames: [PreviewAudioFrame], take: UUID) async
-    func finish(_ take: UUID, leftover: [PreviewAudioFrame]) async throws -> String
+    func feed(_ frames: [VoiceAudioFrame], take: UUID) async
+    func finish(_ take: UUID, leftover: [VoiceAudioFrame]) async throws -> String
     func abandon() async
     func teardown() async
 }
@@ -85,7 +85,7 @@ nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
     }
 }
 
-actor LocalStreamingPreview: VoiceTranscribing {
+actor LocalStreamingTranscriber: VoiceTranscribing {
     private enum Preparation {
         case idle
         case loading(UUID, Task<StreamingUnifiedAsrManager, Error>)
@@ -156,7 +156,7 @@ actor LocalStreamingPreview: VoiceTranscribing {
         try await manager.reset()
         try Task.checkCancellation()
         guard session?.take == take else { throw CancellationError() }
-        let firstPartial = PreviewLogOnce()
+        let firstPartial = TranscriberLogOnce()
         await manager.setPartialTranscriptCallback { text in
             if firstPartial.mark() {
                 Diag.log("voice preview first partial, chars=\(text.count)")
@@ -169,7 +169,7 @@ actor LocalStreamingPreview: VoiceTranscribing {
         Diag.log("voice stream started")
     }
 
-    func feed(_ frames: [PreviewAudioFrame], take: UUID) async {
+    func feed(_ frames: [VoiceAudioFrame], take: UUID) async {
         guard owns(take), !frames.isEmpty else { return }
         guard let manager = preparedManager else { return }
         guard let buffer = Self.joinedBuffer(frames) else { return }
@@ -186,7 +186,7 @@ actor LocalStreamingPreview: VoiceTranscribing {
         }
     }
 
-    func finish(_ take: UUID, leftover: [PreviewAudioFrame]) async throws -> String {
+    func finish(_ take: UUID, leftover: [VoiceAudioFrame]) async throws -> String {
         if !owns(take) {
             try await open(take, manager: try await manager(), onPartial: { _ in })
         }
@@ -220,7 +220,7 @@ actor LocalStreamingPreview: VoiceTranscribing {
         return String(format: "%.3f", maxAbs)
     }
 
-    private static func joinedBuffer(_ frames: [PreviewAudioFrame]) -> AVAudioPCMBuffer? {
+    private static func joinedBuffer(_ frames: [VoiceAudioFrame]) -> AVAudioPCMBuffer? {
         let sampleRate = frames[0].sampleRate
         let count = frames.reduce(0) { $0 + $1.samples.count }
         guard count > 0,
@@ -330,7 +330,7 @@ actor LocalStreamingPreview: VoiceTranscribing {
     }
 }
 
-final class PreviewLogOnce: @unchecked Sendable {
+final class TranscriberLogOnce: @unchecked Sendable {
     private let lock = NSLock()
     private nonisolated(unsafe) var logged = false
 

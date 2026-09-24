@@ -3,7 +3,7 @@ import Foundation
 import XCTest
 @testable import Sendpoint
 
-final class StackPaletteTests: XCTestCase {
+final class PaletteActionsTests: XCTestCase {
     private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
     private let otherStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
     private let firstNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
@@ -58,8 +58,7 @@ final class StackPaletteTests: XCTestCase {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .note(id: secondNoteID, index: 1, count: 3),
             stack: stack(noteCount: 3),
-            undo: StackUndoFacts(stackID: otherStackID, stackName: "Stack 1", noteCount: 1, isCurrentStack: false),
-            templateName: "Coherent"
+            undo: StackUndoFacts(stackID: otherStackID, stackName: "Stack 1", noteCount: 1, isCurrentStack: false)
         ))
         XCTAssertEqual(items.map(\.action), [
             .editNote(secondNoteID), .copyNote(secondNoteID),
@@ -76,21 +75,20 @@ final class StackPaletteTests: XCTestCase {
 
         let last = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .note(id: thirdNoteID, index: 2, count: 3),
-            stack: stack(noteCount: 3), undo: nil, templateName: "Coherent"
+            stack: stack(noteCount: 3), undo: nil
         ))
         XCTAssertFalse(last.contains { $0.action == .moveNoteDown(thirdNoteID) }, "last note cannot move down")
     }
 
     func testAnEmptyStackCanOnlyChangeTheTemplateOrUndoAClear() {
         let nothing = PaletteActionCatalog.items(for: PaletteActionContext(
-            focus: .nothing, stack: stack(noteCount: 0), undo: nil, templateName: "Coherent"
+            focus: .nothing, stack: stack(noteCount: 0), undo: nil
         ))
         XCTAssertEqual(nothing.map(\.action), [.chooseTemplate])
 
         let cleared = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .nothing, stack: stack(noteCount: 0),
-            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 3, isCurrentStack: true),
-            templateName: "Coherent"
+            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 3, isCurrentStack: true)
         ))
         XCTAssertEqual(cleared.map(\.action), [.undoClear, .chooseTemplate])
     }
@@ -99,8 +97,7 @@ final class StackPaletteTests: XCTestCase {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .note(id: secondNoteID, index: 1, count: 3),
             stack: stack(noteCount: 3),
-            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 1, isCurrentStack: true),
-            templateName: "Coherent"
+            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 1, isCurrentStack: true)
         ))
         XCTAssertEqual(
             PaletteActionCatalog.menu(items, query: "").map(\.action),

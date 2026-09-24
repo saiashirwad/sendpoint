@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import SendpointDomain
 @Observable
-final class StackPaletteModel {
+final class StackPaletteController {
     private(set) var state = PaletteWorkflow()
     let store: StackStore
     let settings: TemplateSettings

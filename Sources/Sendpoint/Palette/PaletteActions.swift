@@ -82,7 +82,6 @@ nonisolated struct PaletteActionContext: Equatable {
     var moveTargets: [PaletteMoveTarget] = []
     var stack: StackItemFacts?
     var undo: StackUndoFacts?
-    var templateName: String
 }
 
 nonisolated enum PaletteActionCatalog {

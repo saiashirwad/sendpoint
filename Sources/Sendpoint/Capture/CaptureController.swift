@@ -55,7 +55,7 @@ final class CaptureController {
     @ObservationIgnored private let makeSurfaces: (CaptureController) -> CaptureSurfaces
     @ObservationIgnored private lazy var surfaces = makeSurfaces(self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
-    @ObservationIgnored private var pending: [CaptureAction] = []
+    @ObservationIgnored private var pending: [CaptureEvent] = []
     @ObservationIgnored private var isDraining = false
     private enum Work: Hashable { case selection, selectionDeadline, insertion, failure }
     @ObservationIgnored private var tasks: [Work: Task<Void, Never>] = [:]
@@ -193,8 +193,8 @@ final class CaptureController {
         return NoteCaptureContext(stackID: store.selectedStackID)
     }
 
-    func send(_ action: CaptureAction) {
-        pending.append(action)
+    func send(_ event: CaptureEvent) {
+        pending.append(event)
         guard !isDraining else { return }
         isDraining = true
         while !pending.isEmpty {
@@ -262,7 +262,7 @@ final class CaptureController {
     }
 
     private func launch(_ work: Work, context: NoteCaptureContext,
-                        operation: @escaping @MainActor () async throws -> CaptureAction) {
+                        operation: @escaping @MainActor () async throws -> CaptureEvent) {
         guard state.session?.context == context else { return }
         tasks[work]?.cancel()
         tasks[work] = Task { [weak self] in
