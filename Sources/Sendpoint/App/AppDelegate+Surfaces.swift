@@ -5,8 +5,8 @@ extension AppDelegate {
     func buildPalette(store: StackStore) {
         palette = StackPaletteWindowController(
             store: store,
-            settings: templates,
-            shortcuts: shortcuts,
+            settings: templateSettings,
+            shortcuts: shortcutSettings,
             export: exportController,
             surfaces: surfaces,
             onSelectTemplate: { [weak self] in self?.requestTemplateSelection($0) }
@@ -15,7 +15,7 @@ extension AppDelegate {
 
     func presentPermissionHelpForCapture() {
         permissionState.refresh()
-        if settings.hasCompletedSetup {
+        if appSettings.hasCompletedSetup {
             permissionState.requestAccessibility()
         } else {
             presentSetup()
@@ -26,9 +26,9 @@ extension AppDelegate {
         permissionState.refresh()
         if setupWindowController == nil {
             setupWindowController = SetupWindowController(
-                settings: settings,
+                settings: appSettings,
                 permissionState: permissionState,
-                shortcuts: shortcuts,
+                shortcuts: shortcutSettings,
                 voiceSettings: voiceSettings,
                 surfaces: surfaces,
                 noteCount: { [weak self] in self?.store.map(SetupTour.noteCount(in:)) },
@@ -43,7 +43,7 @@ extension AppDelegate {
     }
 
     func presentLaunchSurface(kind: LaunchPresentation.Kind) {
-        switch LaunchPresentation.decide(hasCompletedSetup: settings.hasCompletedSetup, kind: kind) {
+        switch LaunchPresentation.decide(hasCompletedSetup: appSettings.hasCompletedSetup, kind: kind) {
         case .setup: presentSetup()
         case .settings: showSettings()
         case .none: break
@@ -64,15 +64,15 @@ extension AppDelegate {
     }
 
     func showSettings() {
-        guard settings.hasCompletedSetup else {
+        guard appSettings.hasCompletedSetup else {
             presentSetup()
             return
         }
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
-                settings: settings,
-                shortcuts: shortcuts,
-                templates: templates,
+                settings: appSettings,
+                shortcuts: shortcutSettings,
+                templates: templateSettings,
                 voiceSettings: voiceSettings,
                 hotKeyRegistrar: hotKeyRegistrar,
                 captureController: captureController,

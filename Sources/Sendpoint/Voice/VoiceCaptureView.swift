@@ -75,8 +75,8 @@ struct VoiceCaptureView: View {
         .scaleEffect(appeared ? 1 : 0.92)
         .opacity(appeared ? 1 : 0)
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: appeared)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: tether)
-        .animation(.easeOut(duration: 0.18), value: failureMessage)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: facts.tether)
+        .animation(.easeOut(duration: 0.18), value: facts.failureText)
         .environment(\.colorScheme, .dark)
         .padding(VoiceCaptureLayout.shadowPadding)
         .frame(maxWidth: .infinity)
@@ -90,7 +90,7 @@ struct VoiceCaptureView: View {
     private var pill: some View {
         HStack(spacing: 10) {
             leading(rowHeight: VoiceCaptureLayout.pillHeight, anchorHeight: VoiceCaptureLayout.pillHeight)
-            CaptureTether(text: tether, ink: palette.ink)
+            CaptureTether(text: facts.tether, ink: palette.ink)
             orb(transcript: [])
                 .padding(.leading, 2)
             failure
@@ -123,7 +123,7 @@ struct VoiceCaptureView: View {
                     rowHeight: VoiceCaptureLayout.cardFooterHeight,
                     anchorHeight: VoiceCaptureLayout.cardAnchorHeight(lines: lineCount, fontSize: fontSize)
                 )
-                CaptureTether(text: tether, ink: palette.ink)
+                CaptureTether(text: facts.tether, ink: palette.ink)
                 Spacer(minLength: 8)
                 failure
                 orb(transcript: transcript.rows)
@@ -144,7 +144,7 @@ struct VoiceCaptureView: View {
     @ViewBuilder
     private func transcriptBody(_ transcript: Transcript) -> some View {
         if transcript.rows.isEmpty {
-            VoiceTranscriptWaiting(ink: palette.ink, animates: animates && (orbMode == .idle || orbMode == .live))
+            VoiceTranscriptWaiting(ink: palette.ink, animates: animates && (facts.orbMode == .idle || facts.orbMode == .live))
         } else {
             VoiceTranscriptLines(
                 rows: transcript.rows,
@@ -186,16 +186,16 @@ struct VoiceCaptureView: View {
     }
 
     private func orb(transcript: [VoiceTranscriptRow]) -> some View {
-        MeteredOrb(mode: orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
+        MeteredOrb(mode: facts.orbMode, meter: meter, ink: palette.ink, amber: palette.amber, accent: palette.accent, animates: animates)
             .frame(width: 22, height: 22)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel(transcript: transcript))
+            .accessibilityLabel(facts.accessibilityLabel(transcript: transcript.map(\.text)))
     }
 
     @ViewBuilder
     private var failure: some View {
-        if let failureMessage {
-            Text(failureMessage)
+        if let failureText = facts.failureText {
+            Text(failureText)
                 .font(.ui(11.5, weight: .medium))
                 .foregroundStyle(palette.amber)
                 .lineLimit(1)
@@ -204,45 +204,14 @@ struct VoiceCaptureView: View {
         }
     }
 
-    // MARK: - Copy
-
-    private var orbMode: VoiceOrb.Mode {
-        switch model.state.session?.phase {
-        case .recording, .selectingVoice(recording: true, finishRequested: _): .live
-        case .transcribing, .saving, .inserting: .thinking
-        case .failed, .saveFailed: .flat
-        default: .idle
-        }
-    }
-
-    private var tether: String? {
-        guard let text = model.captured?.text else { return nil }
-        return VoiceOverlayCopy.tether(for: text)
-    }
-
-    private var failureMessage: String? {
-        if case let .failed(message) = model.state.session?.phase { return message }
-        return nil
-    }
-
-    private func accessibilityLabel(transcript rows: [VoiceTranscriptRow]) -> String {
-        let destination: String
-        if let target = model.state.session?.dictationTarget {
-            destination = " Pasting into \(target.appName ?? "the front app")."
-        } else {
-            destination = model.targetStack.map { " Saving to \($0.name), \($0.countLabel)." } ?? ""
-        }
-        let transcript = rows.isEmpty
-            ? ""
-            : " Live transcript: \(rows.map(\.text).joined(separator: " "))"
-        switch model.state.session?.phase {
-        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)\(transcript)"
-        case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
-        case let .failed(message): return "Voice body: \(message)"
-        case .saving: return "Voice body: saving.\(destination)"
-        case .inserting: return "Voice body: pasting.\(destination)"
-        default: return ""
-        }
+    private var facts: VoiceOverlayFacts {
+        VoiceOverlayFacts(
+            phase: model.state.session?.phase,
+            capturedText: model.captured?.text,
+            dictationTarget: model.state.session?.dictationTarget,
+            stackName: model.targetStack?.name,
+            stackCount: model.targetStack?.countLabel
+        )
     }
 }
 
@@ -347,7 +316,67 @@ private struct MeteredOrb: View {
     }
 }
 
-enum VoiceOverlayCopy {
+nonisolated struct VoiceOverlayFacts: Equatable {
+    let orbMode: VoiceOrb.Mode
+    let failureText: String?
+    let tether: String?
+
+    private let phase: CapturePhase?
+    private let dictationTarget: DictationTarget?
+    private let stackName: String?
+    private let stackCount: String?
+
+    init(
+        phase: CapturePhase?,
+        capturedText: String?,
+        dictationTarget: DictationTarget?,
+        stackName: String?,
+        stackCount: String?
+    ) {
+        self.phase = phase
+        self.dictationTarget = dictationTarget
+        self.stackName = stackName
+        self.stackCount = stackCount
+        switch phase {
+        case .recording, .selectingVoice(recording: true, finishRequested: _):
+            orbMode = .live
+        case .transcribing, .saving, .inserting:
+            orbMode = .thinking
+        case .failed, .saveFailed:
+            orbMode = .flat
+        default:
+            orbMode = .idle
+        }
+        if case let .failed(message) = phase {
+            failureText = message
+        } else {
+            failureText = nil
+        }
+        tether = capturedText.flatMap(VoiceOverlayCopy.tether(for:))
+    }
+
+    func accessibilityLabel(transcript lines: [String]) -> String {
+        let destination: String
+        if let dictationTarget {
+            destination = " Pasting into \(dictationTarget.appName ?? "the front app")."
+        } else if let stackName, let stackCount {
+            destination = " Saving to \(stackName), \(stackCount)."
+        } else {
+            destination = ""
+        }
+        let transcript = lines.isEmpty ? "" : " Live transcript: \(lines.joined(separator: " "))"
+        switch phase {
+        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)\(transcript)"
+        case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
+        case let .failed(message): return "Voice body: \(message)"
+        case .saving: return "Voice body: saving.\(destination)"
+        case .inserting: return "Voice body: pasting.\(destination)"
+        default: return ""
+        }
+    }
+}
+
+nonisolated enum VoiceOverlayCopy {
     static func tether(for text: String) -> String? {
         let words = text.split(whereSeparator: \.isWhitespace).count
         guard words > 0 else { return nil }

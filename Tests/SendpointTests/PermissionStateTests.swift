@@ -283,7 +283,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testVisibleWatcherPicksUpDiskChangesBothWays() async {
-        let files = LockedBool(false)
+        let files = Locked(false)
         let state = PermissionController(services: services(
             modelFilesExist: { files.value }
         ))
@@ -302,7 +302,7 @@ final class PermissionStateTests: XCTestCase {
     }
 
     func testFailedDownloadSurvivesRefreshAndRecoversWhenFilesAppear() async {
-        let files = LockedBool(false)
+        let files = Locked(false)
         let state = PermissionController(services: services(
             modelFilesExist: { files.value },
             downloadModel: { _ in throw TestError.failed }

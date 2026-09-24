@@ -85,20 +85,17 @@ nonisolated struct VoiceAudioFrame: Sendable {
 }
 
 nonisolated final class VoiceAudioQueue: @unchecked Sendable {
-    private let lock = NSLock()
-    private nonisolated(unsafe) var items: [VoiceAudioFrame] = []
+    private let items = Locked<[VoiceAudioFrame]>([])
 
     nonisolated func append(_ frame: VoiceAudioFrame) {
-        lock.lock()
-        items.append(frame)
-        lock.unlock()
+        items.withLock { $0.append(frame) }
     }
 
     nonisolated func drain() -> [VoiceAudioFrame] {
-        lock.lock()
-        let batch = items
-        items.removeAll(keepingCapacity: true)
-        lock.unlock()
-        return batch
+        items.withLock { items in
+            let batch = items
+            items.removeAll(keepingCapacity: true)
+            return batch
+        }
     }
 }

@@ -39,7 +39,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
     }
 
     func testRedundantStartsShareOneLoopAndOneStopEndsIt() async {
-        let files = LockedBool(false)
+        let files = Locked(false)
         let state = PermissionController(services: services(
             modelFilesExist: { files.value }
         ))

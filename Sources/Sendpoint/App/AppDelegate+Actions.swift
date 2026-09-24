@@ -7,16 +7,16 @@ extension AppDelegate {
         let current = facts?.current
         statusItemController.setBaseTitle(
             StatusMenuModel.title(for: current),
-            tooltip: "\(current?.name ?? "No stack") · \(templates.activeTemplate.name)"
+            tooltip: "\(current?.name ?? "No stack") · \(templateSettings.activeTemplate.name)"
         )
         statusItemController.rebuildMenu(
             facts: facts,
             storeStatus: statusMenuStoreStatus,
             error: store?.error,
             hasPendingMutations: store?.hasPendingMutations == true,
-            settings: settings,
-            shortcuts: shortcuts,
-            templates: templates
+            settings: appSettings,
+            shortcuts: shortcutSettings,
+            templates: templateSettings
         )
     }
 
@@ -35,7 +35,7 @@ extension AppDelegate {
             editLatest: { [weak self] in self?.latestNoteEditor?.model.send(.open) }
         )
         let issues = hotKeyRegistrar.register(actions)
-        shortcuts.updateShortcutRegistrationIssues(issues)
+        shortcutSettings.updateShortcutRegistrationIssues(issues)
         refreshStatusItem()
     }
 
@@ -78,13 +78,13 @@ extension AppDelegate {
     private func copyMarkdown() {
         guard !focusOpenNoteEditor() else { return }
         guard let store else { NSSound.beep(); return }
-        let target = settings.pasteDirectly
+        let target = appSettings.pasteDirectly
             ? NSWorkspace.shared.frontmostApplication?.processIdentifier
             : nil
         exportController.copy(
             store: store,
             stackID: store.selectedStackID,
-            template: templates.activeTemplate,
+            template: templateSettings.activeTemplate,
             pasteTarget: target
         ) { [weak self] message in
             self?.statusItemController.flash(message)
@@ -111,7 +111,7 @@ extension AppDelegate {
     func requestTemplateSelection(_ templateID: UUID) {
         if settingsWindowController?.requestTemplateSelection(templateID) == true { return }
         do {
-            try templates.selectTemplate(id: templateID)
+            try templateSettings.selectTemplate(id: templateID)
             refreshStatusItem()
         } catch {
             NSSound.beep()

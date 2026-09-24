@@ -3,6 +3,22 @@ import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
+nonisolated enum PanelKey: Equatable {
+    case escape
+    case commandReturn
+
+    init?(event: NSEvent) {
+        if event.keyCode == UInt16(kVK_Escape) {
+            self = .escape
+        } else if (event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter)),
+                  event.modifierFlags.contains(.command) {
+            self = .commandReturn
+        } else {
+            return nil
+        }
+    }
+}
+
 final class CapturePanel: NSPanel {
     var onClose: (() -> Void)?
 
@@ -61,17 +77,17 @@ final class CaptureWindows {
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
-            if event.keyCode == UInt16(kVK_Escape) {
+            switch PanelKey(event: event) {
+            case .escape:
                 if self.surface == .voice { self.model.send(.voiceEscape) }
                 else { self.model.send(.dismiss) }
                 return nil
-            }
-            if (event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter)),
-               event.modifierFlags.contains(.command) {
+            case .commandReturn:
                 self.model.send(.save)
                 return nil
+            case nil:
+                return event
             }
-            return event
         }
     }
 
@@ -124,7 +140,7 @@ final class CaptureWindows {
 
     private func installVoiceEscapeFallback() {
         voiceEscapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == UInt16(kVK_Escape) else { return }
+            guard PanelKey(event: event) == .escape else { return }
             MainActor.assumeIsolated { self?.model.send(.voiceEscape) }
         }
     }

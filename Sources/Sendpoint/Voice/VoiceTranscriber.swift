@@ -47,41 +47,40 @@ nonisolated protocol VoiceTranscribing: Sendable {
 }
 
 nonisolated final class VoiceModelProgressRelay: @unchecked Sendable {
-    private let lock = NSLock()
-    private var observers: [Int: @Sendable (Double) -> Void] = [:]
-    private var nextID = 0
-    private var latest: Double?
+    private struct State {
+        var observers: [Int: @Sendable (Double) -> Void] = [:]
+        var nextID = 0
+        var latest: Double?
+    }
+
+    private let state = Locked(State())
 
     @discardableResult
     func subscribe(_ observer: @escaping @Sendable (Double) -> Void) -> Int {
-        lock.lock()
-        nextID += 1
-        let id = nextID
-        observers[id] = observer
-        let replay = latest
-        lock.unlock()
+        let (id, replay) = state.withLock { state in
+            state.nextID += 1
+            let id = state.nextID
+            state.observers[id] = observer
+            return (id, state.latest)
+        }
         if let replay { observer(replay) }
         return id
     }
 
     func unsubscribe(_ id: Int) {
-        lock.lock()
-        observers[id] = nil
-        lock.unlock()
+        state.withLock { $0.observers[id] = nil }
     }
 
     func report(_ fraction: Double) {
-        lock.lock()
-        latest = fraction
-        let current = Array(observers.values)
-        lock.unlock()
+        let current = state.withLock { state in
+            state.latest = fraction
+            return Array(state.observers.values)
+        }
         for observer in current { observer(fraction) }
     }
 
     func reset() {
-        lock.lock()
-        latest = nil
-        lock.unlock()
+        state.withLock { $0.latest = nil }
     }
 }
 
@@ -331,14 +330,13 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
 }
 
 final class TranscriberLogOnce: @unchecked Sendable {
-    private let lock = NSLock()
-    private nonisolated(unsafe) var logged = false
+    private nonisolated let logged = Locked(false)
 
     nonisolated func mark() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !logged else { return false }
-        logged = true
-        return true
+        logged.withLock { logged in
+            guard !logged else { return false }
+            logged = true
+            return true
+        }
     }
 }

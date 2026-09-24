@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import SendpointDomain
 import SwiftUI
 
@@ -34,16 +33,16 @@ final class LatestNoteEditorWindow {
             self.panel = panel
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, event.window === self.panel else { return event }
-                if event.keyCode == UInt16(kVK_Escape) {
+                switch PanelKey(event: event) {
+                case .escape:
                     self.model.send(.dismiss)
                     return nil
-                }
-                if [UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter)].contains(event.keyCode),
-                   event.modifierFlags.contains(.command) {
+                case .commandReturn:
                     self.model.send(.save)
                     return nil
+                case nil:
+                    return event
                 }
-                return event
             }
         }
         installCloseHandler()

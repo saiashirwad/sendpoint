@@ -110,26 +110,27 @@ final class VoiceNoteService {
             do {
                 let queue = try await microphone.start(order)
                 guard !Task.isCancelled, self.machine.phase == .starting(take) else { return }
-                if self.microphones != order {
-                    self.stopMicrophone()
-                    self.startMicrophone(take)
-                    return
-                }
+                if self.restartIfMicrophoneOrderChanged(order, take: take) { return }
                 self.tasks[.start] = nil
                 self.queue = queue
                 self.stream(queue, take: take)
                 self.send(.micStarted(take, self.now()))
             } catch {
                 guard !Task.isCancelled, self.machine.phase == .starting(take) else { return }
-                if self.microphones != order {
-                    self.stopMicrophone()
-                    self.startMicrophone(take)
-                    return
-                }
+                if self.restartIfMicrophoneOrderChanged(order, take: take) { return }
                 self.tasks[.start] = nil
                 self.send(.micFailed(take, error.localizedDescription))
             }
         }
+    }
+
+    private func restartIfMicrophoneOrderChanged(_ order: MicrophoneOrder, take: UUID) -> Bool {
+        if microphones != order {
+            stopMicrophone()
+            startMicrophone(take)
+            return true
+        }
+        return false
     }
 
     private func stopMicrophone() {

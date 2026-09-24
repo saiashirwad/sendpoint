@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct VoiceOrb: View {
-    enum Mode: Equatable {
+    nonisolated enum Mode: Equatable {
         case idle
         case live
         case thinking

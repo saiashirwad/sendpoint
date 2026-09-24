@@ -4,9 +4,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let environment: AppEnvironment
     var statusItemController: StatusItemController { environment.statusItemController }
     var surfaces: SurfaceCoordinator { environment.surfaces }
-    var settings: AppSettings { environment.appSettings }
-    var shortcuts: ShortcutSettings { environment.shortcutSettings }
-    var templates: TemplateSettings { environment.templateSettings }
+    var appSettings: AppSettings { environment.appSettings }
+    var shortcutSettings: ShortcutSettings { environment.shortcutSettings }
+    var templateSettings: TemplateSettings { environment.templateSettings }
     var voiceSettings: VoiceSettings { environment.voiceSettings }
     var captureController: CaptureController { environment.captureController }
     var permissionState: PermissionController { environment.permissionState }
