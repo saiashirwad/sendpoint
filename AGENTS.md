@@ -11,7 +11,7 @@
 - See UI with `./shots.sh`: renders every screen, light and dark, into `.build/shots/` (`--diff` keeps the last set and fails on each changed screen, diffs in `.build/shots-diff/`). A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
 - Finish every requested change with `./ship.sh` (build, assemble, install, launch; full log in `.build/ship.log`) before reporting it done.
 - Publish only with `./release.sh X.Y.Z --ad-hoc --publish`.
-- Before adding a setting, a shortcut, or a state machine, load the `add-setting`, `add-shortcut`, or `add-state-machine` skill.
+- Before adding a setting, a shortcut, or a state machine, read its guide first: `.claude/skills/add-setting/SKILL.md`, `.claude/skills/add-shortcut/SKILL.md`, or `.claude/skills/add-state-machine/SKILL.md`.
 
 # Folder map
 
