@@ -51,46 +51,33 @@ private actor MicrophoneHardware {
     private var engine: AVAudioEngine?
     private var activeLabel = "voice"
     private var activeDevice: AudioInputDevice?
-    private var activeFormat: AVAudioFormat?
     private var spareEngine: AVAudioEngine?
     private var spareDevice: AudioInputDevice?
-    private var spareFormat: AVAudioFormat?
 
     func prepare(_ order: MicrophoneOrder) {
         guard engine == nil, spareEngine == nil else { return }
         let engine = AVAudioEngine()
         let input = engine.inputNode
         guard let device = AudioInputDeviceQuery.preferred(order),
-              AudioInputDeviceQuery.bind(device, to: input) else { return }
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { return }
+              AudioInputDeviceQuery.bind(device, to: input),
+              Self.tapFormat(of: input) != nil
+        else { return }
         spareEngine = engine
         spareDevice = device
-        spareFormat = format
         Diag.log("microphone prepared: \(device.name)")
     }
 
     func start(_ order: MicrophoneOrder, level: AsyncStream<Float>.Continuation,
                collectFrames: Bool) throws -> VoiceAudioQueue {
         stop()
-        let engine = spareEngine ?? AVAudioEngine()
-        let input = engine.inputNode
         guard let device = AudioInputDeviceQuery.preferred(order) else { throw MicrophoneError.noInputDevice }
-        let cachedFormat = spareDevice?.id == device.id && spareDevice?.uid == device.uid
-            ? spareFormat : nil
-        if cachedFormat == nil && !AudioInputDeviceQuery.bind(device, to: input) {
-            throw MicrophoneError.noInputDevice
-        }
-        let format = cachedFormat ?? input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { throw MicrophoneError.noInputDevice }
-        spareEngine = nil
-        spareDevice = nil
-        spareFormat = nil
+        let (engine, format) = try boundEngine(for: device)
+        let input = engine.inputNode
 
         let queue = VoiceAudioQueue()
         let label = collectFrames ? "voice" : "input preview"
         Diag.log("\(label) tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
-        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable buffer, _ in
+        try Self.installTap(on: input, format: format) { @Sendable buffer, _ in
             if collectFrames, let frame = VoiceAudioFrame(buffer: buffer) {
                 queue.append(frame)
             }
@@ -104,10 +91,39 @@ private actor MicrophoneHardware {
         }
         self.engine = engine
         activeDevice = device
-        activeFormat = format
         activeLabel = label
         Diag.log("\(label) recording started")
         return queue
+    }
+
+    private func boundEngine(for device: AudioInputDevice) throws -> (AVAudioEngine, AVAudioFormat) {
+        let spare = spareEngine
+        let spareMatches = spareDevice?.id == device.id && spareDevice?.uid == device.uid
+        spareEngine = nil
+        spareDevice = nil
+        if let spare, spareMatches {
+            AudioInputDeviceQuery.matchRate(of: device, on: spare.inputNode)
+            if let format = Self.tapFormat(of: spare.inputNode) { return (spare, format) }
+            Diag.log("microphone format changed on \(device.name); binding a new engine")
+        }
+        let engine = (spareMatches ? nil : spare) ?? AVAudioEngine()
+        guard AudioInputDeviceQuery.bind(device, to: engine.inputNode),
+              let format = Self.tapFormat(of: engine.inputNode)
+        else { throw MicrophoneError.noInputDevice }
+        return (engine, format)
+    }
+
+    private static func tapFormat(of input: AVAudioInputNode) -> AVAudioFormat? {
+        MicrophoneTapFormat.valid(output: input.outputFormat(forBus: 0), hardware: input.inputFormat(forBus: 0))
+    }
+
+    private static func installTap(on input: AVAudioInputNode, format: AVAudioFormat,
+                                   block: @escaping AVAudioNodeTapBlock) throws {
+        if #available(macOS 27, *) {
+            try input.__installTap(onBus: 0, bufferSize: 2_048, format: format, error: (), block: block)
+        } else {
+            input.installTap(onBus: 0, bufferSize: 2_048, format: format, block: block)
+        }
     }
 
     func stop() {
@@ -117,9 +133,7 @@ private actor MicrophoneHardware {
         self.engine = nil
         spareEngine = engine
         spareDevice = activeDevice
-        spareFormat = activeFormat
         activeDevice = nil
-        activeFormat = nil
         Diag.log("\(activeLabel) recording stopped")
     }
 
@@ -127,6 +141,13 @@ private actor MicrophoneHardware {
         stop()
         spareEngine = nil
         spareDevice = nil
-        spareFormat = nil
+    }
+}
+
+nonisolated enum MicrophoneTapFormat {
+    static func valid(output: AVAudioFormat, hardware: AVAudioFormat) -> AVAudioFormat? {
+        guard output.sampleRate > 0, output.channelCount > 0,
+              output.sampleRate == hardware.sampleRate else { return nil }
+        return output
     }
 }

@@ -167,6 +167,11 @@ nonisolated enum AudioInputDeviceQuery {
         return true
     }
 
+    static func matchRate(of device: AudioInputDevice, on input: AVAudioInputNode) {
+        guard let unit = input.audioUnit else { return }
+        matchOutputRateToHardware(of: unit, deviceName: device.name)
+    }
+
     private static func select(_ device: AudioInputDevice, on input: AVAudioInputNode) -> Bool {
         guard let unit = input.audioUnit else { return false }
         var id = device.id
