@@ -241,6 +241,35 @@ final class HotKeyRegistrarTests: XCTestCase {
         )
     }
 
+    func testLatestNoteShortcutFiresCanBeClearedAndYieldsToExistingBindings() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let combo = KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.control, .command])
+        let settings = ShortcutSettings(defaults: defaults)
+        XCTAssertEqual(settings.combo(for: .editLatest), combo)
+        var registeredID: UInt32?
+        let center = HotKeyCenter(registerEvent: { key, modifiers, id in
+            if key == UInt32(combo.keyCode), modifiers == combo.carbonModifiers { registeredID = id.id }
+            return (noErr, EventHotKeyRef(bitPattern: 1))
+        }, unregisterEvent: { _ in })
+        let registrar = HotKeyRegistrar(settings: settings, center: center)
+        var fired = 0
+        var actions = makeActions()
+        actions.editLatest = { fired += 1 }
+        XCTAssertTrue(registrar.register(actions).isEmpty)
+        center.fire(id: try XCTUnwrap(registeredID), released: false)
+        XCTAssertEqual(fired, 1)
+        registrar.clear(.editLatest)
+        XCTAssertNil(ShortcutSettings(defaults: defaults).combo(for: .editLatest))
+        defaults.removeObject(forKey: "editLatestCombo")
+        defaults.set(try JSONEncoder().encode(combo), forKey: "captureCombo")
+        let restored = ShortcutSettings(defaults: defaults)
+        XCTAssertEqual(restored.captureCombo, combo)
+        XCTAssertNil(restored.combo(for: .editLatest))
+        XCTAssertEqual(restored.displacedDefault(for: .editLatest),
+                       .displaced(slot: .editLatest, combo: combo, by: .capture))
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let suite = "SendpointHotKeyRegistrarTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

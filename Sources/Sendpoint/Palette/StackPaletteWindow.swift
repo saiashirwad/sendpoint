@@ -92,6 +92,10 @@ final class StackPaletteWindowController: NSObject, NSWindowDelegate {
 
     func close() { model.send(.close) }
 
+    var hasUnfinishedInteraction: Bool {
+        model.state.inlineEdit != nil || model.state.isBusy
+    }
+
     func teardown() {
         guard lifecycle == .active else { return }
         model.send(.teardown)

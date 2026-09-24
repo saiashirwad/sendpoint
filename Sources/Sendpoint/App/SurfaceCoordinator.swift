@@ -13,6 +13,7 @@ enum Surface: CaseIterable, Hashable {
     case setup
     case captureEditor
     case captureVoice
+    case latestNoteEditor
 }
 
 final class SurfaceCoordinator {
@@ -49,7 +50,7 @@ final class SurfaceCoordinator {
 
     func present(_ surface: Surface) {
         switch surface {
-        case .captureEditor:
+        case .captureEditor, .latestNoteEditor:
             for hidden in [Surface.palette, .settings] {
                 dismiss(hidden)
             }
@@ -95,7 +96,7 @@ final class SurfaceCoordinator {
             switch surface {
             case .settings:
                 true
-            case .palette, .setup, .captureEditor, .captureVoice:
+            case .palette, .setup, .captureEditor, .captureVoice, .latestNoteEditor:
                 false
             }
         }

@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWindowController: SettingsWindowController?
     var setupWindowController: SetupWindowController?
     var palette: StackPaletteWindowController?
+    var latestNoteEditor: LatestNoteEditorWindow?
     var stackSelector: StackSelector?
     var stackReadout: StackReadoutController?
     enum StoreState {
@@ -61,6 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if settingsWindowController?.canTerminate() == false { return .terminateCancel }
+        if let editor = latestNoteEditor?.model, editor.isOpen {
+            editor.send(.open)
+            editor.send(.dismiss)
+            if editor.isOpen { return .terminateCancel }
+        }
         environment.voiceService.teardown()
         guard let store, store.state == .processing else { return .terminateNow }
         guard terminationTask == nil else { return .terminateLater }
@@ -82,6 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stackSelector = nil
         stackReadout?.teardown()
         stackReadout = nil
+        latestNoteEditor?.teardown()
+        latestNoteEditor = nil
         palette?.teardown()
         palette = nil
         setupWindowController?.teardown()

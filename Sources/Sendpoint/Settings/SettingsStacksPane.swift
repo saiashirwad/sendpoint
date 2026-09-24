@@ -27,6 +27,7 @@ struct SettingsStacksPane: View {
                 ShortcutRows(
                     specs: [
                         ShortcutSpec(title: "Show the stack", slot: .stack),
+                        ShortcutSpec(title: "Edit latest note", slot: .editLatest),
                         ShortcutSpec(title: "Clear stack", hint: "⌘Z undoes", slot: .clear),
                     ],
                     shortcuts: shortcuts,

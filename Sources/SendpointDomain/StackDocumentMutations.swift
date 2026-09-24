@@ -3,7 +3,7 @@ import Foundation
 public enum StackDocumentMutation: Equatable, Sendable {
     case switchStack(stackID: UUID)
     case addNote(stackID: UUID, note: Note)
-    case updateNoteBody(stackID: UUID, noteID: UUID, body: String)
+    case updateNoteBody(stackID: UUID, noteID: UUID, body: String, expected: Note? = nil)
     case removeNote(stackID: UUID, noteID: UUID)
 
     case moveNote(stackID: UUID, noteID: UUID, destinationIndex: Int)
@@ -91,12 +91,17 @@ public enum StackDocumentMutations {
             }
             document.stacks[stackIndex].notes.append(note)
 
-        case let .updateNoteBody(stackID, noteID, note):
+        case let .updateNoteBody(stackID, noteID, note, expected):
             guard let stackIndex = stackIndex(stackID, in: document),
                   let noteIndex = document.stacks[stackIndex].notes.firstIndex(where: {
                       $0.id == noteID
                   })
-            else { return .noOp }
+            else {
+                return expected == nil ? .noOp : .rejected("The note was moved or deleted. Your draft has been kept.")
+            }
+            if let expected, document.stacks[stackIndex].notes[noteIndex] != expected {
+                return .rejected("The note changed elsewhere. Your draft has been kept.")
+            }
             guard document.stacks[stackIndex].notes[noteIndex].body != note else {
                 return .noOp
             }

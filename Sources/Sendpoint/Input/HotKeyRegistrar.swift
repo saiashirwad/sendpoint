@@ -11,6 +11,7 @@ final class HotKeyRegistrar {
         var showStack: () -> Void
         var selectStack: (_ number: Int) -> Void
         var clear: () -> Void
+        var editLatest: () -> Void = {}
     }
 
     private let settings: ShortcutSettings
@@ -50,6 +51,7 @@ final class HotKeyRegistrar {
             case .stack: action = actions.showStack
             case let .selectStack(number): action = { actions.selectStack(number) }
             case .clear: action = actions.clear
+            case .editLatest: action = actions.editLatest
             }
             switch center.register(name: .slot(slot), combo: combo, released: released,
                                    action: action) {

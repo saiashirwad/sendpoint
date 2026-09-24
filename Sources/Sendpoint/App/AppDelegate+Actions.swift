@@ -23,15 +23,16 @@ extension AppDelegate {
     func registerHotKeys() {
         captureController.send(.voiceModeChanged(voiceSettings.voiceMode))
         let actions = HotKeyRegistrar.Actions(
-            voicePressed: { [weak self] in self?.captureController.send(.voicePressed) },
+            voicePressed: { [weak self] in self?.sendCaptureAction(.voicePressed) },
             voiceReleased: { [weak self] in self?.captureController.send(.voiceReleased) },
             typedNote: { [weak self] in self?.captureSelection() },
-            dictatePressed: { [weak self] in self?.captureController.send(.dictatePressed) },
+            dictatePressed: { [weak self] in self?.sendCaptureAction(.dictatePressed) },
             dictateReleased: { [weak self] in self?.captureController.send(.dictateReleased) },
             copy: { [weak self] in self?.copyMarkdown() },
             showStack: { [weak self] in self?.showStack() },
             selectStack: { [weak self] number in self?.selectStack(number) },
-            clear: { [weak self] in self?.clearStack() }
+            clear: { [weak self] in self?.clearStack() },
+            editLatest: { [weak self] in self?.latestNoteEditor?.model.send(.open) }
         )
         let issues = hotKeyRegistrar.register(actions)
         shortcuts.updateShortcutRegistrationIssues(issues)
@@ -40,9 +41,9 @@ extension AppDelegate {
 
     func perform(_ action: StatusMenuAction) {
         switch action {
-        case .voiceNote: captureController.send(.voiceToggled)
+        case .voiceNote: sendCaptureAction(.voiceToggled)
         case .typedNote: captureSelection()
-        case .dictate: captureController.send(.dictateToggled)
+        case .dictate: sendCaptureAction(.dictateToggled)
         case .showStack: showStack()
         case let .selectStack(number): selectStack(number)
         case let .selectTemplate(templateID): requestTemplateSelection(templateID)
@@ -57,11 +58,25 @@ extension AppDelegate {
     }
 
     private func captureSelection() {
+        guard !focusOpenNoteEditor() else { return }
         Diag.log("captureSelection invoked")
         captureController.beginCapture()
     }
 
+    private func sendCaptureAction(_ action: CaptureAction) {
+        guard !focusOpenNoteEditor() else { return }
+        captureController.send(action)
+    }
+
+    private func focusOpenNoteEditor() -> Bool {
+        guard let editor = latestNoteEditor?.model, editor.isOpen else { return false }
+        editor.send(.open)
+        statusItemController.flash("Finish editing this note first.")
+        return true
+    }
+
     private func copyMarkdown() {
+        guard !focusOpenNoteEditor() else { return }
         guard let store else { NSSound.beep(); return }
         let target = settings.pasteDirectly
             ? NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -120,6 +135,7 @@ extension AppDelegate {
     }
 
     func showStack() {
+        guard !focusOpenNoteEditor() else { return }
         guard store != nil, let palette else { NSSound.beep(); return }
         palette.show()
     }

@@ -5,11 +5,11 @@ import Observation
 import SendpointDomain
 
 nonisolated enum ShortcutSlot: Hashable, Sendable {
-    case voiceCapture, capture, dictate, copy, stack, clear
+    case voiceCapture, capture, dictate, copy, stack, clear, editLatest
     case selectStack(Int)
 
     static let allCases: [ShortcutSlot] =
-        [.voiceCapture, .capture, .dictate, .copy, .stack, .clear] + selectStackCases
+        [.voiceCapture, .capture, .dictate, .copy, .stack, .clear, .editLatest] + selectStackCases
     static let selectStackCases: [ShortcutSlot] = (1...StackDocument.stackCount).map(ShortcutSlot.selectStack)
 
     var rawValue: String {
@@ -20,6 +20,7 @@ nonisolated enum ShortcutSlot: Hashable, Sendable {
         case .copy: "copy"
         case .stack: "stack"
         case .clear: "clear"
+        case .editLatest: "editLatest"
         case let .selectStack(number): "selectStack\(number)"
         }
     }
@@ -32,13 +33,14 @@ nonisolated enum ShortcutSlot: Hashable, Sendable {
         case .copy: "Export stack as Markdown"
         case .stack: "Show stack"
         case .clear: "Clear stack"
+        case .editLatest: "Edit latest note"
         case let .selectStack(number): stackTitle(number)
         }
     }
 
     var isOptional: Bool {
         switch self {
-        case .dictate, .selectStack: true
+        case .dictate, .selectStack, .editLatest: true
         default: false
         }
     }
@@ -93,10 +95,10 @@ final class ShortcutSettings {
 
     private static let homeRow = [kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_Semicolon]
 
-    private static let stackDefaultCombos: [(ShortcutSlot, KeyCombo)] =
+    private static let optionalDefaultCombos: [(ShortcutSlot, KeyCombo)] =
         zip(ShortcutSlot.selectStackCases, homeRow).map { slot, key in
             (slot, KeyCombo(keyCode: UInt16(key), modifiers: [.option]))
-        }
+        } + [(.editLatest, KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.control, .command]))]
 
     private static let fixedDefaultCombos: [ShortcutSlot: KeyCombo] = [
         .voiceCapture: KeyCombo(keyCode: UInt16(kVK_ANSI_E), modifiers: [.command]),
@@ -110,7 +112,7 @@ final class ShortcutSettings {
 
     private let defaults: UserDefaults
     private var combos: [ShortcutSlot: KeyCombo]
-    private var unsetStackSlots: Set<ShortcutSlot> = []
+    private var unsetDefaultSlots: Set<ShortcutSlot> = []
     private(set) var shortcutRegistrationIssues: [ShortcutRegistrationIssue] = []
 
     var voiceCaptureCombo: KeyCombo { requiredCombo(.voiceCapture) }
@@ -130,12 +132,13 @@ final class ShortcutSettings {
         combos = Self.fixedDefaultCombos
         for slot in ShortcutSlot.allCases {
             switch Self.read(Key.combo(slot), from: defaults) {
-            case .absent: if case .selectStack = slot { unsetStackSlots.insert(slot) }
+            case .absent:
+                if Self.optionalDefaultCombos.contains(where: { $0.0 == slot }) { unsetDefaultSlots.insert(slot) }
             case .unbound: combos[slot] = nil
             case let .combo(combo): combos[slot] = combo
             }
         }
-        adoptFreeStackDefaults()
+        adoptFreeDefaults()
         shortcutRegistrationIssues = ShortcutSlot.allCases.compactMap { slot in
             guard let combo = combos[slot] else { return displacedDefault(for: slot) }
             if let conflict = shortcutConflict(for: combo, excluding: slot) {
@@ -147,8 +150,8 @@ final class ShortcutSettings {
 
     func combo(for slot: ShortcutSlot) -> KeyCombo? { combos[slot] }
     func displacedDefault(for slot: ShortcutSlot) -> ShortcutRegistrationIssue? {
-        guard unsetStackSlots.contains(slot), combos[slot] == nil,
-              let combo = Self.stackDefaultCombos.first(where: { $0.0 == slot })?.1,
+        guard unsetDefaultSlots.contains(slot), combos[slot] == nil,
+              let combo = Self.optionalDefaultCombos.first(where: { $0.0 == slot })?.1,
               case let .duplicate(owner) = shortcutConflict(for: combo, excluding: slot)
         else { return nil }
         return .displaced(slot: slot, combo: combo, by: owner)
@@ -174,22 +177,22 @@ final class ShortcutSettings {
     func setShortcut(_ proposed: KeyCombo, for slot: ShortcutSlot) throws {
         if let conflict = shortcutConflict(for: proposed, excluding: slot) { throw conflict }
         combos[slot] = proposed
-        unsetStackSlots.remove(slot)
+        unsetDefaultSlots.remove(slot)
         persist(proposed, key: Key.combo(slot))
-        adoptFreeStackDefaults()
+        adoptFreeDefaults()
     }
 
     func clearShortcut(for slot: ShortcutSlot) {
-        guard slot.isOptional, combos[slot] != nil || unsetStackSlots.contains(slot) else { return }
+        guard slot.isOptional, combos[slot] != nil || unsetDefaultSlots.contains(slot) else { return }
         combos[slot] = nil
-        unsetStackSlots.remove(slot)
+        unsetDefaultSlots.remove(slot)
         defaults.set(Self.unboundMarker, forKey: Key.combo(slot))
-        adoptFreeStackDefaults()
+        adoptFreeDefaults()
     }
 
-    private func adoptFreeStackDefaults() {
-        for (slot, combo) in Self.stackDefaultCombos
-        where unsetStackSlots.contains(slot) && combos[slot] == nil
+    private func adoptFreeDefaults() {
+        for (slot, combo) in Self.optionalDefaultCombos
+        where unsetDefaultSlots.contains(slot) && combos[slot] == nil
             && shortcutConflict(for: combo, excluding: slot) == nil {
             combos[slot] = combo
         }
