@@ -1,0 +1,61 @@
+{
+  "compiler": "/opt/homebrew/bin/odin version dev-2026-09:a2fb372b7",
+  "output_directory": "/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99",
+  "check_capture": {
+    "seconds": [
+      0.086,
+      0.0764,
+      0.0766,
+      0.0825,
+      0.0778
+    ],
+    "median": 0.0778,
+    "last_output": ""
+  },
+  "test_capture": {
+    "seconds": [
+      0.7763,
+      0.6736,
+      0.7175,
+      0.6791,
+      0.7009
+    ],
+    "median": 0.7009,
+    "last_output": "[INFO ] --- [2026-09-30 10:15:25] Starting test runner with 1 thread.\n[INFO ] --- [2026-09-30 10:15:25] The random seed sent to every test is: 42.\n[INFO ] --- [2026-09-30 10:15:25] Memory tracking is enabled. Tests will log their memory usage if there's an issue.\n[INFO ] --- [2026-09-30 10:15:25] < Final Mem/ Total Mem> <  Peak Mem> (#Free/Alloc) :: [package.test_name]\n\nFinished 6 tests in 120\u00b5s. All tests were successful.\n\n"
+  },
+  "build_native_debug": {
+    "seconds": [
+      0.5836,
+      0.5876,
+      0.5115,
+      0.4875,
+      0.4888
+    ],
+    "median": 0.5115,
+    "last_output": ""
+  },
+  "build_native_release": {
+    "seconds": [
+      1.6371,
+      1.5314,
+      1.6139,
+      1.4887,
+      1.4709
+    ],
+    "median": 1.5314,
+    "last_output": ""
+  },
+  "sign": "/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app: replacing existing signature\n",
+  "verify": "/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app: valid on disk\n/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app: satisfies its Designated Requirement\n",
+  "bundle_execution": "bundle: research.sendpoint.odin-probe\n",
+  "debugger": "(lldb) target create \"/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app/Contents/MacOS/OdinProbe\"\nCurrent executable set to '/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app/Contents/MacOS/OdinProbe' (arm64).\n(lldb) target symbols add /var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/native.dSYM\nsymbol file '/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/native.dSYM/Contents/Resources/DWARF/native' has been added to '/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app/Contents/MacOS/OdinProbe'\n(lldb) breakpoint set --file main.odin --line 8\nBreakpoint 1: where = OdinProbe`main::main + 268 at main.odin:8:11, address = 0x000000010003da74\n(lldb) run\nbundle: research.sendpoint.odin-probe\nProcess 98223 launched: '/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/OdinProbe.app/Contents/MacOS/OdinProbe' (arm64)\nProcess 98223 stopped\n* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 1.1\n      frame #0: 0x000000010003da74 OdinProbe`main::main at main.odin:8:11\n   5   \tmain :: proc() {\n   6   \t    pool := NS.AutoreleasePool_alloc()\n   7   \t    pool = NS.AutoreleasePool_init(pool)\n-> 8   \t    defer NS.AutoreleasePool_drain(pool)\n    \t          ^\n   9   \t    // Proves linkage and typed ObjC messaging without opening UI or asking permissions.\n   10  \t    bundle := NS.Bundle_mainBundle()\n   11  \t    identifier := NS.Bundle_bundleIdentifier(bundle)\nTarget 0: (OdinProbe) stopped.\n(lldb) frame variable pool\n(objc_Foundation::AutoreleasePool *) pool = 0x0000000100634320\n(lldb) continue\nProcess 98223 resuming\nProcess 98223 exited with status = 0 (0x00000000)\n",
+  "sizes": {
+    "debug_bytes": 430808,
+    "release_bytes": 191040
+  },
+  "appkit_construction": "NSPanel + NSVisualEffectView + NSTextField + NSTextView constructed\n",
+  "missing_enum_case": {
+    "exit": 1,
+    "output": "/private/var/folders/_f/yb2trsh50c1gv2dpybhtbw7r0000gn/T/opencode/odin-agents-lk3irq99/missing_case.odin(3:34) Unhandled switch case: Voice\tSuggestion: Was '#partial switch' wanted? \n"
+  }
+}
