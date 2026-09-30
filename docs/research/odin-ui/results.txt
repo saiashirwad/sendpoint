@@ -1,0 +1,18 @@
+Before show: app active=false
+Panel key=true; app active=true; backingScale=2.0
+AX roles: text=AXTextArea button=AXButton; callbacks: save=1 change=1
+PASS: native controls, subclass drawRect, target/action, text delegate, selection, synthetic marked text, snapshot, explicit teardown
+Before show: app active=false
+Panel key=true; app active=true; backingScale=2.0
+AX roles: text=AXTextArea button=AXButton; callbacks: save=1 change=1
+PASS: native controls, subclass drawRect, target/action, text delegate, selection, synthetic marked text, snapshot, explicit teardown
+Sendpoint: width 54.05 pt, 1 runs
+  Helvetica: 9 glyphs
+العربية: width 27.27 pt, 1 runs
+  GeezaPro: 7 glyphs
+日本語: width 36.00 pt, 1 runs
+  PingFangSC-Regular: 3 glyphs
+👩🏽‍💻: width 16.00 pt, 1 runs
+  AppleColorEmoji: 1 glyphs
+é: width 6.67 pt, 1 runs
+  Helvetica: 1 glyphs
