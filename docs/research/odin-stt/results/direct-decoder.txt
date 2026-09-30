@@ -1,0 +1,37 @@
+load_ms=86.244
+
+functionName: (null)
+inputs: (
+    "targets : MultiArray (Int32, 1 \U00d7 1)",
+    "h_in : MultiArray (Float32, 2 \U00d7 1 \U00d7 640)",
+    "c_in : MultiArray (Float32, 2 \U00d7 1 \U00d7 640)",
+    "target_length : MultiArray (Int32, 1)"
+)
+outputs: (
+    "decoder : MultiArray (Float32, 1 \U00d7 640 \U00d7 1)",
+    "h_out : MultiArray (Float32, 2 \U00d7 1 \U00d7 640)",
+    "c_out : MultiArray (Float32, 2 \U00d7 1 \U00d7 640)"
+)
+states: (
+)
+predictedFeatureName: (null)
+predictedProbabilitiesName: (null)
+classLabels: (null)
+updatable: NO
+trainingInputs: (
+)
+parameters: (
+)
+metadata: {
+    MLModelAuthorKey = "Fluid Inference";
+    MLModelCreatorDefinedKey =     {
+        "com.github.apple.coremltools.conversion_date" = "2026-06-12";
+        "com.github.apple.coremltools.source" = "torch==2.7.0";
+        "com.github.apple.coremltools.source_dialect" = TorchScript;
+        "com.github.apple.coremltools.version" = "9.0";
+    };
+    MLModelDescriptionKey = "Parakeet-unified decoder (RNNT prediction network)";
+    MLModelLicenseKey = "";
+    MLModelVersionStringKey = "";
+}
+decoder_prediction_ms=1.708 output_count=640 first_value=0.015

@@ -1,0 +1,55 @@
+sherpa=1.13.8 config_size=272 model_size=136
+load_ms=815.206
+audio_s=7.435
+partial audio_ms=1220 text=Well
+partial audio_ms=1300 text=Well,
+partial audio_ms=1380 text=Well, I don't
+partial audio_ms=1540 text=Well, I don't wish
+partial audio_ms=1780 text=Well, I don't wish to
+partial audio_ms=1860 text=Well, I don't wish to see
+partial audio_ms=2020 text=Well, I don't wish to see it
+partial audio_ms=2180 text=Well, I don't wish to see it any
+partial audio_ms=2260 text=Well, I don't wish to see it anymore
+partial audio_ms=2580 text=Well, I don't wish to see it anymore,
+partial audio_ms=2660 text=Well, I don't wish to see it anymore, ob
+partial audio_ms=2740 text=Well, I don't wish to see it anymore, observed
+partial audio_ms=3060 text=Well, I don't wish to see it anymore, observed Ph
+partial audio_ms=3140 text=Well, I don't wish to see it anymore, observed Phoe
+partial audio_ms=3220 text=Well, I don't wish to see it anymore, observed Phoebe
+partial audio_ms=3700 text=Well, I don't wish to see it anymore, observed Phoebe,
+partial audio_ms=3860 text=Well, I don't wish to see it anymore, observed Phoebe, turning
+partial audio_ms=4100 text=Well, I don't wish to see it anymore, observed Phoebe, turning a
+partial audio_ms=4180 text=Well, I don't wish to see it anymore, observed Phoebe, turning away
+partial audio_ms=4420 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her
+partial audio_ms=4500 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes
+partial audio_ms=5460 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes.
+partial audio_ms=5700 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It
+partial audio_ms=5780 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is
+partial audio_ms=5860 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certain
+partial audio_ms=5940 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly
+partial audio_ms=6340 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very
+partial audio_ms=6500 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like
+partial audio_ms=6740 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like the
+partial audio_ms=6820 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like the old
+partial audio_ms=7060 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like the old port
+partial audio_ms=7140 text=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like the old portrait
+final=Well, I don't wish to see it anymore, observed Phoebe, turning away her eyes. It is certainly very like the old portrait
+tail_ms=779.037 decode_ms=23745.479
+       24.58 real        49.55 user         0.29 sys
+          1231273984  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               75496  page reclaims
+                   4  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  10  voluntary context switches
+               12555  involuntary context switches
+        750114669298  instructions retired
+        153376677096  cycles elapsed
+          1216087984  peak memory footprint

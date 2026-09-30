@@ -1,0 +1,46 @@
+event=0 load_ms=74.205917
+event=1 Well
+event=1 Well, I don't
+event=1 Well, I don't wish
+event=1 Well, I don't wish to
+event=1 Well, I don't wish to see
+event=1 Well, I don't wish to see it
+event=1 Well, I don't wish to see it any
+event=1 Well, I don't wish to see it any more
+event=1 Well, I don't wish to see it any more,
+event=1 Well, I don't wish to see it any more, ob
+event=1 Well, I don't wish to see it any more, observed
+event=1 Well, I don't wish to see it any more, observed Phoebe
+event=1 Well, I don't wish to see it any more, observed Phoebe,
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like the
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like the old
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like the old port
+event=1 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like the old portrait
+event=2 Well, I don't wish to see it any more, observed Phoebe, turning away her eyes it is certainly very like the old portrait
+event=0 tail_ms=15.915791 decode_ms=696.131125
+        0.79 real         0.19 user         0.06 sys
+            59850752  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                4917  page reclaims
+                  14  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                   0  voluntary context switches
+                2942  involuntary context switches
+          2610236222  instructions retired
+           852052577  cycles elapsed
+            41943736  peak memory footprint
