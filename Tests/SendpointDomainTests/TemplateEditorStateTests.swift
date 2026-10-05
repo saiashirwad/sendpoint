@@ -14,7 +14,7 @@ final class TemplateEditorStateTests: XCTestCase {
     }
 
     func testDirtyDeleteRefusesWithoutChangingTheDraft() {
-        var state = make(edited: .coherent)
+        var state = make(edited: .learn)
         _ = state.update(.editPreamble("Dirty"))
         let dirty = state
 
@@ -25,7 +25,7 @@ final class TemplateEditorStateTests: XCTestCase {
     }
 
     func testCancelledAndStaleDecisionsDoNothing() {
-        var state = make(edited: .coherent)
+        var state = make(edited: .learn)
         _ = state.update(.editPreamble("Dirty"))
         XCTAssertEqual(state.update(.requestSelection(Template.plain.id)), [])
         XCTAssertEqual(state.pendingTemplateID, Template.plain.id)
@@ -33,7 +33,7 @@ final class TemplateEditorStateTests: XCTestCase {
         XCTAssertEqual(state.update(.resolvePendingSelection(.cancel, id: nil)), [])
         XCTAssertNil(state.pendingTemplateID)
         XCTAssertEqual(state.draft.preamble, "Dirty")
-        XCTAssertEqual(state.editedTemplateID, Template.coherent.id)
+        XCTAssertEqual(state.editedTemplateID, Template.learn.id)
 
         let cancelled = state
         XCTAssertEqual(state.update(.resolvePendingSelection(.save, id: nil)), [])
@@ -59,7 +59,7 @@ final class TemplateEditorStateTests: XCTestCase {
         XCTAssertEqual(state, dirty)
 
         XCTAssertEqual(
-            state.update(.storedTemplate(.coherent, templates: state.templates, thenSelect: nil)),
+            state.update(.storedTemplate(.learn, templates: state.templates, thenSelect: nil)),
             []
         )
         XCTAssertEqual(state, dirty)
@@ -76,7 +76,7 @@ final class TemplateEditorStateTests: XCTestCase {
     }
 
     func testSaveAsNewSelectsTheCloneBeforeThePendingDestination() {
-        var state = make(edited: .coherent)
+        var state = make(edited: .learn)
         _ = state.update(.editPreamble("Clone"))
         _ = state.update(.requestSelection(Template.plain.id))
         let id = UUID(uuidString: "00000000-0000-0000-0000-000000000099")!
@@ -84,17 +84,17 @@ final class TemplateEditorStateTests: XCTestCase {
             id: id,
             name: "Copy",
             preamble: "Clone",
-            includeTimestamps: Template.coherent.includeTimestamps,
-            includeHeading: Template.coherent.includeHeading,
-            includeNoteNumbers: Template.coherent.includeNoteNumbers,
-            clearStackAfterExport: Template.coherent.clearStackAfterExport
+            includeTimestamps: Template.learn.includeTimestamps,
+            includeHeading: Template.learn.includeHeading,
+            includeNoteNumbers: Template.learn.includeNoteNumbers,
+            clearStackAfterExport: Template.learn.clearStackAfterExport
         )
 
         XCTAssertEqual(
             state.update(.saveAsNewAndSelectPending(name: "Copy", id: id)),
             [.addTemplate(clone, thenSelect: Template.plain.id)]
         )
-        XCTAssertEqual(state.editedTemplateID, Template.coherent.id)
+        XCTAssertEqual(state.editedTemplateID, Template.learn.id)
         XCTAssertEqual(state.draft.preamble, "Clone")
 
         var templates = Template.builtIns
@@ -103,7 +103,7 @@ final class TemplateEditorStateTests: XCTestCase {
             state.update(.addedTemplate(clone, templates: templates, thenSelect: Template.plain.id)),
             [.selectTemplate(id: id, thenSelect: Template.plain.id)]
         )
-        XCTAssertEqual(state.editedTemplateID, Template.coherent.id)
+        XCTAssertEqual(state.editedTemplateID, Template.learn.id)
 
         XCTAssertEqual(
             state.update(.selectedTemplate(clone, templates: templates, thenSelect: Template.plain.id)),

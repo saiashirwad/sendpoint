@@ -34,8 +34,8 @@ final class SettingsIntentTests: XCTestCase {
         expected.includeHeading = true
         XCTAssertEqual(editor.draft, expected)
 
-        editor.send(.editClearStackAfterExport(true))
-        expected.clearStackAfterExport = true
+        editor.send(.editClearStackAfterExport(false))
+        expected.clearStackAfterExport = false
         XCTAssertEqual(editor.draft, expected)
         XCTAssertTrue(editor.isDirty)
     }

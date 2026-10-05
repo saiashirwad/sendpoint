@@ -5,6 +5,37 @@ import XCTest
 
 @MainActor
 final class ExportControllerTests: XCTestCase {
+    func testEveryBuiltInPastesItsPromptAndClearsWithoutOverridingDefaults() async throws {
+        for template in Template.builtIns {
+            let stack = Stack(notes: [note])
+            let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+            let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
+            defer { store.teardown() }
+            var written = ""
+            let reported = expectation(description: "\(template.name) pasted")
+            let exporter = ExportController(services: ExportServices(
+                write: { written = $0; return 42 },
+                paste: { pid, revision in
+                    XCTAssertEqual(pid, 1)
+                    XCTAssertEqual(revision, 42)
+                    return true
+                }
+            ))
+            defer { exporter.teardown() }
+
+            exporter.copy(store: store, stackID: stack.id, template: template, pasteTarget: 1) { _ in
+                reported.fulfill()
+            }
+            await fulfillment(of: [reported], timeout: 2)
+            await store.waitForIdle()
+
+            XCTAssertEqual(written, PromptComposer.markdown(stack: stack, template: template))
+            XCTAssertEqual(exporter.state, .idle)
+            XCTAssertTrue(store.currentNotes.isEmpty, template.name)
+            XCTAssertEqual(store.lastCleared?.notes, [note])
+        }
+    }
+
     private let note = Note(
         subject: .standalone,
         body: "A note"

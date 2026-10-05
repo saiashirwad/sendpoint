@@ -19,10 +19,10 @@ final class PromptComposerTests: XCTestCase {
     }
 
     func testComposerIncludesPreambleHeadingEntriesAndTimestamp() {
-        let output = compose(template: .coherent)
+        let output = compose(template: .learn)
 
         XCTAssertTrue(output.contains("# Reading notes — January 2, 2025"))
-        XCTAssertEqual(output.components(separatedBy: Template.coherent.preamble).count - 1, 1)
+        XCTAssertEqual(output.components(separatedBy: Template.learn.preamble).count - 1, 1)
         XCTAssertFalse(output.contains("## "))
         XCTAssertTrue(output.contains("_\(expectedTime)_"))
     }
@@ -33,19 +33,21 @@ final class PromptComposerTests: XCTestCase {
             Note(subject: .standalone, body: "Thursday", createdAt: date),
             Note(subject: .standalone, body: "Friday", createdAt: nextDay),
         ])
-        let output = compose(stack: stack, template: .coherent)
+        let output = compose(stack: stack, template: .learn)
 
         XCTAssertTrue(output.contains("Jan 2, 2025"), output)
         XCTAssertTrue(output.contains("Jan 3, 2025"), output)
-        XCTAssertFalse(compose(template: .coherent).contains("Jan 2, 2025"), "one day needs only the time")
+        XCTAssertFalse(compose(template: .learn).contains("Jan 2, 2025"), "one day needs only the time")
     }
 
     func testComposerNumbersEntriesOnlyWhenTheTemplateEnablesIt() {
-        let numbered = compose(template: .pointByPoint)
+        var template = Template.steer
+        template.includeNoteNumbers = true
+        let numbered = compose(template: template)
         XCTAssertTrue(numbered.contains("## 1"))
         XCTAssertTrue(numbered.contains("## 2"))
 
-        var unnumbered = Template.pointByPoint
+        var unnumbered = template
         unnumbered.includeNoteNumbers = false
         XCTAssertFalse(compose(template: unnumbered).contains("## "))
     }
