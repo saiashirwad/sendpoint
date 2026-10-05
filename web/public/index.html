@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sendpoint · Think out loud while you read</title>
-  <meta name="description" content="A free Mac menu-bar app. Speak notes on selected passages, then paste them as one prompt into ChatGPT, Gemini, Claude Code or OpenCode.">
+  <meta name="description" content="Keep your train of thought. Speak notes while you read, then paste passages and reactions as one AI prompt. Free, open-source Mac app with local transcription.">
   <meta property="og:title" content="Sendpoint">
-  <meta property="og:description" content="Speak notes on what you read. Send them as one prompt to learn from your reasoning or steer a coding agent.">
+  <meta property="og:description" content="Don't stop thinking to start typing. Speak as you read, then send your passages and reactions as one prompt to learn with AI or steer a coding agent.">
   <meta property="og:url" content="https://sendpoint.app/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Sendpoint">
@@ -18,7 +18,7 @@
   <meta name="twitter:site" content="@texoport__">
   <meta name="twitter:creator" content="@texoport__">
   <meta name="twitter:title" content="Sendpoint">
-  <meta name="twitter:description" content="Speak notes on what you read. Send them as one prompt to learn from your reasoning or steer a coding agent.">
+  <meta name="twitter:description" content="Don't stop thinking to start typing. Speak as you read, then send your passages and reactions as one prompt to learn with AI or steer a coding agent.">
   <meta name="twitter:image" content="https://sendpoint.app/og.png">
   <link rel="icon" href="/icon.png" type="image/png">
   <link rel="preload" href="/fonts/Geist-Regular.ttf" as="font" type="font/ttf" crossorigin>
@@ -45,7 +45,8 @@
       --sel: rgba(0, 0, 0, 0.075);
       --accent: #db1a66;
       --accent-wash: rgba(219, 26, 102, 0.1);
-      --ink: #111111;
+      --cta: #bd1557;
+      --cta-fg: #ffffff;
       --ink-fg: #ffffff;
       --term: #151517;
       --term-fg: #e8e8e8;
@@ -71,7 +72,8 @@
         --sel: rgba(255, 255, 255, 0.1);
         --accent: #fa5c99;
         --accent-wash: rgba(250, 92, 153, 0.14);
-        --ink: #f2f2f2;
+        --cta: #fa5c99;
+        --cta-fg: #121212;
         --ink-fg: #121212;
         --term: #0a0a0b;
         --shadow: 0 0 0 1px rgba(255,255,255,0.02), 0 16px 48px rgba(0,0,0,0.5);
@@ -92,6 +94,7 @@
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
     .skip { position: absolute; left: -9999px; top: 8px; }
     .skip:focus { left: 12px; z-index: 50; background: var(--paper); padding: 6px 10px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
     .wrap { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 40px; }
     .label {
@@ -128,7 +131,7 @@
     }
     .btn:hover { background: var(--fill); }
     .btn svg { width: 1.05em; height: 1.05em; fill: currentColor; flex: none; margin-top: -0.05em; }
-    .btn.primary { background: var(--ink); color: var(--ink-fg); box-shadow: none; }
+    .btn.primary { background: var(--cta); color: var(--cta-fg); box-shadow: 0 4px 20px var(--accent-wash); }
     .btn.primary:hover { opacity: 0.86; }
     .fine { font-size: 0.85rem; color: var(--fg-2); margin: 16px 0 0; }
 
@@ -140,14 +143,10 @@
       font-size: clamp(2.4rem, 4.3vw, 3.75rem); line-height: 1.02; letter-spacing: -0.038em;
       margin: 0 0 22px -0.04em; max-width: 10em;
     }
-    .hero .lede { font-size: 1.12rem; line-height: 1.5; color: var(--fg-2); max-width: 27em; margin-bottom: 30px; }
+    .hero .lede { font-size: 1.12rem; line-height: 1.5; color: var(--fg-2); max-width: 27em; margin-bottom: 16px; }
+    .hero .mechanic { color: var(--fg-2); max-width: 30em; margin-bottom: 28px; }
     .hero .lede b { color: var(--fg); font-weight: 500; }
 
-    .win {
-      background: var(--raised); border-radius: 12px; overflow: hidden;
-      border: 1px solid var(--window-edge); box-shadow: var(--shadow);
-      position: relative;
-    }
     .bar {
       height: 38px; display: flex; align-items: center; gap: 14px; padding: 0 14px;
       border-bottom: 1px solid var(--line); background: var(--well);
@@ -185,35 +184,42 @@
     .capsule .said {
       min-height: 58px; font-size: 0.84rem; line-height: 1.45; color: rgba(var(--c), 0.92);
     }
-    .capsule .said .w { opacity: 0; transition: opacity 0.08s ease; }
-    .capsule .said .w.on { opacity: 1; }
     .capsule .foot {
       white-space: nowrap; display: flex; align-items: center; gap: 10px; margin-top: 8px; height: 22px;
       font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.02em; color: rgba(var(--c), 0.55);
     }
     .capsule .foot .st { color: rgba(var(--c), 0.9); font-weight: 500; }
-    .capsule .foot .rule { width: 1px; height: 0.9em; background: rgba(var(--c), 0.16); }
     .capsule .foot .sp { flex: 1; }
     .orb { position: relative; width: 18px; height: 18px; flex: none; }
     .orb i { position: absolute; inset: 5px; border-radius: 50%; background: #fa5c99; }
     @media (prefers-color-scheme: dark) { .orb i { background: #db1a66; } }
-    .orb .halo { inset: 0; opacity: 0.25; animation: pulse 1.4s ease-in-out infinite; }
+    .orb .halo { inset: 0; opacity: 0.25; animation: pulse 1.4s ease-in-out 3; }
     @keyframes pulse { 0%, 100% { transform: scale(0.6); opacity: 0.35; } 50% { transform: scale(1); opacity: 0.18; } }
 
-    .scene { position: relative; padding-bottom: 54px; }
-    .scene .doc { padding: 26px 30px 92px; font-size: 0.95rem; line-height: 1.65; color: var(--fg-2); }
-    .scene .doc p:last-child { margin: 0; }
-    .scene .doc strong { color: var(--fg); font-weight: 500; }
-    .scene .doc .on { color: var(--fg); }
-    .scene .capsule { position: absolute; right: 28px; bottom: 20px; }
-    .scene .held {
-      position: absolute; left: 4px; bottom: 0;
-      display: flex; align-items: center; gap: 8px;
-      font-size: 0.85rem; color: var(--fg-2);
-    }
-    .scene .held .kbd { font-size: 0.95rem; height: 2.1em; min-width: 3.4em; box-shadow: inset 0 0 0 1px var(--line-2), 0 1px 0 var(--line-2); transform: translateY(1px); }
+    .demo { margin: 0; }
+    .demo-flow { margin: 0; padding: 0; list-style: none; display: grid; gap: 16px; }
+    .demo-flow > li { padding: 18px 22px; border: 1px solid var(--window-edge); border-radius: 12px; background: var(--raised); }
+    .demo-flow .stage { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 500; }
+    .demo-flow .stage .num { margin: 0; background: var(--accent-wash); color: var(--accent); width: 1.8em; height: 1.8em; }
+    .demo-flow .stage .hint { margin-left: auto; color: var(--fg-2); font-weight: 400; }
+    .demo-flow blockquote { margin: 0; font-size: 1.05rem; line-height: 1.55; }
+    .demo-flow mark.s { background: var(--accent-wash); box-shadow: 0 0 0 2px var(--accent-wash); }
+    .demo-flow > li.speaking { background: var(--term); border-color: #48484c; color: var(--term-fg); box-shadow: var(--shadow); }
+    .demo-flow .speaking .stage .hint { display: inline-flex; align-items: center; gap: 5px; color: #fa5c99; }
+    .demo-flow .speaking .num { background: rgba(250, 92, 153, 0.14); color: #fa5c99; }
+    .demo-flow .said { min-height: 3.1em; font-size: 1.05rem; line-height: 1.55; }
+    .demo-flow .said .w { opacity: 0.3; transition: opacity 0.08s ease; }
+    .demo-flow .said .w.on { opacity: 1; }
+    .demo-flow .orb i { background: #fa5c99; }
+    .demo-flow .compiled { border-color: var(--accent); }
+    .demo-flow .compiled .pair { border-left: 2px solid var(--accent); padding-left: 14px; }
+    .demo-flow .compiled .quote { color: var(--fg-2); font-size: 0.9rem; margin-bottom: 8px; }
+    .demo-flow .compiled .reaction { font-size: 1rem; margin: 0; }
+    .demo figcaption { margin-top: 14px; font-size: 0.85rem; color: var(--fg-2); }
 
-    .jobs-index { border-top: 1px solid var(--line); }
+    .use-cases { border-top: 1px solid var(--line); padding: 40px 0 0; }
+    .use-cases h2 { font-size: clamp(1.5rem, 2.4vw, 2rem); letter-spacing: -0.028em; line-height: 1.15; }
+    .use-cases p { margin: 12px 0 0; color: var(--fg-2); max-width: 45em; }
     .jobs-index .wrap { display: grid; grid-template-columns: 1fr 1fr; }
     .jobs-index a {
       display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: baseline;
@@ -270,7 +276,7 @@
     .note .meta .t { margin-left: auto; font-family: var(--mono); font-size: 0.64rem; }
     .note.solo { box-shadow: inset 0 0 0 1px var(--line); background: transparent; border: 1px dashed var(--line-2); box-shadow: none; }
     .standalone-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 280px); column-gap: 28px; margin-top: 16px; }
-    .standalone-row .cap { align-self: center; text-align: right; color: var(--fg-3); font-size: 0.86rem; }
+    .standalone-row .cap { align-self: center; text-align: right; color: var(--fg-2); font-size: 0.86rem; }
 
     .prompt {
       border-radius: 12px; background: var(--raised); border: 1px solid var(--window-edge); box-shadow: var(--shadow);
@@ -291,6 +297,15 @@
     .prompt pre .q { color: var(--fg-2); }
     .prompt pre .v { color: var(--fg); }
     .prompt pre .ts { color: var(--fg-2); font-style: italic; }
+    .prompt-preview { padding: 22px 24px; }
+    .prompt-preview .label { display: block; margin-bottom: 8px; color: var(--accent); }
+    .prompt-preview .intent { font-weight: 500; font-size: 1.08rem; line-height: 1.45; margin-bottom: 20px; }
+    .prompt-preview blockquote { margin: 0 0 10px; padding-left: 14px; border-left: 2px solid var(--accent); color: var(--fg-2); }
+    .prompt-preview .reaction { margin: 0; }
+    .prompt details { border-top: 1px solid var(--line); }
+    .prompt summary { cursor: pointer; padding: 14px 24px; font-size: 0.9rem; color: var(--fg-2); }
+    .prompt summary:hover { background: var(--fill); color: var(--fg); }
+    .prompt details[open] summary { border-bottom: 1px solid var(--line); }
 
     .reply { border-radius: 12px; background: var(--raised); border: 1px solid var(--window-edge); box-shadow: var(--shadow); overflow: hidden; }
     .reply .body { padding: 26px 30px 6px; }
@@ -367,7 +382,7 @@
       background: var(--raised);
     }
     .stacks .k { font-family: var(--mono); font-weight: 500; font-size: 0.86rem; display: block; }
-    .stacks .c { white-space: nowrap; font-family: var(--mono); font-size: 0.6rem; color: var(--fg-3); display: block; margin-top: 3px; letter-spacing: 0.02em; }
+    .stacks .c { white-space: nowrap; font-family: var(--mono); font-size: 0.6rem; color: var(--fg-2); display: block; margin-top: 3px; letter-spacing: 0.02em; }
     .stacks .cur { box-shadow: inset 0 0 0 1.5px var(--fg), 0 1px 0 var(--line-2); }
     .stacks .cur .c { color: var(--fg); }
 
@@ -418,7 +433,6 @@
       .how-grid > div:nth-child(3) { padding-left: 0; border-left: 0; }
       .how-grid > div:nth-child(n+3) { border-top: 1px solid var(--line); }
       section.job, section.band { padding: 72px 0; }
-      .scene .held { right: 8px; }
     }
     @media (max-width: 720px) {
       .annot, .standalone-row { grid-template-columns: minmax(0, 1fr); }
@@ -443,17 +457,16 @@
       .how-grid > div { padding: 22px 0 !important; border-left: 0 !important; }
       .how-grid > div + div { border-top: 1px solid var(--line); }
       .shortcuts { grid-template-columns: 1fr; }
-      .scene .doc { padding: 18px 18px 120px; font-size: 0.88rem; }
-      .scene .held { display: none; }
-      .scene .capsule { left: 10px; right: 10px; width: auto; max-width: none; }
-      .scene .capsule .n2 { display: none; }
+      .demo-flow > li { padding: 16px 18px; }
+      .prompt-preview { padding: 18px; }
+      .prompt summary { padding: 14px 18px; }
       .head .why { padding-top: 0; }
       .bar .url { transform: none; font-size: 0.72rem; }
       .prompt pre { font-size: 0.72rem; padding: 14px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .orb .halo { animation: none; opacity: 0.22; transform: scale(0.9); }
-      .capsule .said .w { opacity: 1; transition: none; }
+      .demo-flow .said .w { opacity: 1; transition: none; }
     }
   </style>
 </head>
@@ -476,7 +489,8 @@
       <div class="wrap">
         <div>
           <h1 id="hero-h">Think out loud while you read.</h1>
-           <p class="lede">Select a passage, hold <span class="kbd">⌘E</span> and say what you make of it. Keep reading. When you finish, <span class="kbd">⌃⌘V</span> pastes every note into <b>ChatGPT, Gemini, Claude Code or OpenCode</b> as one prompt.</p>
+          <p class="lede">Stopping to type can cost you the thought you were about to have. <b>Say it out loud instead.</b> Work through the idea without leaving what you're reading.</p>
+          <p class="mechanic">Select a passage, hold <span class="kbd">⌘E</span>, and just talk. When you're ready, <span class="kbd">⌃⌘V</span> pastes your passages and reactions as one prompt into ChatGPT, Gemini, Claude, or your coding agent.</p>
           <div class="actions">
             <a class="btn primary" href="/download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5.1c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>Download for Mac</a>
             <a class="btn" href="https://github.com/saiashirwad/sendpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>Source on GitHub</a>
@@ -484,28 +498,40 @@
           <p class="fine">Free · macOS 14+ · Apple Silicon</p>
         </div>
 
-        <div class="scene" aria-hidden="true">
-          <div class="win">
-            <div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="url">chatgpt.com</span></div>
-            <div class="doc">
-              <p>In SQLite's <strong>WAL</strong> mode, writers append changed pages to a <code>.wal</code> file rather than overwriting the main database file.</p>
-              <p class="on"><mark class="s">When a read transaction starts, SQLite remembers the last committed frame in the WAL. That end mark fixes which changes the reader can see.</mark></p>
-              <p>That end mark freezes the reader's view to a point-in-time snapshot.</p>
-            </div>
-          </div>
-          <div class="held"><span class="kbd">⌘E</span> held</div>
-          <div class="capsule">
-            <div class="said" id="said">wait so the reader doesn't even touch or lock the main db file, it just grabs an integer index in memory and walks the log for changes before that number?</div>
-            <div class="foot"><span class="st">Stack 1</span><span class="n2">2 notes</span><span class="rule n2"></span><span>24 words selected</span><span class="sp"></span><span class="orb"><i class="halo"></i><i></i></span></div>
-          </div>
-        </div>
+        <figure class="demo" aria-label="Illustrative workflow: select, speak, paste">
+          <ol class="demo-flow">
+            <li>
+              <div class="stage"><span class="num" aria-hidden="true">1</span>Select what makes you pause<span class="hint">Any app</span></div>
+              <blockquote><mark class="s">The WAL cannot be reset while readers still need its frames.</mark></blockquote>
+            </li>
+            <li class="speaking">
+              <div class="stage"><span class="num" aria-hidden="true">2</span>Hold <span class="kbd">⌘E</span> and talk<span class="hint"><span class="orb" aria-hidden="true"><i class="halo"></i><i></i></span>Recording</span></div>
+              <div class="said" id="said" aria-hidden="true">wait, so a slow reader can keep the WAL growing even while writes still work?</div>
+              <span class="sr-only">wait, so a slow reader can keep the WAL growing even while writes still work?</span>
+            </li>
+            <li class="compiled">
+              <div class="stage"><span class="num" aria-hidden="true">3</span>Paste one connected prompt<span class="hint"><span class="kbd">⌃⌘V</span></span></div>
+              <div class="pair">
+                <p class="quote">&gt; The WAL cannot be reset while readers still need its frames.</p>
+                <p class="reaction">wait, so a slow reader can keep the WAL growing even while writes still work?</p>
+              </div>
+            </li>
+          </ol>
+          <figcaption>Passage + your thinking. Already paired. No rewriting.</figcaption>
+        </figure>
       </div>
     </section>
 
-    <nav class="jobs-index" aria-label="The two jobs">
+    <div class="use-cases">
       <div class="wrap">
-        <a href="#learning"><span><b>Learning</b><span class="t">Explain it in your own words. Get your gaps filled.</span></span><span class="arrow" aria-hidden="true">↓</span></a>
-        <a href="#steering"><span><b>Steering an agent</b><span class="t">Answer its plan line by line, not in one vague message.</span></span><span class="arrow" aria-hidden="true">↓</span></a>
+        <h2 id="uses-h">Two ways to put your thinking to work.</h2>
+        <p>The same loop: read, react out loud, send. Make sense of a difficult idea, or make sure an agent understands yours.</p>
+      </div>
+    </div>
+    <nav class="jobs-index" aria-labelledby="uses-h">
+      <div class="wrap">
+        <a href="#learning"><span><b>Learning</b><span class="t">Find the gaps in your understanding before asking AI to fill them.</span></span><span class="arrow" aria-hidden="true">↓</span></a>
+        <a href="#steering"><span><b>Steering an agent</b><span class="t">Catch the wrong turn in its plan before it starts coding.</span></span><span class="arrow" aria-hidden="true">↓</span></a>
       </div>
     </nav>
 
@@ -517,17 +543,17 @@
             <h2 id="learn-h">Say what you think it means. Let the model check your reasoning.</h2>
           </div>
           <div class="why">
-            <p>You remember what you put into your own words. Talking through a passage makes you read carefully, and it leaves a record of how you reasoned.</p>
-            <p>The model gets that record. It tells you where you're right, shows exactly where your reasoning went off, and fills your specific gaps instead of explaining from scratch.</p>
+            <p>A passage can feel clear until you try to explain it. <b>Talking turns “I think I get it” into an idea you can actually check.</b> You notice the connections—and the gaps—before the model says a word.</p>
+            <p>Now the next explanation has something to stick to. Send your thinking with the passages that sparked it, so the model can check your reasoning and fill your specific gaps instead of starting from scratch.</p>
           </div>
         </div>
 
         <div class="trip">
           <div class="step">
             <div class="rail">
-              <span class="label">Step 1 · Read</span>
-              <h3>Talk at the passage that sparked your thought.</h3>
-              <p>Select, hold <span class="kbd">⌘E</span>, talk, release. The note is saved with the passage it came from. Focus stays where you're reading.</p>
+              <span class="label">Step 1 · Engage</span>
+              <h3>Don't just reread it. Try explaining it.</h3>
+              <p>Select, hold <span class="kbd">⌘E</span>, and say what you think it means—even if it's half-formed. Release to save the thought with its passage. Stay in the reading, not a notes app.</p>
             </div>
             <div>
               <div class="annot">
@@ -562,6 +588,15 @@
             </div>
             <div class="prompt">
               <div class="ph"><span>Pasted at the cursor</span><span class="sp"></span><span>Template</span><span class="tpl">Learn</span></div>
+              <div class="prompt-preview">
+                <span class="label">The instruction</span>
+                <p class="intent">Check my reasoning. Show where it went off. Fill what I missed.</p>
+                <span class="label">A passage + your reaction · excerpt</span>
+                <blockquote>A checkpoint can copy pages back into the database only as far as active readers allow. The WAL cannot be reset while readers still need its frames.</blockquote>
+                <p class="reaction">wait hang on, so if a background query hangs, does that mean writes start failing, or does the wal file just expand forever because checkpoint can't touch it?</p>
+              </div>
+              <details>
+                <summary>See the full Learn prompt · 3 notes</summary>
 <pre><span class="pre">Below are notes I spoke out loud while reading. Each is either a passage I quoted followed by my reaction, or a standalone thought. They're transcribed speech, so expect loose phrasing, half-finished sentences and transcription errors.
 
 I'm saying these to understand the material, not just to get answers. Read them as a record of how I'm thinking:
@@ -589,6 +624,7 @@ Write one connected response, not a reply to each note in turn. Organize it howe
 <span class="v">right, so writes still succeed, but disk usage explodes because old frames can't be recycled until every slow reader drops its read-mark</span>
 
 <span class="ts">_2:19 PM_</span></pre>
+              </details>
             </div>
           </div>
 
@@ -621,8 +657,8 @@ Write one connected response, not a reply to each note in turn. Organize it howe
             <h2 id="steer-h">Answer the plan line by line. Then let it act.</h2>
           </div>
           <div class="why">
-            <p>A coding agent hands you a long plan. Replying with one message means addressing only what you remember. Instead, go through the plan, select specific parts, and react to each: agree, question, object, or change.</p>
-            <p>Paste your notes back with the Steer template. The agent answers, pushes back, and revises. <b>Usually it takes two or three rounds to agree.</b> Then it acts.</p>
+            <p>The same habit works on a coding plan. <b>Don't hold every objection in your head while you scroll.</b> Select a line and say what's right, what's missing, or what needs to change—while the thought is still there.</p>
+            <p>Paste your reactions into Claude Code or OpenCode with the Steer template. It asks the agent to answer, push back, and revise before acting. Settle the open questions, then give it the go-ahead.</p>
           </div>
         </div>
 
@@ -661,6 +697,15 @@ Write one connected response, not a reply to each note in turn. Organize it howe
             </div>
             <div class="prompt">
               <div class="ph"><span>Pasted at the cursor</span><span class="sp"></span><span>Template</span><span class="tpl">Steer</span></div>
+              <div class="prompt-preview">
+                <span class="label">The instruction</span>
+                <p class="intent">Answer my questions. Push back where I'm wrong. Don't act yet.</p>
+                <span class="label">A plan line + your direction · excerpt</span>
+                <blockquote>4. On rejection, last write wins by server timestamp for all fields.</blockquote>
+                <p class="reaction">not for the note body. two devices edit the same note and someone loses a paragraph. fine for title and tags</p>
+              </div>
+              <details>
+                <summary>See the full Steer prompt · 4 notes</summary>
 <pre><span class="pre">These are my notes on your previous response. Each quote is something you wrote, followed by my reaction: agreement, a question, an objection, or a change I want. Notes without a quote are general thoughts. They're transcribed speech, so read for intent.
 
 Treat them as direction. Answer my questions, push back where you think I'm wrong, and say what you'd change as a result. Keep it tight. Don't act on anything yet; we'll keep going until we agree.</span>
@@ -678,6 +723,7 @@ Treat them as direction. Answer my questions, push back where you think I'm wron
 <span class="v">why? the offline queue reads from pending_mutations. feels like its own pr</span>
 
 <span class="v">also no ui in this one. the conflicts table can wait</span></pre>
+              </details>
             </div>
           </div>
 
@@ -828,11 +874,7 @@ Treat them as direction. Answer my questions, push back where you think I'm wron
       said.innerHTML = words.map(function (w) { return '<span class="w">' + w + "</span>"; }).join(" ");
       var spans = said.querySelectorAll(".w"), i = 0;
       function tick() {
-        if (i < spans.length) { spans[i++].classList.add("on"); setTimeout(tick, 120 + Math.random() * 110); return; }
-        setTimeout(function () {
-          spans.forEach(function (s) { s.classList.remove("on"); });
-          i = 0; setTimeout(tick, 900);
-        }, 4200);
+        if (i < spans.length) { spans[i++].classList.add("on"); setTimeout(tick, 150); }
       }
       setTimeout(tick, 500);
     })();
