@@ -107,13 +107,25 @@ struct ExportServices {
 final class ExportController {
     private(set) var state: ExportState = .idle
     @ObservationIgnored private let services: ExportServices
-    @ObservationIgnored private var pasteTask: Task<Void, Never>?
-    @ObservationIgnored private weak var store: StackStore?
-    @ObservationIgnored private var report: (String) -> Void = { _ in }
-    @ObservationIgnored private var pending: [ExportEvent] = []
+    @ObservationIgnored private(set) var pasteTask: (requestID: UUID, task: Task<Void, Never>)?
+    private struct Context {
+        let requestID: UUID
+        weak var store: StackStore?
+        let report: (String) -> Void
+    }
+    private struct Pending {
+        let event: ExportEvent
+        let proposed: Context?
+    }
+    @ObservationIgnored private var context: Context?
+    @ObservationIgnored private let diagnostics: DiagnosticSink
+    @ObservationIgnored private var pending: [Pending] = []
     @ObservationIgnored private var isDraining = false
 
-    init(services: ExportServices) { self.services = services }
+    init(services: ExportServices, diagnostics: @escaping DiagnosticSink = Diag.record) {
+        self.services = services
+        self.diagnostics = diagnostics
+    }
 
     func copy(store: StackStore, stackID: UUID, template: Template,
               pasteTarget: pid_t? = nil, report: @escaping (String) -> Void) {
@@ -121,60 +133,111 @@ final class ExportController {
             report("Nothing to copy")
             return
         }
-        self.store = store
-        self.report = report
-        send(.begin(ExportRequest(id: UUID(), stack: stack,
+        let request = ExportRequest(id: UUID(), stack: stack,
             markdown: PromptComposer.markdown(stack: stack, template: template),
-            clearAfterCopy: template.clearStackAfterExport, pasteTarget: pasteTarget)))
+            clearAfterCopy: template.clearStackAfterExport, pasteTarget: pasteTarget)
+        enqueue(.begin(request), proposed: Context(requestID: request.id, store: store, report: report))
     }
 
     func copyNote(_ note: Note, report: (String) -> Void) {
         guard state != .tornDown else { return }
-        pasteTask?.cancel()
-        pasteTask = nil
+        cancelPaste()
         if case let .awaitingPaste(request, _) = state { send(.pasted(request.id, dispatched: false)) }
-        report(services.write(PromptComposer.noteMarkdown(note)) == nil ? "Couldn’t copy the note." : "Copied note")
+        guard state != .tornDown else { return }
+        let revision = services.write(PromptComposer.noteMarkdown(note))
+        diagnostics(DiagnosticRecord(.clipboard, revision == nil ? .failed : .succeeded, operationID: UUID(), noteID: note.id))
+        report(revision == nil ? "Couldn’t copy the note." : "Copied note")
     }
 
     func send(_ event: ExportEvent) {
-        pending.append(event)
+        enqueue(event)
+    }
+
+    private func enqueue(_ event: ExportEvent, proposed: Context? = nil) {
+        pending.append(Pending(event: event, proposed: proposed))
         guard !isDraining else { return }
         isDraining = true
-        while !pending.isEmpty { run(state.update(pending.removeFirst())) }
+        while !pending.isEmpty {
+            let next = pending.removeFirst()
+            let previous = state
+            let effects = state.update(next.event)
+            if case let .cleared(id, outcome) = next.event,
+               context?.requestID == id, previous != state {
+                diagnostics(DiagnosticRecord(.cleanup, outcome.diagnosticOutcome, operationID: id))
+            }
+            if let proposed = next.proposed {
+                if case let .copying(request) = state, request.id == proposed.requestID {
+                    context = proposed
+                    diagnostics(DiagnosticRecord(.export, .accepted, operationID: request.id, stackID: request.stack.id))
+                    for note in request.stack.notes {
+                        diagnostics(DiagnosticRecord(.export, .accepted, operationID: request.id,
+                                                     stackID: request.stack.id, noteID: note.id))
+                    }
+                } else {
+                    diagnostics(DiagnosticRecord(.export, .rejected, operationID: proposed.requestID))
+                    for effect in effects {
+                        if case let .report(message) = effect { proposed.report(message) }
+                    }
+                    continue
+                }
+            }
+            run(effects)
+            if state == .idle || state == .tornDown { context = nil }
+        }
         isDraining = false
     }
 
     private func run(_ effects: [ExportEffect]) {
         for effect in effects {
             switch effect {
-            case let .write(request): send(.copied(request.id, revision: services.write(request.markdown)))
+            case let .write(request):
+                let revision = services.write(request.markdown)
+                diagnostics(DiagnosticRecord(.clipboard, revision == nil ? .failed : .succeeded, operationID: request.id))
+                send(.copied(request.id, revision: revision))
             case let .paste(request, revision):
                 guard let pid = request.pasteTarget else { continue }
-                pasteTask = Task { [weak self, services] in
+                let task = Task { [weak self, services] in
                     do {
                         try Task.checkCancellation()
                         let dispatched = try await services.paste(pid, revision)
                         try Task.checkCancellation()
-                        guard let self else { return }
+                        guard let self, case let .awaitingPaste(current, currentRevision) = self.state,
+                              current.id == request.id, currentRevision == revision else { return }
                         self.pasteTask = nil
+                        self.diagnostics(DiagnosticRecord(.paste, dispatched ? .succeeded : .cancelled, operationID: request.id))
                         self.send(.pasted(request.id, dispatched: dispatched))
-                    } catch is CancellationError {
                     } catch {
                         guard !Task.isCancelled else { return }
-                        self?.pasteTask = nil
-                        self?.send(.pasted(request.id, dispatched: false))
+                        guard let self, case let .awaitingPaste(current, currentRevision) = self.state,
+                              current.id == request.id, currentRevision == revision else { return }
+                        self.pasteTask = nil
+                        self.diagnostics(DiagnosticRecord(.paste, error is CancellationError ? .cancelled : .failed,
+                                                          operationID: request.id))
+                        self.send(.pasted(request.id, dispatched: false))
                     }
                 }
+                pasteTask = (request.id, task)
             case let .clear(request):
-                store?.mutate(.clearExportedNotes(stackID: request.stack.id, notes: request.stack.notes)) {
+                guard context?.requestID == request.id else { continue }
+                context?.store?.mutate(.clearExportedNotes(stackID: request.stack.id, notes: request.stack.notes),
+                                       operationID: request.id) {
                     [weak self] outcome in self?.send(.cleared(request.id, outcome))
                 }
-            case let .report(message): report(message)
-            case .retry: store?.retryPendingMutations()
-            case .cancelPaste: pasteTask?.cancel(); pasteTask = nil
+            case let .report(message): context?.report(message)
+            case .retry:
+                diagnostics(DiagnosticRecord(.cleanup, .retry, operationID: context?.requestID))
+                context?.store?.retryPendingMutations()
+            case .cancelPaste: cancelPaste()
             }
         }
     }
 
-    func teardown() { send(.teardown); store = nil; report = { _ in } }
+    private func cancelPaste() {
+        guard let work = pasteTask else { return }
+        pasteTask = nil
+        work.task.cancel()
+        diagnostics(DiagnosticRecord(.paste, .cancelled, operationID: work.requestID))
+    }
+
+    func teardown() { send(.teardown) }
 }

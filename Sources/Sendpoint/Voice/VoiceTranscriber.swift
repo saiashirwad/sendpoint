@@ -118,14 +118,12 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
     }
     private let progress = VoiceModelProgressRelay()
     private var session: (take: UUID, isOpen: Bool)?
-    private var loggedFirstFeed = false
     private var preparationAttemptID: UUID?
 
     func prepareIfNeeded() async {
         do {
             _ = try await prepare()
         } catch {
-            Diag.log("voice preview model not ready: \(error.localizedDescription)")
         }
     }
 
@@ -151,37 +149,26 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
         onPartial: @escaping @Sendable (String) -> Void
     ) async throws {
         session = (take, false)
-        loggedFirstFeed = false
         try await manager.reset()
         try Task.checkCancellation()
         guard session?.take == take else { throw CancellationError() }
-        let firstPartial = TranscriberLogOnce()
         await manager.setPartialTranscriptCallback { text in
-            if firstPartial.mark() {
-                Diag.log("voice preview first partial, chars=\(text.count)")
-            }
             onPartial(text)
         }
         try Task.checkCancellation()
         guard session?.take == take else { throw CancellationError() }
         session = (take, true)
-        Diag.log("voice stream started")
     }
 
     func feed(_ frames: [VoiceAudioFrame], take: UUID) async {
         guard owns(take), !frames.isEmpty else { return }
         guard let manager = preparedManager else { return }
         guard let buffer = Self.joinedBuffer(frames) else { return }
-        if !loggedFirstFeed {
-            loggedFirstFeed = true
-            Diag.log("voice first feed, frames=\(buffer.frameLength) peak=\(Self.peak(buffer))")
-        }
         do {
             try await manager.appendAudio(buffer)
             guard owns(take) else { return }
             try await manager.processBufferedAudio()
         } catch {
-            Diag.log("voice stream chunk failed: \(error.localizedDescription)")
         }
     }
 
@@ -199,7 +186,6 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
         try await manager.reset()
         guard owns(take) else { throw CancellationError() }
         session = nil
-        Diag.log("voice transcription finished, chars=\(text.count)")
         return text
     }
 
@@ -209,14 +195,6 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
         await manager.setPartialTranscriptCallback { _ in }
         guard session == nil else { return }
         try? await manager.reset()
-    }
-
-    private static func peak(_ buffer: AVAudioPCMBuffer) -> String {
-        guard let data = buffer.floatChannelData?[0] else { return "none" }
-        let count = Int(buffer.frameLength)
-        var maxAbs: Float = 0
-        for i in 0..<count { maxAbs = max(maxAbs, abs(data[i])) }
-        return String(format: "%.3f", maxAbs)
     }
 
     private static func joinedBuffer(_ frames: [VoiceAudioFrame]) -> AVAudioPCMBuffer? {
@@ -282,7 +260,6 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
                     try Task.checkCancellation()
                     try await Self.prime(manager)
                     try Task.checkCancellation()
-                    Diag.log("voice model loaded")
                     return manager
                 }
                 preparation = .loading(id, task)
@@ -326,17 +303,5 @@ actor LocalStreamingTranscriber: VoiceTranscribing {
         try await manager.appendAudio(buffer)
         try await manager.processBufferedAudio()
         try await manager.reset()
-    }
-}
-
-final class TranscriberLogOnce: @unchecked Sendable {
-    private nonisolated let logged = Locked(false)
-
-    nonisolated func mark() -> Bool {
-        logged.withLock { logged in
-            guard !logged else { return false }
-            logged = true
-            return true
-        }
     }
 }

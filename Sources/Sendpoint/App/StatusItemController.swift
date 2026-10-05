@@ -25,7 +25,6 @@ final class StatusItemController {
             button.imagePosition = .imageLeading
         }
         statusItem.isVisible = true
-        Diag.log("statusItem button=\(statusItem.button != nil) visible=\(statusItem.isVisible)")
     }
 
     func setBaseTitle(_ title: String, tooltip: String) {

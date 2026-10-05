@@ -20,17 +20,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var stackSelector: StackSelector?
     var stackReadout: StackReadoutController?
     enum StoreState {
-        case loading
+        case loading(UUID)
         case available(StackStore)
         case unavailable(String)
+        case tornDown
+
+        enum Event {
+            case begin(UUID)
+            case loaded(UUID, StackStore)
+            case failed(UUID, String)
+            case teardown
+        }
+
+        @discardableResult
+        mutating func update(_ event: Event) -> Bool {
+            if case .tornDown = self { return false }
+            switch event {
+            case let .begin(request):
+                if case .available = self { return false }
+                self = .loading(request)
+            case let .loaded(request, store):
+                guard case let .loading(current) = self, current == request else { return false }
+                self = .available(store)
+            case let .failed(request, message):
+                guard case let .loading(current) = self, current == request else { return false }
+                self = .unavailable(message)
+            case .teardown:
+                self = .tornDown
+            }
+            return true
+        }
     }
 
-    var storeState: StoreState = .loading
+    var storeState: StoreState = .loading(UUID())
     var bootstrapTask: Task<Void, Never>?
     var terminationTask: Task<Void, Never>?
     var userOpenedObserver: (any NSObjectProtocol)?
-    override init() {
-        environment = AppEnvironment()
+    override convenience init() {
+        self.init(environment: AppEnvironment())
+    }
+
+    init(environment: AppEnvironment) {
+        self.environment = environment
         super.init()
         captureController.onAccessibilityRequired = { [weak self] in
             self?.presentPermissionHelpForCapture()
@@ -38,7 +69,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Diag.log("=== launch pid=\(ProcessInfo.processInfo.processIdentifier) ===")
         observeUserOpened()
         NSApp.mainMenu = MainMenu.build()
         statusItemController.onAction = { [weak self] action in self?.perform(action) }
@@ -80,6 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        teardown()
+    }
+
+    func teardown() {
+        let store = store
+        guard storeState.update(.teardown) else { return }
         terminationTask?.cancel()
         terminationTask = nil
         bootstrapTask?.cancel()

@@ -40,6 +40,7 @@ extension AppDelegate {
     }
 
     func perform(_ action: StatusMenuAction) {
+        if case .tornDown = storeState { return }
         switch action {
         case .voiceNote: sendCaptureEvent(.voiceToggled)
         case .typedNote: captureSelection()
@@ -59,7 +60,6 @@ extension AppDelegate {
 
     private func captureSelection() {
         guard !focusOpenNoteEditor() else { return }
-        Diag.log("captureSelection invoked")
         captureController.beginCapture()
     }
 
@@ -96,7 +96,6 @@ extension AppDelegate {
             NSSound.beep()
             return
         }
-        Diag.log("clearStack invoked, stack=\(stack.id), count=\(stack.notes.count)")
         clearStack(stack.id)
     }
 

@@ -3,23 +3,26 @@ import SendpointDomain
 
 extension AppDelegate {
     func bootstrapStore() {
+        let request = UUID()
+        guard storeState.update(.begin(request)) else { return }
         bootstrapTask?.cancel()
-        storeState = .loading
         refreshStatusItem()
 
         bootstrapTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if case let .loading(current) = storeState, current == request {
+                    bootstrapTask = nil
+                }
+            }
             do {
-                let store = try await StackStore(
-                    persistence: .live(),
-                    onChange: { [weak self] in self?.storeDidChange() }
-                )
-                guard !Task.isCancelled else {
+                try Task.checkCancellation()
+                let store = try await environment.loadStore { [weak self] in self?.storeDidChange() }
+                guard !Task.isCancelled, storeState.update(.loaded(request, store)) else {
                     store.teardown()
                     return
                 }
                 bootstrapTask = nil
-                storeState = .available(store)
                 settingsWindowController?.storeDidBecomeAvailable(store)
                 captureController.configure(store: store)
                 buildPalette(store: store)
@@ -47,10 +50,9 @@ extension AppDelegate {
                 refreshStatusItem()
             } catch is CancellationError {
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, storeState.update(.failed(request, error.localizedDescription)) else { return }
                 bootstrapTask = nil
-                storeState = .unavailable(error.localizedDescription)
-                Diag.log("store bootstrap failed: \(error)")
+                Diag.record(DiagnosticRecord(.load, .failed, operationID: request))
                 refreshStatusItem()
             }
         }
@@ -72,6 +74,7 @@ extension AppDelegate {
         case .loading: .loading
         case .available: .available
         case let .unavailable(message): .unavailable(message)
+        case .tornDown: .unavailable("Sendpoint is closing.")
         }
     }
 }

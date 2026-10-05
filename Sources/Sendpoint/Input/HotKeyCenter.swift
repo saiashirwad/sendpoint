@@ -5,13 +5,6 @@ import SendpointDomain
 enum HotKeyName: Hashable {
     case slot(ShortcutSlot)
     case voiceEscape
-
-    var label: String {
-        switch self {
-        case let .slot(slot): slot.rawValue
-        case .voiceEscape: "voiceEscape"
-        }
-    }
 }
 
 enum HotKeyRegistrationResult: Equatable {
@@ -82,10 +75,8 @@ final class HotKeyCenter {
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C_414E), id: id)
         let (status, ref) = registerEvent(UInt32(keyCode), carbonModifiers, hotKeyID)
         guard status == noErr, let ref else {
-            Diag.log("hotkey FAILED name=\(name.label) keyCode=\(keyCode) carbonMods=\(carbonModifiers) status=\(status)")
             return .failed(status)
         }
-        Diag.log("hotkey ok name=\(name.label) keyCode=\(keyCode) carbonMods=\(carbonModifiers) id=\(id)")
         registrations[name] = Registration(id: id, ref: ref, pressed: pressed, released: released)
         Self.routes[id] = WeakCenter(self)
         return .registered
@@ -103,7 +94,6 @@ final class HotKeyCenter {
 
     func fire(id: UInt32, released: Bool) {
         guard let registration = registrations.values.first(where: { $0.id == id }) else { return }
-        Diag.log("hotkey fired id=\(id)")
         if released { registration.released?() } else { registration.pressed() }
     }
 

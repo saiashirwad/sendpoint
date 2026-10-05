@@ -1,44 +1,12 @@
 import Foundation
+import SendpointDomain
 
 nonisolated enum Diag {
-    private static let queue = DispatchQueue(label: "app.sendpoint.diag")
-    private static let maxBytes = 2_000_000
+    static let fileURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Sendpoint/diagnostics.jsonl")
+    private static let journal = DiagnosticJournal(file: fileURL)
 
-    static let fileURL: URL = {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Sendpoint", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("debug.log")
-        rotateIfLarge(url)
-        return url
-    }()
-
-    private static func rotateIfLarge(_ url: URL) {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        guard let size = attributes?[.size] as? Int, size > maxBytes else { return }
-        let previous = url.appendingPathExtension("1")
-        try? FileManager.default.removeItem(at: previous)
-        try? FileManager.default.moveItem(at: url, to: previous)
-    }
-
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-        return formatter
-    }()
-
-    static func log(_ message: String) {
-        let when = Date()
-        queue.async {
-            let line = "\(clock.string(from: when)) \(message)\n"
-            guard let data = line.data(using: .utf8) else { return }
-            if let handle = try? FileHandle(forWritingTo: fileURL) {
-                defer { try? handle.close() }
-                _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: data)
-            } else {
-                try? data.write(to: fileURL)
-            }
-        }
+    static func record(_ record: DiagnosticRecord) {
+        journal.record(record)
     }
 }

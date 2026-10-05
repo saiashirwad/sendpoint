@@ -52,6 +52,8 @@ final class CaptureController {
     @ObservationIgnored private let selection: SelectionCapture
     @ObservationIgnored private let recorder: VoiceRecorder
     @ObservationIgnored private let frontApp: @MainActor () -> DictationTarget?
+    @ObservationIgnored private let sleep: @MainActor (Duration) async throws -> Void
+    @ObservationIgnored private let diagnostics: DiagnosticSink
     @ObservationIgnored private let makeSurfaces: (CaptureController) -> CaptureSurfaces
     @ObservationIgnored private lazy var surfaces = makeSurfaces(self)
     @ObservationIgnored private var previousApp: NSRunningApplication?
@@ -101,6 +103,8 @@ final class CaptureController {
     init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionController,
          selection: SelectionCapture, recorder: VoiceRecorder,
          frontApp: @escaping @MainActor () -> DictationTarget? = { CaptureController.frontmostApp() },
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         diagnostics: @escaping DiagnosticSink = Diag.record,
          surfaces: @escaping (CaptureController) -> CaptureSurfaces) {
         self.settings = settings
         self.voiceSettings = voiceSettings
@@ -108,6 +112,8 @@ final class CaptureController {
         self.selection = selection
         self.recorder = recorder
         self.frontApp = frontApp
+        self.sleep = sleep
+        self.diagnostics = diagnostics
         self.makeSurfaces = surfaces
         recorder.observe { [weak self] in self?.receive($0) }
     }
@@ -198,7 +204,37 @@ final class CaptureController {
         guard !isDraining else { return }
         isDraining = true
         while !pending.isEmpty {
-            for effect in state.update(pending.removeFirst()) { run(effect) }
+            let next = pending.removeFirst()
+            let previous = state
+            let effects = state.update(next)
+            if case let .begin(_, context, _) = next, previous.session == nil,
+               state.session?.context == context {
+                diagnostics(DiagnosticRecord(.capture, .accepted, operationID: context.noteID,
+                                             stackID: context.stackID, noteID: context.noteID))
+            }
+            if case let .saved(request, outcome) = next, previous != state {
+                diagnostics(DiagnosticRecord(.capture, outcome == .noOp ? .failed : outcome.diagnosticOutcome,
+                                             operationID: request.note.id,
+                                             stackID: request.destinationStackID, noteID: request.note.id))
+            }
+            if case let .failed(context, _) = next, previous != state {
+                diagnostics(DiagnosticRecord(.capture, .failed, operationID: context.noteID,
+                                             stackID: context.stackID, noteID: context.noteID))
+            }
+            if case let .inserted(context, dispatched) = next, previous != state {
+                diagnostics(DiagnosticRecord(.capture, dispatched ? .succeeded : .failed,
+                                             operationID: context.noteID, stackID: context.stackID, noteID: context.noteID))
+            }
+            if let previousSession = previous.session, state.session == nil {
+                switch next {
+                case .dismiss, .cancelVoice, .voiceEscape, .teardown:
+                    let context = previousSession.context
+                    diagnostics(DiagnosticRecord(.capture, .cancelled, operationID: context.noteID,
+                                                 stackID: context.stackID, noteID: context.noteID))
+                default: break
+                }
+            }
+            for effect in effects { run(effect) }
         }
         isDraining = false
     }
@@ -221,8 +257,9 @@ final class CaptureController {
                 })
             }
         case let .selectionDeadline(context):
-            launch(.selectionDeadline, context: context) { [weak self] in
-                try await Task.sleep(for: Self.selectionDeadline)
+            launch(.selectionDeadline, context: context) { [sleep, weak self] in
+                try await sleep(Self.selectionDeadline)
+                try Task.checkCancellation()
                 self?.tasks.removeValue(forKey: .selection)?.cancel()
                 return .selection(context, CapturedSelection(text: "", screenRect: nil))
             }
@@ -234,7 +271,8 @@ final class CaptureController {
             }
         case let .commit(request):
             guard let store else { return }
-            store.mutate(.addNote(stackID: request.destinationStackID, note: request.note)) {
+            store.mutate(.addNote(stackID: request.destinationStackID, note: request.note),
+                         operationID: request.note.id) {
                 [weak self] outcome in
                 guard let self, !self.state.isTornDown else { return }
                 self.send(.saved(request, outcome))
@@ -245,8 +283,8 @@ final class CaptureController {
         case .focusEditor: surfaces.focus()
         case let .failureTimer(context):
             cancelWork()
-            launch(.failure, context: context) {
-                try await Task.sleep(for: .seconds(2.5))
+            launch(.failure, context: context) { [sleep] in
+                try await sleep(.seconds(2.5))
                 return .failureTimeout(context)
             }
         case .close:

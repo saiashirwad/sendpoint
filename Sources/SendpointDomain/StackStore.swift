@@ -33,12 +33,14 @@ public final class StackStore {
 
     private struct QueuedMutation {
         let mutation: StackDocumentMutation
+        let operationID: UUID
         let outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)?
     }
 
     private var document: StackDocument
     private let persistence: StorePersistence
     private let onChange: @MainActor @Sendable () -> Void
+    private let diagnostics: DiagnosticSink
 
     private var queuedMutations: [QueuedMutation] = []
     @ObservationIgnored private var processingTask: Task<Void, Never>?
@@ -87,7 +89,8 @@ public final class StackStore {
 
     public init(
         persistence: StorePersistence,
-        onChange: @escaping @MainActor @Sendable () -> Void = {}
+        onChange: @escaping @MainActor @Sendable () -> Void = {},
+        diagnostics: @escaping DiagnosticSink = { _ in }
     ) async throws {
         try Task.checkCancellation()
         let loaded = try await persistence.load()
@@ -108,10 +111,12 @@ public final class StackStore {
         self.document = initialDocument
         self.persistence = persistence
         self.onChange = onChange
+        self.diagnostics = diagnostics
     }
 
     public func mutate(
         _ mutation: StackDocumentMutation,
+        operationID: UUID = UUID(),
         outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)? = nil
     ) {
         guard state != .tornDown else {
@@ -120,7 +125,9 @@ public final class StackStore {
             return
         }
 
-        queuedMutations.append(QueuedMutation(mutation: mutation, outcome: outcome))
+        let queued = QueuedMutation(mutation: mutation, operationID: operationID, outcome: outcome)
+        diagnose(queued, .accepted)
+        queuedMutations.append(queued)
         startProcessingIfNeeded()
     }
 
@@ -163,11 +170,11 @@ public final class StackStore {
     public func teardown() {
         guard state != .tornDown else { return }
         state = .tornDown
-        let outcomes = queuedMutations.compactMap(\.outcome)
+        let abandoned = queuedMutations
         queuedMutations.removeAll()
         processingTask?.cancel()
         processingTask = nil
-        outcomes.forEach { $0(.cancelled) }
+        abandoned.forEach { diagnose($0, .cancelled); $0.outcome?(.cancelled) }
         resumeIdleWaiters()
     }
 
@@ -190,6 +197,7 @@ public final class StackStore {
                         return
                     }
                     queuedMutations.removeFirst()
+                    diagnose(queuedMutation, .succeeded)
                     queuedMutation.outcome?(.committed)
                 case let .failed(message):
                     guard state != .tornDown else {
@@ -197,6 +205,7 @@ public final class StackStore {
                         return
                     }
                     finishProcessing(nextState: .halted)
+                    diagnose(queuedMutation, .failed)
                     queuedMutation.outcome?(.commitFailed(message))
                     onChange()
                     return
@@ -206,9 +215,11 @@ public final class StackStore {
                 }
             case .noOp:
                 queuedMutations.removeFirst()
+                diagnose(queuedMutation, .succeeded)
                 queuedMutation.outcome?(.noOp)
             case let .rejected(message):
                 queuedMutations.removeFirst()
+                diagnose(queuedMutation, .rejected)
                 error = .mutationRejected(message)
                 queuedMutation.outcome?(.rejected(message))
                 onChange()
@@ -250,5 +261,19 @@ public final class StackStore {
         let waiters = idleWaiters.values
         idleWaiters.removeAll()
         waiters.forEach { $0.resume() }
+    }
+
+    private func diagnose(_ queued: QueuedMutation, _ outcome: DiagnosticRecord.Outcome) {
+        switch queued.mutation {
+        case let .addNote(stackID, note):
+            diagnostics(DiagnosticRecord(.save, outcome, operationID: queued.operationID,
+                                         stackID: stackID, noteID: note.id))
+        case let .clearExportedNotes(stackID, notes):
+            for note in notes {
+                diagnostics(DiagnosticRecord(.cleanup, outcome, operationID: queued.operationID,
+                                             stackID: stackID, noteID: note.id))
+            }
+        default: break
+        }
     }
 }

@@ -12,6 +12,7 @@ final class VoiceNoteService {
     private let microphone: Microphone
     private let modelReady: () -> Bool
     private let now: () -> Date
+    private let sleep: @MainActor (Duration) async throws -> Void
     private var tasks: [Work: Task<Void, Never>] = [:]
     private var stopGeneration = 0
     private var teardownTask: Task<Void, Never>?
@@ -29,13 +30,15 @@ final class VoiceNoteService {
         levelMeter: VoiceLevelMeter = VoiceLevelMeter(),
         microphone: Microphone? = nil,
         modelReady: @escaping () -> Bool = { LocalVoiceModelFiles.exist() },
-        now: @escaping () -> Date = { Date() }
+        now: @escaping () -> Date = { Date() },
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.transcriber = transcriber
         self.levelMeter = levelMeter
         self.microphone = microphone ?? .live(meter: levelMeter)
         self.modelReady = modelReady
         self.now = now
+        self.sleep = sleep
     }
 
     func warmUp() { send(.warmUp) }
@@ -154,17 +157,20 @@ final class VoiceNoteService {
             self.onOutput?(.partial(take, text))
         }
         tasks[.stream]?.cancel()
-        tasks[.stream] = Task { [transcriber] in
+        tasks[.stream] = Task { [transcriber, sleep] in
             var isOpen = false
             for _ in 0..<Self.streamOpenAttempts where !Task.isCancelled && !isOpen {
                 isOpen = await transcriber.begin(take, onPartial: { partial.yield($0) })
-                if !isOpen { try? await Task.sleep(for: .milliseconds(50)) }
+                guard !Task.isCancelled else { return }
+                if !isOpen {
+                    do { try await sleep(.milliseconds(50)) } catch { return }
+                }
             }
             guard isOpen else { return }
             while !Task.isCancelled {
                 let frames = queue.drain()
                 if frames.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(5))
+                    do { try await sleep(.milliseconds(5)) } catch { return }
                     continue
                 }
                 await transcriber.feed(frames, take: take)
@@ -182,7 +188,6 @@ final class VoiceNoteService {
             await stopped?.value
             await pump?.value
             guard !Task.isCancelled else { return }
-            Diag.log("voice transcription finishing")
             do {
                 let transcript = try await transcriber.finish(take, leftover: queue?.drain() ?? [])
                 guard !Task.isCancelled, let self else { return }
@@ -204,7 +209,6 @@ final class VoiceNoteService {
         tasks.removeValue(forKey: .finish)?.cancel()
         queue = nil
         partials.stop()
-        Diag.log("voice recording discarded")
         tasks[.settle] = Task { [weak self, transcriber] in
             await pump?.value
             await transcriber.abandon()

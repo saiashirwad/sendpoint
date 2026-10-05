@@ -153,7 +153,6 @@ struct SelectionCapture {
         try Task.checkCancellation()
         let saved = snapshot(pasteboard)
         let changeCountBeforeCopy = pasteboard.changeCount
-        Diag.log("selection: posting copy keystroke")
         postCopy(processIdentifier > 0 ? processIdentifier : nil)
         if fallback == .brief { editorMayOpen() }
 
@@ -193,7 +192,6 @@ struct SelectionCapture {
             if NSEvent.modifierFlags.intersection(watched).isEmpty { return }
             try await Task.sleep(for: .milliseconds(20))
         }
-        Diag.log("waitForModifierRelease timed out, flags still \(NSEvent.modifierFlags.rawValue)")
     }
 
     private static func postCommandKey(_ key: CGKeyCode, processIdentifier: pid_t? = nil) {

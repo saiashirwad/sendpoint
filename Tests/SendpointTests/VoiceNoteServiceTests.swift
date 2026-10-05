@@ -12,6 +12,9 @@ final class VoiceNoteServiceTests: XCTestCase {
         var allowed = true
         var suspendStart = false
         var startGate: CheckedContinuation<Void, Never>?
+        let started = AsyncAcknowledgement()
+        let stopped = AsyncAcknowledgement()
+        let prepared = AsyncAcknowledgement()
 
         func releaseStart() {
             startGate?.resume()
@@ -21,15 +24,26 @@ final class VoiceNoteServiceTests: XCTestCase {
         var boundary: Microphone {
             Microphone(
                 requestAccess: { self.allowed },
-                prepare: { _ in self.prepares += 1 },
+                prepare: { _ in
+                    self.prepares += 1
+                    self.prepared.signal()
+                },
                 start: { _ in
                     self.starts += 1
                     if self.suspendStart {
-                        await withCheckedContinuation { self.startGate = $0 }
+                        await withCheckedContinuation {
+                            self.startGate = $0
+                            self.started.signal()
+                        }
+                    } else {
+                        self.started.signal()
                     }
                     return VoiceAudioQueue()
                 },
-                stop: { self.stops += 1 },
+                stop: {
+                    self.stops += 1
+                    self.stopped.signal()
+                },
                 teardown: { self.teardowns += 1 }
             )
         }
@@ -40,16 +54,19 @@ final class VoiceNoteServiceTests: XCTestCase {
         let transcriber: FakeTranscriber
         let mic: Mic
         let outputs: Outputs
+        let timing: ControlledSleep
     }
 
     @MainActor private final class Outputs {
         var all: [VoiceOutput] = []
+        let delivered = AsyncAcknowledgement()
     }
 
-    private func makeFixture(modelReady: Bool = true) -> Fixture {
-        let transcriber = FakeTranscriber()
+    private func makeFixture(modelReady: Bool = true, openResults: [Bool] = []) -> Fixture {
+        let transcriber = FakeTranscriber(openResults: openResults)
         let mic = Mic()
         let outputs = Outputs()
+        let timing = ControlledSleep()
         var clock = Date(timeIntervalSince1970: 1_000)
         let service = VoiceNoteService(
             transcriber: transcriber, microphone: mic.boundary,
@@ -57,37 +74,49 @@ final class VoiceNoteServiceTests: XCTestCase {
             now: {
                 clock.addTimeInterval(1)
                 return clock
-            }
+            },
+            sleep: { try await timing.sleep($0) }
         )
-        service.onOutput = { outputs.all.append($0) }
-        return Fixture(service: service, transcriber: transcriber, mic: mic, outputs: outputs)
+        service.onOutput = {
+            outputs.all.append($0)
+            outputs.delivered.signal()
+        }
+        addTeardownBlock { @MainActor in
+            mic.releaseStart()
+            service.teardown()
+            await service.waitForTeardown()
+        }
+        return Fixture(service: service, transcriber: transcriber, mic: mic, outputs: outputs, timing: timing)
     }
 
     func testEscapeDuringTranscriptionAbandonsTheModelAndDropsTheLateTranscript() async {
         let f = makeFixture()
         let take = UUID()
         f.service.start(take)
-        await waitUntil { f.outputs.all == [.started(take)] }
+        await f.outputs.delivered.wait()
 
         f.service.stop(take)
         await f.transcriber.waitUntilFinishing()
         XCTAssertEqual(f.service.machine.phase, .transcribing(take))
 
         f.service.discard()
-        await waitUntil { f.service.machine.phase == .idle }
+        let next = UUID()
+        f.service.start(next)
+        await f.outputs.delivered.wait(for: 2)
         let abandons = await f.transcriber.abandons
         XCTAssertEqual(abandons, 1)
 
         await f.transcriber.releaseFinish(with: "too late")
-        for _ in 0..<200 { await Task.yield() }
-        XCTAssertEqual(f.outputs.all, [.started(take)], "the cancelled transcript never reaches the capture")
+        await f.transcriber.finishReturned.wait()
+        f.service.teardown()
+        await f.service.waitForTeardown()
+        XCTAssertEqual(f.outputs.all, [.started(take), .started(next)], "the cancelled transcript never reaches the capture")
     }
 
     func testClosingATypedNoteNeverTouchesTheModel() async {
         let f = makeFixture()
         f.service.discard()
         f.service.discard()
-        for _ in 0..<200 { await Task.yield() }
         let abandons = await f.transcriber.abandons
         XCTAssertEqual(abandons, 0)
         XCTAssertEqual(f.mic.stops, 0)
@@ -97,11 +126,11 @@ final class VoiceNoteServiceTests: XCTestCase {
         let f = makeFixture()
         let take = UUID()
         f.service.start(take)
-        await waitUntil { f.outputs.all == [.started(take)] }
+        await f.outputs.delivered.wait()
         f.service.stop(take)
         await f.transcriber.waitUntilFinishing()
         await f.transcriber.releaseFinish(with: "  spoken words ")
-        await waitUntil { f.outputs.all.count == 2 }
+        await f.outputs.delivered.wait(for: 2)
 
         XCTAssertEqual(f.outputs.all, [.started(take), .transcript(take, "spoken words")])
         XCTAssertEqual(f.service.machine.phase, .idle)
@@ -113,7 +142,7 @@ final class VoiceNoteServiceTests: XCTestCase {
         f.mic.suspendStart = true
         let discarded = UUID()
         f.service.start(discarded)
-        await waitUntil { f.mic.startGate != nil }
+        await f.mic.started.wait()
 
         f.service.discard()
         XCTAssertEqual(f.service.machine.phase, .idle)
@@ -121,12 +150,12 @@ final class VoiceNoteServiceTests: XCTestCase {
 
         f.mic.suspendStart = false
         f.mic.releaseStart()
-        await waitUntil { f.mic.stops == 1 }
+        await f.mic.stopped.wait()
         XCTAssertTrue(f.outputs.all.isEmpty, "a cancelled microphone must not reopen capture")
 
         let next = UUID()
         f.service.start(next)
-        await waitUntil { f.outputs.all == [.started(next)] }
+        await f.outputs.delivered.wait()
         XCTAssertEqual(f.mic.starts, 2)
     }
 
@@ -135,7 +164,7 @@ final class VoiceNoteServiceTests: XCTestCase {
         f.mic.suspendStart = true
         let take = UUID()
         f.service.start(take)
-        await waitUntil { f.mic.startGate != nil }
+        await f.mic.started.wait()
 
         var order = MicrophoneOrder()
         order.absorb([AudioInputDevice(id: 1, uid: "new", name: "New", transport: .builtIn)],
@@ -144,7 +173,7 @@ final class VoiceNoteServiceTests: XCTestCase {
         f.mic.suspendStart = false
         f.mic.releaseStart()
 
-        await waitUntil { f.outputs.all == [.started(take)] }
+        await f.outputs.delivered.wait()
         XCTAssertEqual(f.mic.starts, 2)
         XCTAssertEqual(f.mic.stops, 1)
     }
@@ -159,7 +188,7 @@ final class VoiceNoteServiceTests: XCTestCase {
         let denied = makeFixture()
         denied.mic.allowed = false
         denied.service.start(take)
-        await waitUntil { !denied.outputs.all.isEmpty }
+        await denied.outputs.delivered.wait()
         XCTAssertEqual(denied.mic.starts, 0)
         guard case .failed(take, _)? = denied.outputs.all.first else {
             return XCTFail("expected a failure, got \(denied.outputs.all)")
@@ -169,7 +198,7 @@ final class VoiceNoteServiceTests: XCTestCase {
     func testWarmUpSkipsTheModelUntilItsFilesExist() async {
         let missing = makeFixture(modelReady: false)
         missing.service.warmUp()
-        for _ in 0..<200 { await Task.yield() }
+        await missing.mic.prepared.wait()
         let skipped = await missing.transcriber.prepares
         XCTAssertEqual(skipped, 0, "warming up must never start a download")
         XCTAssertEqual(missing.mic.prepares, 1)
@@ -177,14 +206,14 @@ final class VoiceNoteServiceTests: XCTestCase {
         let ready = makeFixture()
         ready.service.warmUp()
         ready.service.warmUp()
-        await waitUntil { await ready.transcriber.prepares == 1 }
+        await ready.transcriber.prepared.wait()
     }
 
     func testTeardownIsTerminalAndStopsEverything() async {
         let f = makeFixture()
         let take = UUID()
         f.service.start(take)
-        await waitUntil { f.outputs.all == [.started(take)] }
+        await f.outputs.delivered.wait()
 
         f.service.teardown()
         f.service.teardown()
@@ -213,16 +242,51 @@ final class VoiceNoteServiceTests: XCTestCase {
         XCTAssertFalse(opened)
     }
 
-    private func waitUntil(_ condition: @MainActor () async -> Bool) async {
-        for _ in 0..<5000 {
-            if await condition() { return }
-            await Task.yield()
-        }
-        XCTFail("Timed out")
+    func testStreamRetriesOnlyAfterTheInjectedDelayAndCancelsIdlePolling() async {
+        let f = makeFixture(openResults: [false, true])
+        let take = UUID()
+        f.service.start(take)
+        await f.outputs.delivered.wait()
+        await f.timing.started.wait()
+        XCTAssertEqual(f.timing.durations, [.milliseconds(50)])
+        let firstAttempts = await f.transcriber.begins
+        XCTAssertEqual(firstAttempts, 1)
+        f.timing.advance(.milliseconds(50))
+        await f.timing.started.wait(for: 2)
+        XCTAssertEqual(f.timing.durations, [.milliseconds(50), .milliseconds(5)])
+        let attempts = await f.transcriber.begins
+        XCTAssertEqual(attempts, 2)
+        f.service.teardown()
+        await f.service.waitForTeardown()
+        await f.timing.completed.wait(for: 2)
+        XCTAssertEqual(f.outputs.all, [.started(take)])
+    }
+
+    func testTeardownCancelsStreamRetryWithoutAnotherOpenAttempt() async {
+        let f = makeFixture(openResults: [false, true])
+        f.service.start(UUID())
+        await f.timing.started.wait()
+        f.service.teardown()
+        await f.service.waitForTeardown()
+        await f.timing.completed.wait()
+        f.timing.advance(.milliseconds(50))
+        let attempts = await f.transcriber.begins
+        XCTAssertEqual(attempts, 1)
+        XCTAssertEqual(f.service.machine.phase, .tornDown)
     }
 }
 
 private actor FakeTranscriber: VoiceTranscribing {
+    let prepared: AsyncAcknowledgement
+    let finishReturned: AsyncAcknowledgement
+    private var openResults: [Bool]
+    private(set) var begins = 0
+
+    @MainActor init(openResults: [Bool] = []) {
+        prepared = AsyncAcknowledgement()
+        finishReturned = AsyncAcknowledgement()
+        self.openResults = openResults
+    }
     private(set) var abandons = 0
     private(set) var teardowns = 0
     private(set) var prepares = 0
@@ -240,16 +304,24 @@ private actor FakeTranscriber: VoiceTranscribing {
     }
 
     func prepare(onProgress: @escaping @Sendable (Double) -> Void) async throws {}
-    func prepareIfNeeded() async { prepares += 1 }
-    func begin(_ take: UUID, onPartial: @escaping @Sendable (String) -> Void) async -> Bool { true }
+    func prepareIfNeeded() async {
+        prepares += 1
+        await prepared.signal()
+    }
+    func begin(_ take: UUID, onPartial: @escaping @Sendable (String) -> Void) async -> Bool {
+        begins += 1
+        return openResults.isEmpty ? true : openResults.removeFirst()
+    }
     func feed(_ frames: [VoiceAudioFrame], take: UUID) async {}
 
     func finish(_ take: UUID, leftover: [VoiceAudioFrame]) async throws -> String {
-        await withCheckedContinuation { continuation in
+        let text = await withCheckedContinuation { continuation in
             finishing = continuation
             finishWaiters.forEach { $0.resume() }
             finishWaiters.removeAll()
         }
+        await finishReturned.signal()
+        return text
     }
 
     func abandon() async { abandons += 1 }

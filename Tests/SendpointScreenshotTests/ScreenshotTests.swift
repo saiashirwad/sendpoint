@@ -407,10 +407,16 @@ final class ScreenshotTests: XCTestCase {
 
     private func shoot(_ windows: [NSWindow], _ name: String, file: StaticString = #filePath, line: UInt = #line) throws {
         let image = try Self.composite(windows)
+        let filename = "sendpoint.\(name)-\(appearance).png"
+        let hadBaseline = FileManager.default.fileExists(atPath: directory + "/" + filename)
         let failure = verifySnapshot(
             of: image, as: .image(precision: 0.995), named: "\(name)-\(appearance)",
             record: record, snapshotDirectory: directory, file: file, testName: "sendpoint", line: line
         )
+        let result = ["name": filename, "rendering": "passed",
+                      "comparison": record == .all || !hadBaseline ? "recorded" : failure == nil ? "passed" : "failed"]
+        let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
+        print("SENDPOINT_SCREEN " + String(decoding: data, as: UTF8.self))
         if let failure, record == .missing { XCTFail(failure, file: file, line: line) }
     }
 

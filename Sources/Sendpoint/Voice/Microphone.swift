@@ -49,7 +49,6 @@ nonisolated private enum MicrophoneError: LocalizedError {
 
 private actor MicrophoneHardware {
     private var engine: AVAudioEngine?
-    private var activeLabel = "voice"
     private var activeDevice: AudioInputDevice?
     private var spareEngine: AVAudioEngine?
     private var spareDevice: AudioInputDevice?
@@ -64,7 +63,6 @@ private actor MicrophoneHardware {
         else { return }
         spareEngine = engine
         spareDevice = device
-        Diag.log("microphone prepared: \(device.name)")
     }
 
     func start(_ order: MicrophoneOrder, level: AsyncStream<Float>.Continuation,
@@ -75,8 +73,6 @@ private actor MicrophoneHardware {
         let input = engine.inputNode
 
         let queue = VoiceAudioQueue()
-        let label = collectFrames ? "voice" : "input preview"
-        Diag.log("\(label) tap format: \(format.sampleRate)Hz ch=\(format.channelCount) interleaved=\(format.isInterleaved)")
         try Self.installTap(on: input, format: format) { @Sendable buffer, _ in
             if collectFrames, let frame = VoiceAudioFrame(buffer: buffer) {
                 queue.append(frame)
@@ -91,8 +87,6 @@ private actor MicrophoneHardware {
         }
         self.engine = engine
         activeDevice = device
-        activeLabel = label
-        Diag.log("\(label) recording started")
         return queue
     }
 
@@ -102,9 +96,8 @@ private actor MicrophoneHardware {
         spareEngine = nil
         spareDevice = nil
         if let spare, spareMatches {
-            AudioInputDeviceQuery.matchRate(of: device, on: spare.inputNode)
+            AudioInputDeviceQuery.matchRate(on: spare.inputNode)
             if let format = Self.tapFormat(of: spare.inputNode) { return (spare, format) }
-            Diag.log("microphone format changed on \(device.name); binding a new engine")
         }
         let engine = (spareMatches ? nil : spare) ?? AVAudioEngine()
         guard AudioInputDeviceQuery.bind(device, to: engine.inputNode),
@@ -134,7 +127,6 @@ private actor MicrophoneHardware {
         spareEngine = engine
         spareDevice = activeDevice
         activeDevice = nil
-        Diag.log("\(activeLabel) recording stopped")
     }
 
     func teardown() {

@@ -41,8 +41,6 @@ final class InputLevelMonitor {
             }
             isRunning = true
         } catch {
-            guard !Task.isCancelled, current == generation else { return }
-            Diag.log("input level monitor failed to start: \(error.localizedDescription)")
         }
     }
 
