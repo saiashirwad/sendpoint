@@ -47,17 +47,19 @@ fi
             self.assertEqual(result["stages"]["build"]["status"], "failed")
             self.assertEqual(result["stages"]["tests"]["status"], "skipped")
 
-    def run_script(self, kind, responses, args=(), baselines=(), script_result=(0, "Ran 19 tests in 0.001s\nOK\n")):
+    def run_script(self, kind, responses, args=(), baselines=(), script_result=(0, "Ran 19 tests in 0.001s\nOK\n"), inspect=None):
         original = Path.cwd()
+        self.commands = []
         with tempfile.TemporaryDirectory() as directory:
             os.chdir(directory)
             try:
                 for name in baselines:
                     target = Path(".build/shots") / name
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.touch()
+                    target.write_text("baseline\n" if name.endswith(".txt") else "")
 
                 def command(argv, stdout, stderr, env=None):
+                    self.commands.append(argv)
                     if "unittest" in argv:
                         code, text = script_result
                         stdout.write(text)
@@ -71,6 +73,8 @@ fi
                     if env and code == 0:
                         (Path(env["SENDPOINT_SHOTS_DIR"]) / f"screen-{env['SENDPOINT_SHOTS_APPEARANCE']}.png").touch()
                     if env and "Test Case" in text:
+                        (Path(env["SENDPOINT_SHOTS_DIR"]) / f"screen-{env['SENDPOINT_SHOTS_APPEARANCE']}.txt").write_text("current\n")
+                    if env and "Test Case" in text:
                         name = f"screen-{env['SENDPOINT_SHOTS_APPEARANCE']}.png"
                         comparison = "failed" if "snapshot difference" in text else "passed" if had_baseline and env["SENDPOINT_SHOTS_RECORD"] == "missing" else "recorded"
                         stdout.write("SENDPOINT_SCREEN " + json.dumps(dict(name=name, rendering="passed", comparison=comparison)) + "\n")
@@ -81,6 +85,8 @@ fi
                 with patch.object(verification.subprocess, "run", side_effect=command), contextlib.redirect_stdout(io.StringIO()):
                     code = verification.run(kind, list(args))
                 result = json.loads(Path(f".build/{kind}.json").read_text())
+                if inspect:
+                    inspect()
                 self.assertFalse(responses)
                 self.assertEqual(code, result["exit_code"])
                 return result
@@ -197,9 +203,55 @@ Executed 4 tests, with 2 tests skipped and 1 failure
         self.assertEqual(result["stages"]["rendering"]["status"], "passed")
 
     def test_invalid_arguments_record_failure_and_skipped_stages(self):
-        result = self.run_script("shots", [], ["--invalid"])
-        self.assertIn("usage", result["error"])
-        self.assertTrue(all(stage["status"] == "skipped" for stage in result["stages"].values()))
+        for args in (["--invalid"], ["--appearance", "sepia"], ["--filter"], ["--diff", "--diff"]):
+            result = self.run_script("shots", [], args)
+            self.assertIn("usage", result["error"])
+            self.assertTrue(all(stage["status"] == "skipped" for stage in result["stages"].values()))
+
+    def test_text_change_fails_comparison_when_pixels_pass(self):
+        def baseline_text_is_kept():
+            self.assertEqual(Path(".build/shots/screen-light.txt").read_text(), "baseline\n")
+
+        result = self.run_script("shots", self.screenshot_responses(), ["--diff"],
+                                 ["screen-light.png", "screen-dark.png", "screen-light.txt"],
+                                 inspect=baseline_text_is_kept)
+        self.assertEqual(result["stages"]["comparison"]["status"], "failed")
+        self.assertEqual(result["summary"]["mismatches"], ["screen-light.png"])
+        self.assertEqual(result["status"], "failed")
+
+    def test_filter_and_appearance_render_only_the_requested_slice(self):
+        def other_screens_survive():
+            self.assertTrue(Path(".build/shots/other-light.png").exists())
+
+        result = self.run_script("shots", self.screenshot_responses()[:1],
+                                 ["--filter", "testStackPalette", "--appearance", "light"], ["other-light.png"],
+                                 inspect=other_screens_survive)
+        self.assertEqual(self.commands, [["swift", "test", "--filter",
+                                          "SendpointScreenshotTests.ScreenshotTests/(testStackPalette)"]])
+        self.assertEqual(result["stages"]["rendering"]["status"], "passed")
+        self.assertEqual(result["stages"]["dark"]["reason"], "Appearance not requested")
+        self.assertEqual(result["summary"]["appearances"], ["light"])
+        self.assertEqual(list(result)[0], "summary")
+
+    def test_filtered_diff_ignores_baselines_outside_the_slice(self):
+        result = self.run_script("shots", self.screenshot_responses()[:1], ["--diff", "--appearance", "light"],
+                                 ["screen-light.png", "other-dark.png"])
+        self.assertEqual(result["stages"]["comparison"]["status"], "passed")
+        self.assertIsNone(result["stages"]["comparison"]["missing_renders"])
+
+    def test_mismatch_summary_lists_changed_screens_and_text_diffs(self):
+        def baseline_text_is_kept():
+            self.assertEqual(Path(".build/shots/screen-light.txt").read_text(), "baseline\n")
+            self.assertEqual(Path(".build/shots-diff/screen-light.txt").read_text(), "current\n")
+            diff = Path(".build/shots-diff/screen-light.txt.diff").read_text()
+            self.assertIn("-baseline", diff)
+            self.assertIn("+current", diff)
+
+        result = self.run_script("shots", [(1, "Test Case 'ScreenshotTests.testScreen' failed (0 seconds).\nsnapshot difference\n"), self.screenshot_responses()[0]],
+                                 ["--diff"], ["screen-light.png", "screen-dark.png", "screen-light.txt"],
+                                 inspect=baseline_text_is_kept)
+        self.assertEqual(result["summary"]["mismatches"], ["screen-light.png"])
+        self.assertEqual(result["summary"]["text_diffs"], [".build/shots-diff/screen-light.txt.diff"])
 
 
 if __name__ == "__main__":

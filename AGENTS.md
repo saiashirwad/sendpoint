@@ -8,8 +8,10 @@
 - Inject small system boundaries for deterministic tests. Test behavior, including cancellation, stale results, invalid transitions, and teardown.
 - Make clean cutovers. Delete obsolete callers, state, settings, imports, and files.
 - Verify with `./check.sh` (builds and tests; prints one summary line plus any errors; full log in `.build/check.log`).
-- See UI with `./shots.sh`: renders every screen, light and dark, into `.build/shots/` (`--diff` keeps the last set and fails on each changed screen, diffs in `.build/shots-diff/`). A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
-- Finish every requested change with `./ship.sh` (build, assemble, install, launch; full log in `.build/ship.log`) before reporting it done.
+- See UI with `./shots.sh --filter testName --appearance light` while iterating: it renders one `ScreenshotTests` method into `.build/shots/`. Each `sendpoint.<slug>-<appearance>.png` has a `.txt` beside it with the on-screen text and its `x,y` position. Read the `.txt`. Open a PNG only when color or shape is the question. Find a slug's test with `grep -n '"<slug>' Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
+- Before reporting UI work done, run `./shots.sh --diff`. It fails on each screen whose pixels or text changed. `summary` in `.build/shots.json` lists `mismatches` and `text_diffs`; read those, not the stages. An empty text diff means only color or layout changed. Run plain `./shots.sh` to accept the new set. A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
+- Hand UI verification to the `ui-verify` agent when one is available, so screen output stays out of your context.
+- Finish every change under `Sources/` or `Resources/` with `./ship.sh` (build, assemble, install, launch; full log in `.build/ship.log`) before reporting it done. Website changes under `web/` skip it.
 - Publish only with `./release.sh X.Y.Z --ad-hoc --publish`.
 - Before adding a setting, a shortcut, or a state machine, read its guide first: `.claude/skills/add-setting/SKILL.md`, `.claude/skills/add-shortcut/SKILL.md`, or `.claude/skills/add-state-machine/SKILL.md`.
 

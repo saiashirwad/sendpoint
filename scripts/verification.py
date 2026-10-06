@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import difflib
 import json
 import os
 from pathlib import Path
@@ -34,6 +35,46 @@ def unittest_counts(text):
     counts = {name: int(value) for name, value in re.findall(r"(failures|errors|skipped)=(\d+)", text)}
     return {"total": int(total[1]) if total else 0,
             **{name: counts.get(name, 0) for name in ("failures", "errors", "skipped")}}
+
+
+SHOTS_USAGE = "usage: ./shots.sh [--diff] [--filter testName] [--appearance light|dark]"
+
+
+def shot_options(args):
+    options = {"diff": False, "filter": None, "appearance": None}
+    rest = list(args)
+    while rest:
+        flag = rest.pop(0)
+        if flag == "--diff" and not options["diff"]:
+            options["diff"] = True
+        elif flag in ("--filter", "--appearance") and rest and options[flag[2:]] is None:
+            options[flag[2:]] = rest.pop(0)
+        else:
+            raise ValueError(SHOTS_USAGE)
+    if options["appearance"] not in (None, "light", "dark"):
+        raise ValueError(SHOTS_USAGE)
+    return options
+
+
+def words(readout):
+    return [line.split("\t")[-1] for line in readout.splitlines()]
+
+
+def keep_text_baselines(shots, diffs, old_text, mismatches):
+    readouts = []
+    for name in mismatches:
+        text_name = name.removesuffix(".png") + ".txt"
+        new_path = shots / text_name
+        if not new_path.exists():
+            continue
+        new = new_path.read_text()
+        old = old_text.get(text_name, "")
+        (diffs / text_name).write_text(new)
+        new_path.write_text(old)
+        diff_path = diffs / (text_name + ".diff")
+        diff_path.write_text("\n".join(difflib.unified_diff(words(old), words(new), "baseline", "current", lineterm="")) + "\n")
+        readouts.append(str(diff_path))
+    return readouts
 
 
 def install_results(text, code):
@@ -80,8 +121,8 @@ def run(kind, args):
             return code
 
         try:
-            if (kind == "check" and args) or (kind == "shots" and args not in ([], ["--diff"])):
-                raise ValueError(f"usage: ./{kind}.sh" + (" [--diff]" if kind == "shots" else ""))
+            if kind == "check" and args:
+                raise ValueError("usage: ./check.sh")
             if kind == "check":
                 status = stage("verification_scripts", [sys.executable, "-m", "unittest", "discover", "-s", "scripts", "-p", "test_*.py"])
                 if status == 0 and result["stages"]["verification_scripts"]["test_counts"]["total"] == 0:
@@ -103,32 +144,45 @@ def run(kind, args):
                     if status == 0 and result["stages"]["launch"]["status"] != "passed":
                         status = 1
             else:
-                compare = args == ["--diff"]
+                options = shot_options(args)
+                compare = options["diff"]
+                full = options["filter"] is None and options["appearance"] is None
+                appearances = [options["appearance"]] if options["appearance"] else ["light", "dark"]
+                for appearance in {"light", "dark"} - set(appearances):
+                    result["stages"][appearance] = skipped("Appearance not requested")
                 before = set(shots.glob("*.png")) if compare else set()
-                if not compare and shots.exists():
+                old_text = {path.name: path.read_text() for path in shots.glob("*.txt")} if compare else {}
+                if not compare and full and shots.exists():
                     shutil.rmtree(shots)
                 if diffs.exists():
                     shutil.rmtree(diffs)
                 shots.mkdir(parents=True, exist_ok=True)
                 diffs.mkdir(parents=True, exist_ok=True)
+                tests = "SendpointScreenshotTests" if options["filter"] is None else \
+                    f"SendpointScreenshotTests.ScreenshotTests/({options['filter']})"
                 status = 0
-                for appearance in ("light", "dark"):
+                for appearance in appearances:
                     env = dict(os.environ, SENDPOINT_SHOTS_DIR=str(shots.resolve()),
                                SENDPOINT_SHOTS_APPEARANCE=appearance,
                                SENDPOINT_SHOTS_RECORD="missing" if compare else "all",
                                SNAPSHOT_ARTIFACTS=str(diffs.resolve()))
-                    code = stage(appearance, ["swift", "test", "--filter", "SendpointScreenshotTests"], env)
+                    code = stage(appearance, ["swift", "test", "--filter", tests], env)
                     status = status or code
                 after = set(shots.glob("*.png"))
                 counts = test_counts(log_path.read_text())["screenshots"]
                 records = screenshot_records(log_path.read_text())
+                for record in records:
+                    text_path = shots / (record["name"].removesuffix(".png") + ".txt")
+                    if record["comparison"] == "passed" and text_path.name in old_text and text_path.exists() \
+                            and words(text_path.read_text()) != words(old_text[text_path.name]):
+                        record["comparison"] = "failed"
                 rendered_names = {shots / record["name"] for record in records if record["rendering"] == "passed"}
                 rendered = bool(rendered_names) and rendered_names <= after and all(
                     result["stages"][appearance]["test_counts"]["screenshots"]["executed"] > 0
                     and result["stages"][appearance]["test_counts"]["screenshots"]["skipped"] == 0
                     and result["stages"][appearance]["screens"]
-                    for appearance in ("light", "dark"))
-                rendered = rendered and (before <= rendered_names if compare else status == 0)
+                    for appearance in appearances)
+                rendered = rendered and ((before <= rendered_names or not full) if compare else status == 0)
                 result["stages"]["rendering"] = {
                     "status": "passed" if rendered else "incomplete", "screens": len(rendered_names),
                     "tests": counts, "directory": str(shots)}
@@ -141,9 +195,17 @@ def run(kind, args):
                             record["comparison"] == "failed" for record in records) else "incomplete",
                         "compared": sum(record["comparison"] in ("passed", "failed") for record in records),
                         "mismatches": sum(record["comparison"] == "failed" for record in records),
-                        "new_baselines": len(after - before), "missing_renders": len(before - rendered_names),
+                        "new_baselines": len(rendered_names - before),
+                        "missing_renders": len(before - rendered_names) if full else None,
                         "diffs": str(diffs),
-                        "reason": "Missing baselines are recorded, not compared" if after - before else None}
+                        "reason": "Missing baselines are recorded, not compared" if rendered_names - before else None}
+                mismatches = sorted(record["name"] for record in records if record["comparison"] == "failed")
+                result["summary"] = {
+                    "appearances": appearances, "filter": options["filter"], "rendered": len(rendered_names),
+                    "mismatches": mismatches,
+                    "new_baselines": sorted(path.name for path in rendered_names - before) if compare else [],
+                    "text_diffs": keep_text_baselines(shots, diffs, old_text, mismatches),
+                    "directory": str(shots)}
                 if not rendered and status == 0:
                     status = 1
                 if compare and result["stages"]["comparison"]["status"] != "passed" and status == 0:
@@ -167,6 +229,8 @@ def run(kind, args):
                 result["test_counts"] = test_counts(log_path.read_text())
             result.update(status="passed" if status == 0 else "failed", exit_code=status)
             temporary = result_path.with_suffix(".json.tmp")
+            if "summary" in result:
+                result = {"summary": result.pop("summary"), **result}
             temporary.write_text(json.dumps(result, indent=2) + "\n")
             temporary.replace(result_path)
 
@@ -180,7 +244,10 @@ def run(kind, args):
         script_counts = result["stages"]["verification_scripts"].get("test_counts", {})
         detail = f": {counts['behavior']['executed']} behavior tests, {sum(c['skipped'] for c in counts.values())} skipped, {sum(c['failed'] for c in counts.values())} failures, {script_counts.get('total', 0)} script tests"
     elif kind == "shots":
-        detail = f": {len(list(shots.glob('*.png')))} screens in {shots}"
+        summary = result.get("summary", {})
+        detail = f": {summary.get('rendered', 0)} screens rendered in {shots}"
+        if summary.get("mismatches"):
+            detail += f"; changed: {', '.join(summary['mismatches'])}; text diffs in {diffs}"
     elif status == 0:
         detail = ": installed and launched"
     print(f"{kind} {'passed' if status == 0 else 'FAILED (exit ' + str(status) + ')'}{detail}. Results: {result_path}; full log: {log_path}")

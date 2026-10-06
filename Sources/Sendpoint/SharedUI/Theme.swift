@@ -18,9 +18,10 @@ nonisolated enum Spacing {
     static let xxl: CGFloat = 48
 }
 
-nonisolated enum Motion {
-    static let quick = Animation.easeOut(duration: 0.18)
-    static let springy = Animation.spring(response: 0.32, dampingFraction: 0.82)
+enum Motion {
+    static var isEnabled = true
+    static var quick: Animation? { isEnabled ? .easeOut(duration: 0.18) : nil }
+    static var springy: Animation? { isEnabled ? .spring(response: 0.32, dampingFraction: 0.82) : nil }
 }
 
 // MARK: - Type

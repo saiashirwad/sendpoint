@@ -2,6 +2,7 @@ import AppKit
 import SendpointDomain
 import SnapshotTesting
 import SwiftUI
+import Vision
 import XCTest
 @testable import Sendpoint
 
@@ -11,6 +12,7 @@ final class ScreenshotTests: XCTestCase {
     private var appearance = "light"
     private var record = SnapshotTestingConfiguration.Record.all
     private var suites: [String] = []
+    private var hider: (any NSObjectProtocol)?
 
     override func setUp() async throws {
         let environment = ProcessInfo.processInfo.environment
@@ -22,9 +24,17 @@ final class ScreenshotTests: XCTestCase {
         record = environment["SENDPOINT_SHOTS_RECORD"] == "missing" ? .missing : .all
         NSApplication.shared.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         Self.registerAppFonts()
+        Motion.isEnabled = false
+        hider = NotificationCenter.default.addObserver(
+            forName: NSWindow.didUpdateNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { NSApp.windows.forEach(Self.conceal) }
+        }
     }
 
     override func tearDown() async throws {
+        hider.map(NotificationCenter.default.removeObserver)
+        hider = nil
         for suite in suites { UserDefaults.standard.removePersistentDomain(forName: suite) }
         suites = []
     }
@@ -401,7 +411,7 @@ final class ScreenshotTests: XCTestCase {
     private func show(_ windows: [NSWindow]) async throws {
         for window in windows {
             window.appearance = NSApp.appearance
-            window.alphaValue = 0
+            Self.conceal(window)
             window.setFrameOrigin(NSPoint(x: 240, y: 240))
             window.orderFrontRegardless()
         }
@@ -410,7 +420,12 @@ final class ScreenshotTests: XCTestCase {
 
     private func settle() async throws {
         try await Task.sleep(for: .milliseconds(350))
-        for window in NSApp.windows { window.alphaValue = 0 }
+        for window in NSApp.windows { Self.conceal(window) }
+    }
+
+    private static func conceal(_ window: NSWindow) {
+        window.animationBehavior = .none
+        window.alphaValue = 0
     }
 
     private func shoot(_ windows: [NSWindow], _ name: String, file: StaticString = #filePath, line: UInt = #line) throws {
@@ -426,6 +441,24 @@ final class ScreenshotTests: XCTestCase {
         let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
         print("SENDPOINT_SCREEN " + String(decoding: data, as: UTF8.self))
         if let failure, record == .missing { XCTFail(failure, file: file, line: line) }
+        try Self.readout(image).write(toFile: directory + "/sendpoint.\(name)-\(appearance).txt", atomically: true, encoding: .utf8)
+    }
+
+    private static func readout(_ image: NSImage) throws -> String {
+        let cgImage = try XCTUnwrap(image.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: cgImage).perform([request])
+        let size = image.size
+        return (request.results ?? []).compactMap { observation -> (Int, Int, String)? in
+            guard let text = observation.topCandidates(1).first?.string else { return nil }
+            let box = observation.boundingBox
+            return (Int((1 - box.maxY) * size.height), Int(box.minX * size.width), text)
+        }
+        .sorted { ($0.0 / 6, $0.1) < ($1.0 / 6, $1.1) }
+        .map { "\($0.1),\($0.0)\t\($0.2)" }
+        .joined(separator: "\n") + "\n"
     }
 
     private static func composite(_ windows: [NSWindow]) throws -> NSImage {
