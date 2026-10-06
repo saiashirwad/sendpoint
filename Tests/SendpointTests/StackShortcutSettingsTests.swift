@@ -19,7 +19,7 @@ final class StackShortcutSettingsTests: XCTestCase {
                     "stack \(number)"
                 )
             }
-            XCTAssertTrue(settings.shortcutRegistrationIssues.isEmpty)
+            XCTAssertTrue(settings.configurationIssues.isEmpty)
         }
     }
 
@@ -72,6 +72,26 @@ final class StackShortcutSettingsTests: XCTestCase {
 
             settings.clearShortcut(for: .stack)
             XCTAssertNotNil(settings.combo(for: .stack), "required slots cannot be cleared")
+        }
+    }
+
+    func testPreferenceProvenanceSurvivesDisplacementReleaseAndRelaunch() throws {
+        try withDefaults { defaults in
+            let claimed = ShortcutSlot.selectStack(1).defaultCombo
+            defaults.set(try JSONEncoder().encode(ShortcutPreference.custom(claimed)), forKey: "capturePreference")
+            let settings = ShortcutSettings(defaults: defaults)
+            XCTAssertEqual(settings.preference(for: .selectStack(1)), .default)
+            XCTAssertNil(settings.selectStackCombo(1))
+            XCTAssertEqual(settings.preference(for: .capture), .custom(claimed))
+            settings.clearShortcut(for: .selectStack(1))
+            XCTAssertEqual(settings.preference(for: .selectStack(1)), .disabled)
+            try settings.setShortcut(ShortcutSlot.capture.defaultCombo, for: .capture)
+            XCTAssertNil(settings.selectStackCombo(1))
+            let restored = ShortcutSettings(defaults: defaults)
+            XCTAssertEqual(restored.preference(for: .selectStack(1)), .disabled)
+            XCTAssertNil(restored.selectStackCombo(1))
+            XCTAssertEqual(restored.preference(for: .selectStack(2)), .default)
+            XCTAssertNotNil(restored.selectStackCombo(2))
         }
     }
 

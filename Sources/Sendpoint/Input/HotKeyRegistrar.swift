@@ -24,23 +24,13 @@ final class HotKeyRegistrar {
     }
 
     @discardableResult
-    func register(_ actions: Actions) -> [ShortcutRegistrationIssue] {
+    func register(_ actions: Actions) -> [ShortcutRegistrationFailure] {
         self.actions = actions
-        var issues: [ShortcutRegistrationIssue] = []
+        var failures: [ShortcutRegistrationFailure] = []
+        let plan = settings.bindingPlan
         for slot in ShortcutSlot.allCases {
             center.unregister(name: .slot(slot))
-            guard let combo = settings.combo(for: slot) else {
-                if let displaced = settings.displacedDefault(for: slot) { issues.append(displaced) }
-                continue
-            }
-            guard combo.isValid else {
-                issues.append(.invalid(slot: slot, combo: combo))
-                continue
-            }
-            if let conflict = settings.shortcutConflict(for: combo, excluding: slot) {
-                issues.append(.conflict(slot: slot, combo: combo, reason: conflict))
-                continue
-            }
+            guard let combo = plan.bindings[slot] else { continue }
             let action: () -> Void
             var released: (() -> Void)?
             switch slot {
@@ -58,12 +48,13 @@ final class HotKeyRegistrar {
             case .registered:
                 break
             case .invalid:
-                issues.append(.invalid(slot: slot, combo: combo))
+                preconditionFailure("Binding plan admitted an invalid shortcut")
             case let .failed(status):
-                issues.append(.unavailable(slot: slot, combo: combo, status: status))
+                failures.append(ShortcutRegistrationFailure(slot: slot, combo: combo, status: status))
             }
         }
-        return issues
+        settings.updateRegistrationFailures(failures)
+        return failures
     }
 
     func rebind(_ proposed: KeyCombo, for slot: ShortcutSlot) throws {
@@ -91,7 +82,7 @@ final class HotKeyRegistrar {
 
     func applyCurrentBindings() {
         guard let actions else { return }
-        settings.updateShortcutRegistrationIssues(register(actions))
+        register(actions)
     }
 
     func unregisterAll() {

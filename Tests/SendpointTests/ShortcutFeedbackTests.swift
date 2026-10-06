@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class ShortcutFeedbackTests: XCTestCase {
     func testNoFeedbackHidesPanelAndClearsAnnouncement() {
-        let projection = ShortcutFeedback(slots: [.capture], registrationIssues: [], feedback: nil)
+        let projection = ShortcutFeedback(slots: [.capture], configurationIssues: [], feedback: nil)
 
         XCTAssertFalse(projection.isVisible)
         XCTAssertTrue(projection.issues.isEmpty)
@@ -14,7 +14,7 @@ final class ShortcutFeedbackTests: XCTestCase {
     }
 
     func testEmptyFeedbackStillShowsPanel() {
-        let projection = ShortcutFeedback(slots: [], registrationIssues: [], feedback: "")
+        let projection = ShortcutFeedback(slots: [], configurationIssues: [], feedback: "")
 
         XCTAssertTrue(projection.isVisible)
         XCTAssertEqual(projection.feedback, "")
@@ -22,7 +22,7 @@ final class ShortcutFeedbackTests: XCTestCase {
     }
 
     func testFeedbackWithoutIssuesIsUnchanged() {
-        let projection = ShortcutFeedback(slots: [], registrationIssues: [], feedback: "Choose another shortcut.")
+        let projection = ShortcutFeedback(slots: [], configurationIssues: [], feedback: "Choose another shortcut.")
 
         XCTAssertTrue(projection.isVisible)
         XCTAssertEqual(projection.feedback, "Choose another shortcut.")
@@ -33,7 +33,7 @@ final class ShortcutFeedbackTests: XCTestCase {
         let combo = KeyCombo(keyCode: 0, modifiers: [.command])
         let projection = ShortcutFeedback(
             slots: [.capture, .dictate, .capture],
-            registrationIssues: [
+            configurationIssues: [
                 .conflict(slot: .dictate, combo: combo, reason: .reserved("Example")),
                 .invalid(slot: .copy, combo: combo),
                 .invalid(slot: .capture, combo: combo),
@@ -53,7 +53,7 @@ final class ShortcutFeedbackTests: XCTestCase {
     func testExcludedIssuesDoNotShowPanel() {
         let projection = ShortcutFeedback(
             slots: [.capture],
-            registrationIssues: [.invalid(slot: .copy, combo: KeyCombo(keyCode: 0, modifiers: []))],
+            configurationIssues: [.invalid(slot: .copy, combo: KeyCombo(keyCode: 0, modifiers: []))],
             feedback: nil
         )
 
@@ -62,9 +62,9 @@ final class ShortcutFeedbackTests: XCTestCase {
     }
 
     func testEmptyFeedbackAfterIssuePreservesTrailingSeparator() {
-        let issue = ShortcutRegistrationIssue.invalid(slot: .capture, combo: KeyCombo(keyCode: 0, modifiers: []))
-        let withoutFeedback = ShortcutFeedback(slots: [.capture], registrationIssues: [issue], feedback: nil)
-        let emptyFeedback = ShortcutFeedback(slots: [.capture], registrationIssues: [issue], feedback: "")
+        let issue = ShortcutConfigurationIssue.invalid(slot: .capture, combo: KeyCombo(keyCode: 0, modifiers: []))
+        let withoutFeedback = ShortcutFeedback(slots: [.capture], configurationIssues: [issue], feedback: nil)
+        let emptyFeedback = ShortcutFeedback(slots: [.capture], configurationIssues: [issue], feedback: "")
 
         XCTAssertTrue(withoutFeedback.isVisible)
         XCTAssertEqual(withoutFeedback.announcement, withoutFeedback.issues[0].text)

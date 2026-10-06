@@ -38,7 +38,8 @@ struct ShortcutRows<Label: View>: View {
     var body: some View {
         let projection = ShortcutFeedback(
             slots: specs.map(\.slot),
-            registrationIssues: shortcuts.shortcutRegistrationIssues,
+            configurationIssues: shortcuts.configurationIssues,
+            registrationFailures: shortcuts.registrationFailures,
             feedback: feedback
         )
         VStack(alignment: .leading, spacing: 0) {
@@ -75,7 +76,7 @@ struct ShortcutRows<Label: View>: View {
 
     private func binding(for slot: ShortcutSlot) -> Binding<KeyCombo?> {
         Binding(
-            get: { shortcuts.combo(for: slot) },
+            get: { shortcuts.bindingPlan.configuredCombo(for: slot) },
             set: { proposed in
                 if let message = hotKeyRegistrar.updateShortcut(proposed, for: slot) {
                     feedback = message

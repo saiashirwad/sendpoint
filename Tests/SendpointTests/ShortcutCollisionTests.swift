@@ -10,13 +10,13 @@ final class ShortcutCollisionTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = ShortcutSettings(defaults: defaults)
         let oldClear = settings.clearCombo
-        let oldStoredClear = defaults.data(forKey: "clearCombo")
+        let oldStoredClear = defaults.data(forKey: "clearPreference")
 
-        XCTAssertThrowsError(try settings.setShortcut(settings.copyCombo, for: .clear)) {
+        XCTAssertThrowsError(try settings.setShortcut(try XCTUnwrap(settings.copyCombo), for: .clear)) {
             XCTAssertEqual($0 as? ShortcutConflict, .duplicate(.copy))
         }
         XCTAssertEqual(settings.clearCombo, oldClear)
-        XCTAssertEqual(defaults.data(forKey: "clearCombo"), oldStoredClear)
+        XCTAssertEqual(defaults.data(forKey: "clearPreference"), oldStoredClear)
     }
 
     func testFixedMainMenuShortcutsAreRejected() throws {
@@ -43,22 +43,26 @@ final class ShortcutCollisionTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let reserved = KeyCombo(keyCode: UInt16(kVK_ANSI_Z), modifiers: [.command])
         let duplicate = KeyCombo(keyCode: UInt16(kVK_ANSI_S), modifiers: [.control, .command])
-        defaults.set(try JSONEncoder().encode(reserved), forKey: "clearCombo")
-        defaults.set(try JSONEncoder().encode(duplicate), forKey: "copyCombo")
-        defaults.set(try JSONEncoder().encode(duplicate), forKey: "stackCombo")
+        defaults.set(try JSONEncoder().encode(ShortcutPreference.custom(reserved)), forKey: "clearPreference")
+        defaults.set(try JSONEncoder().encode(ShortcutPreference.custom(duplicate)), forKey: "copyPreference")
+        defaults.set(try JSONEncoder().encode(ShortcutPreference.custom(duplicate)), forKey: "stackPreference")
 
         let settings = ShortcutSettings(defaults: defaults)
 
+        XCTAssertNil(settings.copyCombo)
+        XCTAssertNil(settings.stackCombo)
+        XCTAssertNil(settings.clearCombo)
+
         XCTAssertEqual(
-            settings.shortcutConflict(for: settings.clearCombo, excluding: .clear),
+            settings.shortcutConflict(for: reserved, excluding: .clear),
             .reserved("Undo (⌘Z)")
         )
         XCTAssertEqual(
-            settings.shortcutConflict(for: settings.copyCombo, excluding: .copy),
+            settings.shortcutConflict(for: duplicate, excluding: .copy),
             .duplicate(.stack)
         )
         XCTAssertEqual(
-            settings.shortcutRegistrationIssues,
+            settings.configurationIssues,
             [
                 .conflict(slot: .copy, combo: duplicate, reason: .duplicate(.stack)),
                 .conflict(slot: .stack, combo: duplicate, reason: .duplicate(.copy)),

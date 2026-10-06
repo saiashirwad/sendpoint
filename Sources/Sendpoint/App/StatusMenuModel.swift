@@ -68,9 +68,9 @@ enum StatusMenuModel {
         var menu: [StatusMenuItem] = []
 
         menu.append(.entry(StatusMenuEntry(
-            title: "Voice Note (\(shortcuts.voiceCaptureCombo.displayString))",
+            title: shortcuts.voiceCaptureCombo.map { "Voice Note (\($0.displayString))" } ?? "Voice Note",
             action: ready ? .voiceNote : nil,
-            tooltip: shortcuts.voiceCaptureCombo.displayString
+            tooltip: shortcuts.voiceCaptureCombo?.displayString
         )))
         menu.append(.entry(entry("Typed Note",
             action: ready ? .typedNote : nil,

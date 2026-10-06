@@ -7,9 +7,12 @@ struct ShortcutFeedback {
     let issues: [Issue]
     let feedback: String?
 
-    init(slots: [ShortcutSlot], registrationIssues: [ShortcutRegistrationIssue], feedback: String?) {
+    init(slots: [ShortcutSlot], configurationIssues: [ShortcutConfigurationIssue],
+         registrationFailures: [ShortcutRegistrationFailure] = [], feedback: String?) {
         let includedSlots = Set(slots)
-        issues = registrationIssues.filter { includedSlots.contains($0.id) }.map {
+        issues = configurationIssues.filter { includedSlots.contains($0.id) }.map {
+            Issue(id: $0.id, text: "\($0.id.title): \($0.message)")
+        } + registrationFailures.filter { includedSlots.contains($0.id) }.map {
             Issue(id: $0.id, text: "\($0.id.title): \($0.message)")
         }
         self.feedback = feedback

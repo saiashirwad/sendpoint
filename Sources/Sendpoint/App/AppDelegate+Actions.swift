@@ -34,8 +34,7 @@ extension AppDelegate {
             clear: { [weak self] in self?.clearStack() },
             editLatest: { [weak self] in self?.latestNoteEditor?.model.send(.open) }
         )
-        let issues = hotKeyRegistrar.register(actions)
-        shortcutSettings.updateShortcutRegistrationIssues(issues)
+        hotKeyRegistrar.register(actions)
         refreshStatusItem()
     }
 

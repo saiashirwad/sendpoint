@@ -113,10 +113,10 @@ struct SetupTourKeys: Equatable {
     @MainActor
     init(shortcuts: ShortcutSettings) {
         self.init(
-            voice: shortcuts.voiceCaptureCombo.displayString,
-            capture: shortcuts.captureCombo.displayString,
-            stack: shortcuts.stackCombo.displayString,
-            copy: shortcuts.copyCombo.displayString,
+            voice: shortcuts.voiceCaptureCombo?.displayString ?? "the Voice note shortcut (set it in Settings)",
+            capture: shortcuts.captureCombo?.displayString ?? "the Typed note shortcut (set it in Settings)",
+            stack: shortcuts.stackCombo?.displayString ?? "the Show stack shortcut (set it in Settings)",
+            copy: shortcuts.copyCombo?.displayString ?? "The Export stack shortcut (set it in Settings)",
             stacks: (1...StackDocument.stackCount)
                 .compactMap { shortcuts.selectStackCombo($0)?.displayString }
                 .joined(separator: " ")
