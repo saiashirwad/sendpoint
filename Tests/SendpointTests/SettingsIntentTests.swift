@@ -104,7 +104,7 @@ final class SettingsIntentTests: XCTestCase {
         }
         settings.send(.selectedStack(.three))
         let store = try await StackStore(persistence: StorePersistence(
-            load: { .empty() }, commit: { _ in XCTFail("Selecting must not commit notes") }
+            load: { StackDocument() }, commit: { _ in XCTFail("Selecting must not commit notes") }
         ), initialStack: settings.lastStackSlot, onSelection: { settings.send(.selectedStack($0)) })
         XCTAssertEqual(store.currentStackID, .three)
         store.select(.five)

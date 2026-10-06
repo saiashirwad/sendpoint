@@ -59,7 +59,7 @@ final class DiagnosticTests: XCTestCase {
 
     @MainActor
     func testSaveAndCleanupShareExplicitOperationAndNoteIdentity() async throws {
-        let document = StackDocument.empty()
+        let document = StackDocument()
         let records = DiagnosticRecorder()
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }),
                                         diagnostics: records.record)

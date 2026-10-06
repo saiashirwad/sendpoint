@@ -8,7 +8,7 @@ final class StackDocumentMutationTests: XCTestCase {
     private let secondID = StackSlot.two
 
     func testStacksAreNumberedByPlace() {
-        let stacks = StackDocument.empty().stacks
+        let stacks = StackDocument().stacks
         XCTAssertEqual(stacks.count, StackDocument.stackCount)
         XCTAssertEqual(stacks.map { $0.id.number }, [1, 2, 3, 4, 5])
         XCTAssertEqual(stacks.stack(number: 3), stacks[2])
@@ -204,7 +204,7 @@ final class StackDocumentMutationTests: XCTestCase {
 
     func testDuplicateAddsAreRejectedWithoutChangingTheDocument() {
         let note = makeNote(id: UUID(), body: "one")
-        let initial = applied(.addNote(stackID: firstID, note: note), to: .empty())
+        let initial = applied(.addNote(stackID: firstID, note: note), to: StackDocument())
         XCTAssertEqual(StackDocumentMutations.applying(.addNote(stackID: firstID, note: note), to: initial),
                        .rejected("The note already exists."))
     }

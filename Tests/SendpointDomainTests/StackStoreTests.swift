@@ -375,7 +375,7 @@ final class StackStoreTests: XCTestCase {
     func testInitialSelectionAndPreferenceAreIndependentOfNotesAndTeardown() async throws {
         var selected: [StackSlot] = []
         let store = try await StackStore(persistence: StorePersistence(
-            load: { .empty() }, commit: { _ in XCTFail("Navigation must not write notes") }
+            load: { StackDocument() }, commit: { _ in XCTFail("Navigation must not write notes") }
         ), initialStack: .three, onSelection: { selected.append($0) })
         XCTAssertEqual(store.currentStackID, .three)
         store.select(.five)

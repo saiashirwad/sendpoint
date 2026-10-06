@@ -4,7 +4,7 @@ import SendpointDomain
 
 final class StackDocumentDecodingTests: XCTestCase {
     func testFivePermanentSlotsRoundTripWithoutStackIdentityFields() throws {
-        let document = StackDocument.empty()
+        let document = StackDocument()
         let data = try JSONEncoder().encode(document)
         XCTAssertEqual(try JSONDecoder().decode(StackDocument.self, from: data), document)
         XCTAssertEqual(document.stacks.map(\.id), StackSlot.allCases)
@@ -15,14 +15,14 @@ final class StackDocumentDecodingTests: XCTestCase {
     }
 
     func testDecodedMissingSlotIsRejected() throws {
-        var object = try encodedObject(.empty())
+        var object = try encodedObject(StackDocument())
         object.removeValue(forKey: "five")
         XCTAssertThrowsError(try decode(object))
     }
 
     func testDecodedDuplicateNotesAndInvalidClearedBatchesAreRejected() throws {
         let note = Note(subject: .standalone, body: "one")
-        guard case let .applied(document) = StackDocumentMutations.applying(.addNote(stackID: .one, note: note), to: .empty()) else {
+        guard case let .applied(document) = StackDocumentMutations.applying(.addNote(stackID: .one, note: note), to: StackDocument()) else {
             return XCTFail("Expected note addition")
         }
         var object = try encodedObject(document)

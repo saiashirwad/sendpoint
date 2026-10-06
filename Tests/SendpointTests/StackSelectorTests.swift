@@ -73,7 +73,7 @@ final class StackSelectorTests: XCTestCase {
     }
 
     func testSelectionDoesNotNeedACommitAndKeepsItsReadout() async throws {
-        let document = StackDocument.empty()
+        let document = StackDocument()
         let store = try await StackStore(persistence: StorePersistence(
             load: { document },
             commit: { _ in XCTFail("Selection must not commit notes") }

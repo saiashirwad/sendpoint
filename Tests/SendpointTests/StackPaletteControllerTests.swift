@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class StackPaletteControllerTests: XCTestCase {
     func testPaletteRetriesAWriteQueuedByAnotherOwner() async throws {
-        let document = StackDocument.empty()
+        let document = StackDocument()
         let disk = PaletteRetryDisk()
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { try await disk.commit($0) }

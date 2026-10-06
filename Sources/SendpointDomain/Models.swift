@@ -116,10 +116,6 @@ public struct StackDocument: Codable, Hashable, Sendable {
             }
         }
     }
-
-    public static func empty() -> StackDocument {
-        StackDocument()
-    }
 }
 
 public extension Array where Element == Stack {

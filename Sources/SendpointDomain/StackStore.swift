@@ -100,7 +100,7 @@ public final class StackStore {
         if let loaded {
             initialDocument = loaded
         } else {
-            let candidate = StackDocument.empty()
+            let candidate = StackDocument()
             try Task.checkCancellation()
             try await persistence.commit(candidate)
             try Task.checkCancellation()
