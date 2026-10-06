@@ -240,6 +240,28 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.beepCount, 1)
     }
 
+    func testNavigationDiscardsCommandsRetainedWithAFailedDraftSave() throws {
+        for action in [PaletteAction.clearStack, .copyStack] {
+            var harness = makeHarness()
+            harness.send(.open)
+            harness.send(.perform(.editNote(firstNoteID)))
+            harness.send(.editText("Retained draft"))
+            harness.send(.perform(action))
+            let saveID = try XCTUnwrap(harness.mutationID)
+            harness.send(.mutationResult(saveID, .commitFailed("Disk full")))
+            harness.context = makeContext(stacks: stacks, currentStackID: secondStackID)
+            harness.send(.documentChanged)
+            harness.context = makeContext(stacks: stacks, currentStackID: firstStackID)
+            harness.send(.documentChanged)
+            XCTAssertEqual(harness.state.inlineEdit?.text, "Retained draft")
+            harness.send(.retryPendingStoreChanges)
+            harness.send(.mutationResult(saveID, .committed))
+            XCTAssertNil(harness.mutation)
+            XCTAssertNil(harness.copiedStackID)
+            XCTAssertFalse(harness.state.isBusy)
+        }
+    }
+
     func testTheViewerFollowsAStackSwitchMadeElsewhere() {
         var harness = makeHarness()
         harness.send(.open)

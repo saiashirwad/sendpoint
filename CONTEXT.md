@@ -26,6 +26,8 @@ _Avoid_: Active stack, shown stack (as separate product concepts)
 
 **Ownership choice**: Keep selection and the durable queue behind the existing `StackStore` façade, with separate writable state and a small preference callback. A separate observable selection owner would add a dependency and lifetime to every store consumer without removing more facts. `StackDocument` owns only note content and clear undo; `StackSelectMachine` owns only readout timing. Views and controllers call `store.select(slot)` for navigation and `store.mutate(...)` for durable note changes.
 
+**Deferred palette commands**: A command requested while a draft saves runs after that save only if navigation has not superseded it. Local stack selection or an observed external selection discards the pending command, including an away-and-back sequence. The draft still saves to its original slot. A pending window close and committed-operation feedback remain valid across navigation. A deferred clear or export never silently retargets to a newer selection.
+
 **Cleared batch**: The most recently removed group of notes, retained for Undo Clear. It belongs to its original stack.
 
 ## Capture and dictation

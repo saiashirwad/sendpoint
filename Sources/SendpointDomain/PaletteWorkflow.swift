@@ -35,6 +35,13 @@ public struct PalettePending {
     let stackID: StackSlot
     let draft: PaletteEdit?
     var continuation: PaletteEvent?
+
+    mutating func discardSupersededCommand() {
+        switch continuation {
+        case .close?, .flash(_)?, nil: break
+        default: continuation = nil
+        }
+    }
 }
 
 public enum PaletteInteraction {
@@ -230,6 +237,7 @@ public struct PaletteUpdate {
         switch event {
         case .documentChanged:
             if state.shownStackID != context.currentStackID {
+                discardSupersededCommand()
                 if case .editing = state.interaction { finishEdit(before: nil) }
                 showCurrentStack()
                 if state.overlay != nil { closeOverlay() } else if !state.isBusy { state.requestFocus(.search) }
@@ -269,6 +277,7 @@ public struct PaletteUpdate {
         case let .chooseNote(id): chooseNote(id, editing: false)
         case let .selectStack(number):
             guard let stack = context.stacks.stack(number: number) else { effects.append(.beep); break }
+            discardSupersededCommand()
             finishEdit(before: nil)
             effects.append(.selectStack(stack.id))
         case let .perform(action):
@@ -358,6 +367,18 @@ public struct PaletteUpdate {
         state.interaction = .saving(PalettePending(id: operationID,
             stackID: draft?.stackID ?? context.currentStackID, draft: draft, continuation: continuation))
         effects.append(.mutate(operationID, mutation))
+    }
+
+    private mutating func discardSupersededCommand() {
+        switch state.interaction {
+        case var .saving(pending):
+            pending.discardSupersededCommand()
+            state.interaction = .saving(pending)
+        case .failed(var pending, let message, let retryable):
+            pending.discardSupersededCommand()
+            state.interaction = .failed(pending, message, retryable: retryable)
+        default: break
+        }
     }
 
     private mutating func receive(_ id: UUID, _ outcome: StackMutationOutcome) {
