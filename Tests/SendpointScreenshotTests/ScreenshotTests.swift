@@ -80,6 +80,40 @@ final class ScreenshotTests: XCTestCase {
         try shoot([editor] + (editor.childWindows ?? []), "text-capture-destination")
     }
 
+    func testTextCaptureWaitingForSelectionAndSaveFailure() async throws {
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { .empty() }, commit: { _ in throw CocoaError(.fileWriteOutOfSpace) }
+        ))
+        let controller = makeCaptureController(store: store, selection: SelectionCapture(
+            read: { _, _ in
+                try await Task.sleep(for: .seconds(60))
+                return CapturedSelection(text: "")
+            }, paste: { _, _ in false }
+        ))
+        let identity = CaptureIdentity(sourceStack: .one)
+        controller.send(.begin(.typed(identity)))
+        controller.send(.selectionPending(identity))
+        controller.note = "A thought written before the selected passage arrives."
+        controller.send(.save)
+        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(rootView: CaptureView(model: controller)))
+        editor.setContentSize(VoiceCaptureLayout.cardSize(
+            lines: controller.transcriptionPreviewLines,
+            fontSize: CGFloat(controller.transcriptionPreviewFontSize)
+        ))
+        defer {
+            controller.teardown()
+            editor.contentView = nil
+            editor.close()
+            store.teardown()
+        }
+        try await show([editor])
+        try shoot([editor], "text-capture-waiting-selection")
+        controller.send(.selection(identity, CapturedSelection(text: "A short selected passage")))
+        await store.waitForIdle()
+        try await settle()
+        try shoot([editor], "text-capture-save-failed")
+    }
+
     // MARK: - Voice capture
 
     func testVoiceCapturePill() async throws {
@@ -388,13 +422,14 @@ final class ScreenshotTests: XCTestCase {
         ))
     }
 
-    private func makeCaptureController(store: StackStore, defaults: UserDefaults? = nil) -> CaptureController {
+    private func makeCaptureController(store: StackStore, defaults: UserDefaults? = nil,
+                                       selection: SelectionCapture? = nil) -> CaptureController {
         let defaults = defaults ?? makeDefaults()
         let controller = CaptureController(
             settings: AppSettings(defaults: defaults),
             voiceSettings: VoiceSettings(defaults: defaults),
             permissionState: makePermissions(),
-            selection: SelectionCapture(read: { _, _ in CapturedSelection(text: "") }, paste: { _, _ in false }),
+            selection: selection ?? SelectionCapture(read: { _, _ in CapturedSelection(text: "") }, paste: { _, _ in false }),
             recorder: VoiceRecorder(start: { _ in }, stop: { _ in }, discard: {}, levelMeter: VoiceLevelMeter()),
             surfaces: { _ in CaptureSurfaces(prepare: {}, show: { _ in }, focus: {}, close: {}, discard: {}) }
         )

@@ -21,6 +21,7 @@ final class FakeVoiceRecorder {
     }
 
     var starts = 0
+    var stops = 0
     var discards = 0
     var startFails = false
     var transcript: Result<String, Error> = .success("hello there")
@@ -48,6 +49,7 @@ final class FakeVoiceRecorder {
                 }
             },
             stop: { take in
+                self.stops += 1
                 switch self.transcript {
                 case let .success(text): self.output?(.transcript(take, text))
                 case let .failure(error): self.output?(.failed(take, error.localizedDescription))

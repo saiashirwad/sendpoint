@@ -8,10 +8,14 @@ import XCTest
 final class CaptureControllerTests: XCTestCase {
     @Observable @MainActor final class Surfaces {
         var events: [String] = []
+        var onShow: ((CaptureSurface) -> Void)?
         var boundary: CaptureSurfaces {
             CaptureSurfaces(
                 prepare: { self.events.append("prepare") },
-                show: { self.events.append("show \($0)") },
+                show: {
+                    self.events.append("show \($0)")
+                    self.onShow?($0)
+                },
                 focus: { self.events.append("focus") },
                 close: { self.events.append("close") },
                 discard: { self.events.append("discard") }
@@ -38,6 +42,15 @@ final class CaptureControllerTests: XCTestCase {
         var pasteSucceeds = true
     }
 
+    private actor RetryDisk {
+        private var attempts: [StackDocument] = []
+        func commit(_ document: StackDocument) throws {
+            attempts.append(document)
+            if attempts.count == 1 { throw CocoaError(.fileWriteOutOfSpace) }
+        }
+        func documents() -> [StackDocument] { attempts }
+    }
+
     private struct Fixture {
         let controller: CaptureController
         let store: StackStore
@@ -59,6 +72,7 @@ final class CaptureControllerTests: XCTestCase {
         accessibility: AccessibilityPermissionState = .granted,
         hasFrontApp: Bool = true,
         sleep: (@MainActor (Duration) async throws -> Void)? = nil,
+        persistence: StorePersistence? = nil,
         diagnostics: @escaping DiagnosticSink = { _ in }
     ) async throws -> Fixture {
         let suite = "CaptureControllerTests.\(UUID().uuidString)"
@@ -70,7 +84,7 @@ final class CaptureControllerTests: XCTestCase {
             voiceModelFilesExist: { true }, downloadVoiceModel: { _ in },
             openAccessibilitySettings: {}, openMicrophoneSettings: {}
         ))
-        let store = try await StackStore(persistence: StorePersistence(load: { nil }, commit: { _ in }),
+        let store = try await StackStore(persistence: persistence ?? StorePersistence(load: { nil }, commit: { _ in }),
                                         diagnostics: diagnostics)
         let surfaces = Surfaces()
         let recorder = FakeVoiceRecorder()
@@ -177,6 +191,59 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(f.store.currentNotes.map(\.body), ["A thought"])
         XCTAssertEqual(f.store.currentNotes.first?.subject, .selection(quote: "A passage"))
         XCTAssertEqual(f.surfaces.events.last, "close")
+    }
+
+    func testSaveRetryRunsTheRetainedStoreMutationOnceWithoutASecondEnqueue() async throws {
+        let disk = RetryDisk()
+        let f = try await makeFixture(persistence: StorePersistence(
+            load: { .empty() }, commit: { try await disk.commit($0) }
+        ))
+        f.controller.beginCapture()
+        await f.selectionGate.open(selection)
+        await waitForObservation { f.controller.captured == self.selection }
+        let identity = try XCTUnwrap(f.controller.state.identity)
+        f.controller.note = "Retained draft"
+        f.controller.send(.save)
+        await f.store.waitForIdle()
+        XCTAssertEqual(f.store.state, .halted)
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
+        guard case let .saveFailed(request, .retryable) = f.controller.state.work else {
+            return XCTFail("Expected retryable save failure")
+        }
+        XCTAssertEqual(request.note.id, identity.noteID)
+        f.controller.note = "Late edit"
+        f.controller.send(.stackSelected(.five))
+        f.controller.send(.retry)
+        f.controller.send(.retry)
+        await f.store.waitForIdle()
+        XCTAssertFalse(f.controller.isOpen)
+        XCTAssertFalse(f.store.hasPendingMutations)
+        XCTAssertNil(f.store.error, "A duplicate enqueue would reject after the retained mutation commits")
+        XCTAssertEqual(f.store.currentNotes, [request.note])
+        let attempts = await disk.documents()
+        XCTAssertEqual(attempts.count, 2)
+        XCTAssertEqual(attempts.first, attempts.last)
+        XCTAssertEqual(f.store.currentNotes.first?.createdAt, identity.createdAt)
+    }
+
+    func testReentrantEditorCallbackQueuesTypingAndSaveBeforeSelectionResolves() async throws {
+        let f = try await makeFixture()
+        f.surfaces.onShow = { [weak controller = f.controller] surface in
+            guard surface == .editor else { return }
+            controller?.note = "Written during show"
+            controller?.send(.save)
+        }
+        f.controller.beginCapture()
+        await waitForObservation { f.controller.note == "Written during show" }
+        guard case .awaitingTextSelection = f.controller.state.work else {
+            return XCTFail("Callback events must run after the show effect")
+        }
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
+        await f.selectionGate.open(selection)
+        await waitForObservation { !f.controller.isOpen }
+        XCTAssertEqual(f.store.currentNotes.map(\.body), ["Written during show"])
+        XCTAssertEqual(f.store.currentNotes.first?.subject, .selection(quote: selection.text))
+        XCTAssertEqual(f.surfaces.events, ["show editor", "close"])
     }
 
     func testTypedNoteSavesToTheChosenDestinationAndSwitchesTheCurrentStack() async throws {
@@ -427,11 +494,14 @@ final class CaptureControllerTests: XCTestCase {
         await f.timing.started.wait()
         XCTAssertEqual(f.timing.durations, [CaptureController.selectionDeadline])
         XCTAssertTrue(f.controller.isOpen)
+        XCTAssertEqual(f.recorder.stops, 0, "Keep recording while the selection has its finish window")
         f.timing.advance(CaptureController.selectionDeadline)
         await waitForObservation { !f.controller.isOpen }
+        XCTAssertEqual(f.recorder.stops, 1)
         XCTAssertEqual(f.store.currentNotes.map(\.body), ["hello there"])
         await f.selectionGate.open(selection)
         await f.selectionReturned.wait()
+        XCTAssertEqual(f.recorder.stops, 1, "The cancelled reader cannot finish twice")
         f.controller.teardown()
     }
 
