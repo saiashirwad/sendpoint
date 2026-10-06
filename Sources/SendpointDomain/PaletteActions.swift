@@ -54,6 +54,7 @@ public nonisolated enum PaletteActionSection: Hashable {
 public nonisolated struct PaletteActionItem: Equatable, Identifiable {
     public let action: PaletteAction
     public let title: String
+    public let key: PaletteKey
     public let keys: String
     public let section: PaletteActionSection
     public var isDestructive = false
@@ -61,12 +62,14 @@ public nonisolated struct PaletteActionItem: Equatable, Identifiable {
     public init(
         action: PaletteAction,
         title: String,
+        key: PaletteKey,
         keys: String,
         section: PaletteActionSection,
         isDestructive: Bool = false
     ) {
         self.action = action
         self.title = title
+        self.key = key
         self.keys = keys
         self.section = section
         self.isDestructive = isDestructive
@@ -119,27 +122,28 @@ public nonisolated struct PaletteActionContext: Equatable {
 public nonisolated enum PaletteActionCatalog {
     public static func items(for context: PaletteActionContext) -> [PaletteActionItem] {
         var items: [PaletteActionItem] = []
-        func add(_ action: PaletteAction, _ title: String, _ keys: String,
-                 in section: PaletteActionSection, destructive: Bool = false) {
-            items.append(PaletteActionItem(action: action, title: title, keys: keys,
+        func add(_ action: PaletteAction, _ title: String, _ key: PaletteKey, _ keys: String,
+                  in section: PaletteActionSection, destructive: Bool = false) {
+            items.append(PaletteActionItem(action: action, title: title, key: key, keys: keys,
                 section: section, isDestructive: destructive))
         }
 
         if case let .note(id, index, count) = context.focus {
-            add(.editNote(id), "Edit", "↩", in: .note)
-            add(.copyNote(id), "Copy", "⌘C", in: .note)
-            if index > 0 { add(.moveNoteUp(id), "Move up", "⌥↑", in: .note) }
-            if index < count - 1 { add(.moveNoteDown(id), "Move down", "⌥↓", in: .note) }
+            add(.editNote(id), "Edit", .activate, "↩", in: .note)
+            add(.copyNote(id), "Copy", .command("c"), "⌘C", in: .note)
+            if index > 0 { add(.moveNoteUp(id), "Move up", .optionUp, "⌥↑", in: .note) }
+            if index < count - 1 { add(.moveNoteDown(id), "Move down", .optionDown, "⌥↓", in: .note) }
             for target in context.moveTargets {
-                add(.moveNoteToStack(id, target.number), "Move to \(stackTitle(target.number))", target.keys, in: .note)
+                add(.moveNoteToStack(id, target.number), "Move to \(stackTitle(target.number))",
+                    .moveToStack(target.number), target.keys, in: .note)
             }
-            add(.deleteNote(id), "Delete", "⌘⌫", in: .note, destructive: true)
+            add(.deleteNote(id), "Delete", .commandDelete, "⌘⌫", in: .note, destructive: true)
         }
         let hasNotes = context.stack.map { !$0.isEmpty } ?? false
-        if hasNotes { add(.copyStack, "Copy as Markdown", "⇧⌘C", in: .stack) }
-        if let undo = context.undo { add(.undoClear, undo.title, "⌘Z", in: .stack) }
-        if hasNotes { add(.clearStack, "Clear", "⇧⌘⌫", in: .stack, destructive: true) }
-        add(.chooseTemplate, "Change template", "⌘P", in: .template)
+        if hasNotes { add(.copyStack, "Copy as Markdown", .shiftCommand("c"), "⇧⌘C", in: .stack) }
+        if let undo = context.undo { add(.undoClear, undo.title, .command("z"), "⌘Z", in: .stack) }
+        if hasNotes { add(.clearStack, "Clear", .shiftCommandDelete, "⇧⌘⌫", in: .stack, destructive: true) }
+        add(.chooseTemplate, "Change template", .command("p"), "⌘P", in: .template)
         return items
     }
 

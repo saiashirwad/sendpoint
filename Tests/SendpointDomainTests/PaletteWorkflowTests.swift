@@ -58,6 +58,139 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.state.noteState.highlight, firstNoteID, "the highlight wraps")
     }
 
+    func testFilteredMiddleNoteOffersAndExecutesBothDurableMoves() throws {
+        for (key, destination): (PaletteKey, Int) in [(.optionUp, 0), (.optionDown, 2)] {
+            var harness = makeHarness()
+            harness.send(.open)
+            harness.send(.query("two"))
+            XCTAssertEqual(harness.projection.noteListing.ids, [secondNoteID])
+            XCTAssertTrue(harness.projection.actionItems.contains { $0.key == .optionUp })
+            XCTAssertTrue(harness.projection.actionItems.contains { $0.key == .optionDown })
+
+            let command = try XCTUnwrap(harness.projection.actionItems.first { $0.key == key })
+            XCTAssertTrue(harness.send(.key(key, textHasSelection: false)))
+            XCTAssertEqual(harness.mutation,
+                .moveNote(stackID: firstStackID, noteID: secondNoteID, destinationIndex: destination))
+
+            harness = makeHarness()
+            harness.send(.open)
+            harness.send(.query("two"))
+            harness.send(.perform(command.action))
+            XCTAssertEqual(harness.mutation,
+                .moveNote(stackID: firstStackID, noteID: secondNoteID, destinationIndex: destination))
+        }
+    }
+
+    func testTypedDispatchDoesNotUseConfiguredGlyphLabels() {
+        var harness = makeHarness()
+        harness.context = makeContext(stacks: stacks, moveShortcuts: [2: "⌘C", 3: "⌥↓"])
+        harness.send(.open)
+        let move = harness.projection.actionItems.first { $0.key == .moveToStack(2) }
+        XCTAssertEqual(move?.keys, "⌘C")
+        XCTAssertEqual(move?.action, .moveNoteToStack(thirdNoteID, 2))
+
+        harness.send(.key(.optionDown, textHasSelection: false))
+        XCTAssertNil(harness.mutation, "a move glyph cannot enable moving the last note down")
+        XCTAssertEqual(harness.beepCount, 1)
+        harness.send(.key(.command("c"), textHasSelection: false))
+        XCTAssertTrue(harness.effects.contains { if case let .copyNote(note) = $0 { return note.id == thirdNoteID }; return false })
+        XCTAssertNil(harness.mutation)
+        harness.send(.key(.moveToStack(2), textHasSelection: false))
+        XCTAssertEqual(harness.mutation, .moveNoteToStack(noteID: thirdNoteID, from: firstStackID, to: secondStackID))
+    }
+
+    func testSearchKeepsNativeCopySelectionAndCommandDelete() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.query("two"))
+        XCTAssertFalse(harness.send(.key(.command("c"), textHasSelection: true)))
+        XCTAssertTrue(harness.effects.isEmpty)
+        XCTAssertFalse(harness.send(.key(.commandDelete, textHasSelection: false)))
+        XCTAssertTrue(harness.effects.isEmpty)
+        XCTAssertEqual(harness.state.query, "two")
+
+        XCTAssertTrue(harness.send(.key(.command("c"), textHasSelection: false)))
+        XCTAssertTrue(harness.effects.contains { if case let .copyNote(note) = $0 { return note.id == secondNoteID }; return false })
+    }
+
+    func testGlobalRetryDoesNotRequireAnOwnedFailureOrDiscardAnEdit() {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.retryPendingStoreChanges)
+        XCTAssertEqual(harness.effects.count, 1)
+        guard case .retryPendingStoreChanges = harness.effects.first else { return XCTFail("Retry the store") }
+        XCTAssertFalse(harness.state.isBusy)
+
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.editText("Unsaved draft"))
+        harness.send(.retryPendingStoreChanges)
+        XCTAssertEqual(harness.state.inlineEdit?.text, "Unsaved draft")
+        XCTAssertFalse(harness.state.isBusy)
+        XCTAssertEqual(harness.effects.count, 1)
+        guard case .retryPendingStoreChanges = harness.effects.first else { return XCTFail("Retry the store") }
+    }
+
+    func testRetryPreservesTheSavingContinuationAndClosesExactlyOnce() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.editText("Draft"))
+        harness.send(.close)
+        let id = try XCTUnwrap(harness.mutationID)
+        XCTAssertEqual(harness.state.lifecycle, .open)
+        harness.send(.mutationResult(id, .commitFailed("disk full")))
+        harness.send(.retryPendingStoreChanges)
+        XCTAssertTrue(harness.state.isBusy)
+        XCTAssertEqual(harness.state.inlineEdit?.text, "Draft")
+        harness.send(.mutationResult(id, .committed))
+        XCTAssertEqual(harness.closeCount, 1)
+        XCTAssertEqual(harness.state.lifecycle, .closed)
+        harness.send(.mutationResult(id, .committed))
+        XCTAssertTrue(harness.effects.isEmpty)
+    }
+
+    func testGlobalRetryDoesNotReopenARejectedOwnedMutation() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.deleteNote(secondNoteID)))
+        let id = try XCTUnwrap(harness.mutationID)
+        harness.send(.mutationResult(id, .rejected("note removed elsewhere")))
+        harness.send(.retryPendingStoreChanges)
+        XCTAssertEqual(harness.effects.count, 1)
+        XCTAssertEqual(harness.projection.problem, "note removed elsewhere")
+        guard case .failed(_, _, false) = harness.state.interaction else { return XCTFail("Still rejected") }
+    }
+
+    func testSavingDefersACommandAndIgnoresDuplicateAndStaleResults() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        harness.send(.perform(.editNote(secondNoteID)))
+        harness.send(.commitEdit)
+        let first = try XCTUnwrap(harness.mutationID)
+        harness.send(.perform(.copyStack))
+        XCTAssertNil(harness.copiedStackID)
+        harness.send(.mutationResult(first, .noOp))
+        XCTAssertEqual(harness.copiedStackID, firstStackID)
+        harness.send(.mutationResult(first, .noOp))
+        XCTAssertTrue(harness.effects.isEmpty)
+
+        harness.send(.perform(.deleteNote(secondNoteID)))
+        harness.send(.mutationResult(first, .committed))
+        XCTAssertTrue(harness.state.isBusy)
+        XCTAssertTrue(harness.effects.isEmpty)
+    }
+
+    func testTemplateCommandTogglesItsOverlayFromAButton() throws {
+        var harness = makeHarness()
+        harness.send(.open)
+        let template = try XCTUnwrap(harness.projection.actionItems.first { $0.action == .chooseTemplate })
+        harness.send(.perform(template.action))
+        XCTAssertEqual(harness.state.overlay, .templates)
+        harness.send(.perform(template.action))
+        XCTAssertNil(harness.state.overlay)
+        XCTAssertEqual(harness.state.focusRequest.field, .search)
+    }
+
     func testTheNoteEditorDeclinesArrowsWithoutChangingDraftOrHighlight() {
         var harness = makeHarness()
         harness.send(.open)
@@ -197,7 +330,7 @@ final class PaletteWorkflowTests: XCTestCase {
         XCTAssertEqual(harness.projection.problem, "Stack 1: disk full")
         XCTAssertEqual(harness.state.inlineEdit?.text, "Draft", "the draft waits for a retry")
 
-        harness.send(.retry)
+        harness.send(.retryPendingStoreChanges)
         harness.send(.mutationResult(id, .committed))
         XCTAssertNil(harness.projection.problem)
         XCTAssertNil(harness.state.inlineEdit)

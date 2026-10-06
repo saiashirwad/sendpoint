@@ -12,21 +12,23 @@ struct PaletteFooterView: View {
         HStack(spacing: Spacing.lg) {
             status
             Spacer()
-            Button {
-                onEvent(.toggleOverlay(.templates))
-            } label: {
-                HStack(spacing: Spacing.sm) {
-                    Text(projection.activeTemplate.name)
-                        .font(.ui(12.5, weight: .medium))
-                        .foregroundStyle(Ink.secondaryStyle)
-                        .lineLimit(1)
-                    Keycap("⌘P", size: 10.5)
+            if let template = projection.actionItems.first(where: { $0.action == .chooseTemplate }) {
+                Button {
+                    onEvent(.perform(template.action))
+                } label: {
+                    HStack(spacing: Spacing.sm) {
+                        Text(projection.activeTemplate.name)
+                            .font(.ui(12.5, weight: .medium))
+                            .foregroundStyle(Ink.secondaryStyle)
+                            .lineLimit(1)
+                        Keycap(template.keys, size: 10.5)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help("Template used when copying (\(template.keys))")
+                .accessibilityLabel("Template, \(projection.activeTemplate.name)")
             }
-            .buttonStyle(.plain)
-            .help("Template used when copying (⌘P)")
-            .accessibilityLabel("Template, \(projection.activeTemplate.name)")
 
             QuietButton("Actions", keys: "⌘K") {
                 onEvent(.toggleOverlay(.actions))
@@ -48,13 +50,14 @@ struct PaletteFooterView: View {
                     .font(.ui(12, weight: .medium))
             }
             .transition(.opacity)
-        } else if projection.showsUndoInFooter, let undo = projection.undo {
+        } else if projection.showsUndoInFooter, let undo = projection.undo,
+                  let command = projection.actionItems.first(where: { $0.action == .undoClear }) {
             HStack(spacing: Spacing.md) {
                 Text("Cleared \(noteCountLabel(undo.noteCount))")
                     .font(.ui(12))
                     .foregroundStyle(Ink.secondaryStyle)
-                QuietButton("Undo", keys: "⌘Z") {
-                    onEvent(.perform(.undoClear))
+                QuietButton("Undo", keys: command.keys) {
+                    onEvent(.perform(command.action))
                 }
             }
         } else if let current = projection.facts.current, let startedAt = current.startedAt {
@@ -81,7 +84,7 @@ struct PaletteProblemRow: View {
                 .lineLimit(2)
             Spacer()
             if case .failed(_, _, true) = interaction {
-                QuietButton("Retry") { onEvent(.retry) }
+                QuietButton("Retry") { onEvent(.retryPendingStoreChanges) }
             } else if case .failed = interaction {
                 QuietButton("Dismiss") { onEvent(.cancelEdit) }
             }
@@ -106,7 +109,7 @@ struct PaletteErrorRow: View {
                 .lineLimit(2)
             Spacer()
             if hasPendingMutations {
-                QuietButton("Retry") { onEvent(.retry) }
+                QuietButton("Retry") { onEvent(.retryPendingStoreChanges) }
             }
         }
         .padding(.horizontal, Spacing.xl)

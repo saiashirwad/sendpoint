@@ -66,6 +66,10 @@ final class PaletteActionsTests: XCTestCase {
         ])
         XCTAssertEqual(items.first?.section, .note)
         XCTAssertEqual(items.first?.keys, "↩")
+        XCTAssertEqual(items.map(\.key), [
+            .activate, .command("c"), .optionUp, .optionDown, .commandDelete,
+            .shiftCommand("c"), .command("z"), .shiftCommandDelete, .command("p"),
+        ])
         XCTAssertEqual(items.first { $0.action == .copyStack }?.keys, "⇧⌘C")
         XCTAssertEqual(items.first { $0.action == .clearStack }?.section, .stack)
         XCTAssertTrue(items.first { $0.action == .clearStack }?.isDestructive ?? false)

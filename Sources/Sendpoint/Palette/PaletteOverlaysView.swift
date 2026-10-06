@@ -240,8 +240,6 @@ private struct OverlayPanelPreview: View {
     @FocusState private var focus: PaletteField?
     @State private var query = ""
 
-    private static let noteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
-
     var body: some View {
         OverlayPanel(
             placeholder: "Search actions",
@@ -251,24 +249,9 @@ private struct OverlayPanelPreview: View {
             query: $query,
             focus: $focus
         ) {
-            PaletteActionRow(
-                item: PaletteActionItem(action: .editNote(Self.noteID), title: "Edit", keys: "↩", section: .note),
-                isHighlighted: false,
-                onHover: {},
-                onPerform: {}
-            )
-            PaletteActionRow(
-                item: PaletteActionItem(action: .copyNote(Self.noteID), title: "Copy", keys: "⌘C", section: .note),
-                isHighlighted: true,
-                onHover: {},
-                onPerform: {}
-            )
-            PaletteActionRow(
-                item: PaletteActionItem(action: .deleteNote(Self.noteID), title: "Delete", keys: "⌘⌫", section: .note),
-                isHighlighted: false,
-                onHover: {},
-                onPerform: {}
-            )
+            ForEach(Array(PaletteActionItem.samples.prefix(3).enumerated()), id: \.element.id) { index, item in
+                PaletteActionRow(item: item, isHighlighted: index == 1, onHover: {}, onPerform: {})
+            }
         }
         .padding(Spacing.lg)
     }
@@ -284,6 +267,7 @@ private struct OverlayPanelPreview: View {
             item: PaletteActionItem(
                 action: .copyNote(UUID(uuidString: "00000000-0000-0000-0000-000000000102")!),
                 title: "Highlighted row",
+                key: .command("c"),
                 keys: "⌘C",
                 section: .note
             ),
@@ -295,6 +279,7 @@ private struct OverlayPanelPreview: View {
             item: PaletteActionItem(
                 action: .editNote(UUID(uuidString: "00000000-0000-0000-0000-000000000102")!),
                 title: "Plain row",
+                key: .activate,
                 keys: "↩",
                 section: .note
             ),

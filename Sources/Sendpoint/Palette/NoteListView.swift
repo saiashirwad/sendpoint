@@ -26,12 +26,13 @@ struct NoteListView: View {
     private func noteCards(stack: Stack, projection: PaletteProjection) -> some View {
         let listing = projection.noteListing
         let today = Calendar.current.startOfDay(for: Date())
-        if stack.notes.isEmpty, let undo = projection.undo {
+        if stack.notes.isEmpty, let undo = projection.undo,
+           let command = projection.actionItems.first(where: { $0.action == .undoClear }) {
             VStack(spacing: Spacing.lg) {
                 placeholder(title: "Stack cleared", detail: "\(noteCountLabel(undo.noteCount)) set aside.")
                     .frame(maxHeight: 120)
-                QuietButton("Undo", keys: "⌘Z") {
-                    onEvent(.perform(.undoClear))
+                QuietButton("Undo", keys: command.keys) {
+                    onEvent(.perform(command.action))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

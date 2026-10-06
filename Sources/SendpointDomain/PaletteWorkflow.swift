@@ -27,7 +27,7 @@ public enum PaletteEvent {
     case toggleOverlay(PaletteOverlay), closeOverlay, overlayQuery(String), overlayHighlight(Int)
     case selectTemplate(UUID), clearFlash(Int), flash(String)
     case mutationResult(UUID, StackMutationOutcome)
-    case retry
+    case retryPendingStoreChanges
 }
 
 public struct PalettePending {
@@ -113,7 +113,7 @@ public struct PaletteContext {
 
 public enum PaletteEffect {
     case mutate(UUID, StackDocumentMutation)
-    case retry
+    case retryPendingStoreChanges
     case copyStack(UUID)
     case copyNote(Note)
     case selectTemplate(UUID)
@@ -130,8 +130,6 @@ public struct PaletteProjection {
         self.state = state
         self.context = context
     }
-
-    // MARK: - Derived
 
     public var facts: StackUIFacts {
         StackUIFacts(stacks: context.stacks, currentStackID: context.currentStackID,
@@ -167,10 +165,10 @@ public struct PaletteProjection {
 
     var actionContext: PaletteActionContext {
         let facts = facts
-        let listing = noteListing
+        let notes = shownStack?.notes ?? []
         let focus: PaletteActionContext.Focus
-        if let id = state.noteState.highlight, let index = listing.ids.firstIndex(of: id) {
-            focus = .note(id: id, index: index, count: listing.notes.count)
+        if let id = state.noteState.highlight, let index = notes.firstIndex(where: { $0.id == id }) {
+            focus = .note(id: id, index: index, count: notes.count)
         } else {
             focus = .nothing
         }
@@ -242,10 +240,11 @@ public struct PaletteUpdate {
             }
             confine()
         case let .mutationResult(id, outcome): receive(id, outcome)
-        case .retry:
-            guard case let .failed(pending, _, true) = state.interaction else { break }
-            state.interaction = .saving(pending)
-            effects.append(.retry)
+        case .retryPendingStoreChanges:
+            if case let .failed(pending, _, true) = state.interaction {
+                state.interaction = .saving(pending)
+            }
+            effects.append(.retryPendingStoreChanges)
         case .close:
             if !state.hasFailed, finishEdit(before: event) { break }
             state.lifecycle = .closed
@@ -274,7 +273,7 @@ public struct PaletteUpdate {
             enqueue(.switchStack(stackID: stack.id))
         case let .perform(action):
             guard !finishEdit(before: event) else { break }
-            state.interaction = .browsing
+            if action != .chooseTemplate { state.interaction = .browsing }
             perform(action)
         case let .toggleOverlay(overlay):
             guard !finishEdit(before: event) else { break }
@@ -305,7 +304,8 @@ public struct PaletteUpdate {
         case .clearStack: enqueue(.clearStack(stackID: stackID))
         case .undoClear: enqueue(.undoClear)
         case .copyStack: effects.append(.copyStack(stackID))
-        case .chooseTemplate: openOverlay(.templates)
+        case .chooseTemplate:
+            if state.overlay == .templates { closeOverlay() } else { openOverlay(.templates) }
         case let .editNote(id): chooseNote(id, editing: true)
         case let .copyNote(id):
             if let note = view.noteListing.notes.first(where: { $0.id == id }) { effects.append(.copyNote(note)) }
@@ -452,30 +452,14 @@ public struct PaletteUpdate {
             if !state.query.isEmpty { update(.query("")) }
             else { update(.close) }
         case .command("k"): openOverlay(.actions)
-        case .command("p"): openOverlay(.templates)
         case let .commandDigit(digit): update(.selectStack(digit))
-        case let .moveToStack(number):
-            if let id = state.noteState.highlight { update(.perform(.moveNoteToStack(id, number))) }
-            else { effects.append(.beep) }
-        case .activate:
-            if let id = state.noteState.highlight { chooseNote(id, editing: true) }
-            else { effects.append(.beep) }
-        default:
+        case .activate, .moveToStack, .optionUp, .optionDown, .command("p"),
+             .command("c"), .shiftCommand("c"), .command("z"), .commandDelete, .shiftCommandDelete:
             if key == .command("c"), textHasSelection { return false }
             if key == .commandDelete, !state.query.isEmpty { return false }
-            let shortcut: String
-            switch key {
-            case .command("c"): shortcut = "⌘C"
-            case .shiftCommand("c"): shortcut = "⇧⌘C"
-            case .command("z"): shortcut = "⌘Z"
-            case .commandDelete: shortcut = "⌘⌫"
-            case .shiftCommandDelete: shortcut = "⇧⌘⌫"
-            case .optionUp: shortcut = "⌥↑"
-            case .optionDown: shortcut = "⌥↓"
-            default: return false
-            }
-            if let item = view.actionItems.first(where: { $0.keys == shortcut }) { update(.perform(item.action)) }
+            if let item = view.actionItems.first(where: { $0.key == key }) { update(.perform(item.action)) }
             else { effects.append(.beep) }
+        default: return false
         }
         return true
     }

@@ -54,6 +54,7 @@ extension PaletteActionItem {
         PaletteActionItem(
             action: .copyStack,
             title: "Copy as Markdown",
+            key: .shiftCommand("c"),
             keys: "⇧⌘C",
             section: .stack
         )
@@ -62,14 +63,14 @@ extension PaletteActionItem {
     static var samples: [PaletteActionItem] {
         let noteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
         return [
-            PaletteActionItem(action: .editNote(noteID), title: "Edit", keys: "↩", section: .note),
-            PaletteActionItem(action: .copyNote(noteID), title: "Copy", keys: "⌘C", section: .note),
+            PaletteActionItem(action: .editNote(noteID), title: "Edit", key: .activate, keys: "↩", section: .note),
+            PaletteActionItem(action: .copyNote(noteID), title: "Copy", key: .command("c"), keys: "⌘C", section: .note),
             PaletteActionItem(
-                action: .deleteNote(noteID), title: "Delete", keys: "⌘⌫", section: .note,
+                action: .deleteNote(noteID), title: "Delete", key: .commandDelete, keys: "⌘⌫", section: .note,
                 isDestructive: true
             ),
-            PaletteActionItem(action: .clearStack, title: "Clear", keys: "⇧⌘⌫", section: .stack, isDestructive: true),
-            PaletteActionItem(action: .chooseTemplate, title: "Change template", keys: "⌘P", section: .template),
+            PaletteActionItem(action: .clearStack, title: "Clear", key: .shiftCommandDelete, keys: "⇧⌘⌫", section: .stack, isDestructive: true),
+            PaletteActionItem(action: .chooseTemplate, title: "Change template", key: .command("p"), keys: "⌘P", section: .template),
         ]
     }
 }
