@@ -45,6 +45,23 @@ public nonisolated enum PermissionSetupStage: Equatable, Sendable {
     case failedOffline
     case failedOther
     case ready
+
+    public var action: PermissionAction? {
+        switch self {
+        case .accessibility: .requestAccessibility
+        case .microphone: .requestMicrophone
+        case .microphoneSettings: .openMicrophoneSettings
+        case .voiceModel, .failedOffline, .failedOther: .downloadVoiceModel
+        case .downloading, .ready: nil
+        }
+    }
+}
+
+public nonisolated enum PermissionAction: Equatable, Sendable {
+    case requestAccessibility
+    case requestMicrophone
+    case openMicrophoneSettings
+    case downloadVoiceModel
 }
 
 public nonisolated enum PermissionEvent: Equatable, Sendable {
@@ -54,12 +71,9 @@ public nonisolated enum PermissionEvent: Equatable, Sendable {
     case accessibilityStatus(AccessibilityPermissionState)
     case microphoneStatus(MicrophonePermissionState)
     case voiceModelFiles(Bool)
-    case requestAccessibility
+    case action(PermissionAction)
     case accessibilityPrompted(Bool)
-    case requestMicrophone
     case microphoneResolved(UUID, granted: Bool)
-    case openMicrophoneSettings
-    case downloadVoiceModel
     case downloadProgress(UUID, Double)
     case downloadSucceeded(UUID)
     case downloadFailed(UUID, VoiceModelDownloadFailure)
@@ -119,14 +133,14 @@ public nonisolated struct PermissionState: Equatable, Sendable {
 
     public var isTornDown: Bool { lifecycle == .tornDown }
 
-    public var accessibilityAction: PermissionEvent? {
+    public var accessibilityAction: PermissionAction? {
         switch accessibility {
         case .granted: nil
         case .notGranted: .requestAccessibility
         }
     }
 
-    public var microphoneAction: PermissionEvent? {
+    public var microphoneAction: PermissionAction? {
         switch microphone {
         case .granted: nil
         case .notDetermined: .requestMicrophone
@@ -134,7 +148,7 @@ public nonisolated struct PermissionState: Equatable, Sendable {
         }
     }
 
-    public var localVoiceModelAction: PermissionEvent? {
+    public var localVoiceModelAction: PermissionAction? {
         switch localVoiceModel {
         case .downloading, .ready: nil
         case .notDownloaded, .failed: .downloadVoiceModel
@@ -195,7 +209,7 @@ public nonisolated struct PermissionState: Equatable, Sendable {
                 localVoiceModel = .notDownloaded
             }
             return []
-        case .requestAccessibility:
+        case .action(.requestAccessibility):
             guard accessibility == .notGranted else { return [] }
             if !hasRequestedAccessibility {
                 hasRequestedAccessibility = true
@@ -205,7 +219,7 @@ public nonisolated struct PermissionState: Equatable, Sendable {
         case let .accessibilityPrompted(granted):
             accessibility = granted ? .granted : .notGranted
             return []
-        case .requestMicrophone:
+        case .action(.requestMicrophone):
             guard microphone == .notDetermined, microphoneRequest == nil else { return [] }
             let id = UUID()
             microphoneRequest = id
@@ -215,9 +229,9 @@ public nonisolated struct PermissionState: Equatable, Sendable {
             microphoneRequest = nil
             microphone = granted ? .granted : .denied
             return []
-        case .openMicrophoneSettings:
+        case .action(.openMicrophoneSettings):
             return [.openMicrophoneSettings]
-        case .downloadVoiceModel:
+        case .action(.downloadVoiceModel):
             guard modelDownload == nil else { return [] }
             switch localVoiceModel {
             case .notDownloaded, .failed:

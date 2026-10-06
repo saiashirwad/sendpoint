@@ -277,7 +277,7 @@ final class ScreenshotTests: XCTestCase {
                 downloadVoiceModel: { report in try await stage.download?(report) },
                 openAccessibilitySettings: {}, openMicrophoneSettings: {}
             ))
-            if stage.download != nil { permissions.downloadModel() }
+            if stage.download != nil { permissions.perform(.downloadVoiceModel) }
             let tour = SetupTour()
             for _ in 0..<(stage.tourStep ?? 0) { tour.send(.skip) }
             let window = makeWindow(size: SetupView.size, content: SetupView(

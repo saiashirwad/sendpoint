@@ -249,7 +249,7 @@ private struct SettingsStatusCard: View {
     @State private var hovering = false
     @Environment(\.colorScheme) private var scheme
 
-    private var stage: SetupHeroStage { permissionState.setupStage }
+    private var stage: PermissionSetupStage { permissionState.setupStage }
 
     private var isActionable: Bool {
         stage == .ready ? storeHandle.store != nil : stage.isActionable
@@ -287,7 +287,7 @@ private struct SettingsStatusCard: View {
     var body: some View {
         Button {
             guard isActionable else { return }
-            if stage == .ready { onShowStack() } else { stage.perform(on: permissionState) }
+            if stage == .ready { onShowStack() } else { permissionState.perform(stage.action) }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: Spacing.sm) {

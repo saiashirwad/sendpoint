@@ -13,15 +13,15 @@ final class PermissionMachineTests: XCTestCase {
 
     func testGrantedMicrophoneRequestAndReadyDownloadAreInvalid() throws {
         var state = live()
-        XCTAssertEqual(state.update(.requestMicrophone), [])
-        XCTAssertEqual(state.update(.downloadVoiceModel), [])
+        XCTAssertEqual(state.update(.action(.requestMicrophone)), [])
+        XCTAssertEqual(state.update(.action(.downloadVoiceModel)), [])
         XCTAssertNil(state.microphoneRequest)
         XCTAssertNil(state.modelDownload)
         XCTAssertEqual(state.microphone, .granted)
         XCTAssertEqual(state.localVoiceModel, .ready)
 
         state.localVoiceModel = .notDownloaded
-        let effects = state.update(.downloadVoiceModel)
+        let effects = state.update(.action(.downloadVoiceModel))
         let id = try XCTUnwrap(state.modelDownload)
         XCTAssertEqual(effects, [.downloadModel(id)])
         XCTAssertEqual(state.update(.downloadProgress(UUID(), 0.4)), [])
@@ -30,9 +30,9 @@ final class PermissionMachineTests: XCTestCase {
 
     func testStaleMicrophoneAndDownloadResultsDoNothing() throws {
         var state = live(microphone: .notDetermined, model: .notDownloaded)
-        _ = state.update(.requestMicrophone)
+        _ = state.update(.action(.requestMicrophone))
         let microphoneID = try XCTUnwrap(state.microphoneRequest)
-        _ = state.update(.downloadVoiceModel)
+        _ = state.update(.action(.downloadVoiceModel))
         let downloadID = try XCTUnwrap(state.modelDownload)
 
         XCTAssertEqual(state.update(.microphoneResolved(UUID(), granted: true)), [])
@@ -67,7 +67,7 @@ final class PermissionMachineTests: XCTestCase {
         XCTAssertEqual(state.localVoiceModel, .ready)
 
         state.localVoiceModel = .notDownloaded
-        _ = state.update(.downloadVoiceModel)
+        _ = state.update(.action(.downloadVoiceModel))
         let id = try XCTUnwrap(state.modelDownload)
         XCTAssertEqual(state.update(.refresh), [.readAccessibility, .readMicrophone])
         XCTAssertEqual(state.update(.downloadProgress(id, -0.4)), [])
@@ -82,14 +82,14 @@ final class PermissionMachineTests: XCTestCase {
 
     func testFirstAccessibilityRequestPromptsAndTheNextOpensSettings() {
         var state = live(accessibility: .notGranted)
-        XCTAssertEqual(state.update(.requestAccessibility), [.promptAccessibility])
+        XCTAssertEqual(state.update(.action(.requestAccessibility)), [.promptAccessibility])
         XCTAssertTrue(state.hasRequestedAccessibility)
         XCTAssertEqual(state.update(.accessibilityPrompted(false)), [])
         XCTAssertEqual(state.accessibility, .notGranted)
-        XCTAssertEqual(state.update(.requestAccessibility), [.openAccessibilitySettings])
+        XCTAssertEqual(state.update(.action(.requestAccessibility)), [.openAccessibilitySettings])
         XCTAssertEqual(state.update(.accessibilityPrompted(true)), [])
         XCTAssertEqual(state.accessibility, .granted)
-        XCTAssertEqual(state.update(.requestAccessibility), [])
+        XCTAssertEqual(state.update(.action(.requestAccessibility)), [])
     }
 
     func testSetupStageWalksPermissionsInOrder() {
@@ -113,8 +113,8 @@ final class PermissionMachineTests: XCTestCase {
 
     func testTeardownIsTerminal() throws {
         var state = live(accessibility: .notGranted, microphone: .notDetermined, model: .notDownloaded)
-        _ = state.update(.requestMicrophone)
-        _ = state.update(.downloadVoiceModel)
+        _ = state.update(.action(.requestMicrophone))
+        _ = state.update(.action(.downloadVoiceModel))
         _ = state.update(.startWatchingVoiceModel(.seconds(2)))
         let microphoneID = try XCTUnwrap(state.microphoneRequest)
         let downloadID = try XCTUnwrap(state.modelDownload)
@@ -127,7 +127,7 @@ final class PermissionMachineTests: XCTestCase {
 
         XCTAssertEqual(state.update(.teardown), [])
         XCTAssertEqual(state.update(.refresh), [])
-        XCTAssertEqual(state.update(.requestAccessibility), [])
+        XCTAssertEqual(state.update(.action(.requestAccessibility)), [])
         XCTAssertEqual(state.update(.microphoneResolved(microphoneID, granted: true)), [])
         XCTAssertEqual(state.update(.downloadSucceeded(downloadID)), [])
         XCTAssertEqual(state.update(.voiceModelBecameReady), [])

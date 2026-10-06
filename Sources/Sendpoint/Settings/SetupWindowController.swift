@@ -89,7 +89,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         window.presentActivated()
     }
 
-    private var currentStage: SetupHeroStage { permissionState.setupStage }
+    private var currentStage: PermissionSetupStage { permissionState.setupStage }
 
     private var currentStep: Int {
         let stage = currentStage

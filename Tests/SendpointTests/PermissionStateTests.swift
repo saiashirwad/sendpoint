@@ -76,7 +76,8 @@ final class PermissionStateTests: XCTestCase {
         downloadModel: @escaping @Sendable (
             _ onProgress: @escaping @Sendable (Double) -> Void
         ) async throws -> Void = { _ in },
-        openAccessibilitySettings: @escaping @MainActor @Sendable () -> Void = {}
+        openAccessibilitySettings: @escaping @MainActor @Sendable () -> Void = {},
+        openMicrophoneSettings: @escaping @MainActor @Sendable () -> Void = {}
     ) -> PermissionServices {
         PermissionServices(
             accessibilityStatus: { accessibility },
@@ -86,7 +87,7 @@ final class PermissionStateTests: XCTestCase {
             voiceModelFilesExist: modelFilesExist ?? { modelReady },
             downloadVoiceModel: downloadModel,
             openAccessibilitySettings: openAccessibilitySettings,
-            openMicrophoneSettings: {}
+            openMicrophoneSettings: openMicrophoneSettings
         )
     }
 
@@ -129,8 +130,8 @@ final class PermissionStateTests: XCTestCase {
             microphone: .notDetermined,
             requestMicrophone: { true }
         ))
-        granted.requestAccessibility()
-        granted.requestMicrophone()
+        granted.perform(.requestAccessibility)
+        granted.perform(.requestMicrophone)
         await granted.waitForIdle()
         XCTAssertEqual(granted.accessibility, .granted)
         XCTAssertEqual(granted.microphone, .granted)
@@ -142,8 +143,8 @@ final class PermissionStateTests: XCTestCase {
             microphone: .notDetermined,
             requestMicrophone: { false }
         ))
-        denied.requestAccessibility()
-        denied.requestMicrophone()
+        denied.perform(.requestAccessibility)
+        denied.perform(.requestMicrophone)
         await denied.waitForIdle()
         XCTAssertEqual(denied.accessibility, .notGranted)
         XCTAssertEqual(denied.microphone, .denied)
@@ -160,7 +161,7 @@ final class PermissionStateTests: XCTestCase {
             requestAccessibility: true,
             openAccessibilitySettings: { opened.value += 1 }
         ))
-        granted.requestAccessibility()
+        granted.perform(.requestAccessibility)
         XCTAssertEqual(granted.accessibility, .granted)
         XCTAssertEqual(opened.value, 0)
         granted.teardown()
@@ -170,10 +171,10 @@ final class PermissionStateTests: XCTestCase {
             requestAccessibility: false,
             openAccessibilitySettings: { opened.value += 1 }
         ))
-        denied.requestAccessibility()
+        denied.perform(.requestAccessibility)
         XCTAssertEqual(denied.accessibility, .notGranted)
         XCTAssertEqual(opened.value, 0)
-        denied.requestAccessibility()
+        denied.perform(.requestAccessibility)
         XCTAssertEqual(opened.value, 1)
         denied.teardown()
     }
@@ -192,10 +193,10 @@ final class PermissionStateTests: XCTestCase {
             openMicrophoneSettings: {}
         ))
 
-        state.requestMicrophone()
+        state.perform(.requestMicrophone)
         await waitUntil { await gate.count == 1 }
         reported.value = .denied
-        state.requestMicrophone()
+        state.perform(.requestMicrophone)
         state.refresh()
         XCTAssertEqual(state.microphone, .notDetermined)
 
@@ -217,12 +218,12 @@ final class PermissionStateTests: XCTestCase {
             }
         ))
 
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
         await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .failed(.other))
 
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .ready)
         state.teardown()
@@ -235,13 +236,13 @@ final class PermissionStateTests: XCTestCase {
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
 
-        state.downloadModel()
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
+        state.perform(.downloadVoiceModel)
         await waitUntil { await gate.count == 1 }
         state.refresh()
 
         XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
-        XCTAssertNil(state.localVoiceModelAction)
+        XCTAssertNil(state.state.localVoiceModelAction)
 
         await gate.succeed()
         await state.waitForIdle()
@@ -257,7 +258,7 @@ final class PermissionStateTests: XCTestCase {
             modelReady: false,
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         await waitUntil { await gate.count == 1 }
 
         NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
@@ -308,7 +309,7 @@ final class PermissionStateTests: XCTestCase {
             downloadModel: { _ in throw TestError.failed }
         ))
 
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         await state.waitForIdle()
         XCTAssertEqual(state.localVoiceModel, .failed(.other))
 
@@ -327,7 +328,7 @@ final class PermissionStateTests: XCTestCase {
             modelReady: false,
             downloadModel: { progress in try await gate.run(progress: progress) }
         ))
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         await waitUntil { await gate.count == 1 }
 
         await gate.report(-0.25)
@@ -352,22 +353,92 @@ final class PermissionStateTests: XCTestCase {
             modelReady: false
         ))
 
-        XCTAssertEqual(state.accessibilityAction, .requestAccessibility)
-        XCTAssertEqual(state.microphoneAction, .requestMicrophone)
-        XCTAssertEqual(state.localVoiceModelAction, .downloadVoiceModel)
+        XCTAssertEqual(state.state.accessibilityAction, .requestAccessibility)
+        XCTAssertEqual(state.state.microphoneAction, .requestMicrophone)
+        XCTAssertEqual(state.state.localVoiceModelAction, .downloadVoiceModel)
 
-        state.requestAccessibility()
-        XCTAssertEqual(state.accessibilityAction, .requestAccessibility)
+        state.perform(.requestAccessibility)
+        XCTAssertEqual(state.state.accessibilityAction, .requestAccessibility)
         state.teardown()
 
         let blocked = PermissionController(services: services(
             microphone: .restricted,
             modelReady: true
         ))
-        XCTAssertNil(blocked.accessibilityAction)
-        XCTAssertEqual(blocked.microphoneAction, .openMicrophoneSettings)
-        XCTAssertNil(blocked.localVoiceModelAction)
+        XCTAssertNil(blocked.state.accessibilityAction)
+        XCTAssertEqual(blocked.state.microphoneAction, .openMicrophoneSettings)
+        XCTAssertNil(blocked.state.localVoiceModelAction)
         blocked.teardown()
+    }
+
+    func testSetupAndCatalogShareActionsAcrossEveryStage() {
+        let cases: [(PermissionState, Int, PermissionAction?)] = [
+            (PermissionState(accessibility: .notGranted, microphone: .notDetermined,
+                             localVoiceModel: .notDownloaded), 0, .requestAccessibility),
+            (PermissionState(accessibility: .granted, microphone: .notDetermined,
+                             localVoiceModel: .notDownloaded), 1, .requestMicrophone),
+            (PermissionState(accessibility: .granted, microphone: .denied,
+                             localVoiceModel: .notDownloaded), 1, .openMicrophoneSettings),
+            (PermissionState(accessibility: .granted, microphone: .restricted,
+                             localVoiceModel: .notDownloaded), 1, .openMicrophoneSettings),
+            (PermissionState(accessibility: .granted, microphone: .granted,
+                             localVoiceModel: .notDownloaded), 2, .downloadVoiceModel),
+            (PermissionState(accessibility: .granted, microphone: .granted,
+                             localVoiceModel: .failed(.offline)), 2, .downloadVoiceModel),
+            (PermissionState(accessibility: .granted, microphone: .granted,
+                             localVoiceModel: .failed(.other)), 2, .downloadVoiceModel),
+            (PermissionState(accessibility: .granted, microphone: .granted,
+                             localVoiceModel: .downloading(progress: 0.4)), 2, nil),
+            (PermissionState(accessibility: .granted, microphone: .granted,
+                             localVoiceModel: .ready), 2, nil),
+        ]
+        for (state, row, action) in cases {
+            XCTAssertEqual(state.setupStage.action, action)
+            let item = PermissionCatalog.items(state: state)[row]
+            XCTAssertEqual(item.action, action)
+            XCTAssertEqual(item.actionTitle != nil, action != nil)
+            XCTAssertEqual(state.setupStage.actionTitle != nil, action != nil)
+        }
+    }
+
+    func testCatalogAndSetupDispatchDriveTheSameReadiness() async {
+        let controller = PermissionController(services: services(
+            accessibility: .notGranted, microphone: .notDetermined, modelReady: false
+        ))
+        defer { controller.teardown() }
+        let accessibility = PermissionCatalog.items(state: controller.state)[0]
+        XCTAssertEqual(accessibility.action, controller.setupStage.action)
+        controller.perform(accessibility.action)
+        XCTAssertEqual(controller.setupStage, .microphone)
+        controller.perform(controller.setupStage.action)
+        await controller.waitForIdle()
+        XCTAssertEqual(controller.setupStage, .voiceModel)
+        let model = PermissionCatalog.items(state: controller.state)[2]
+        XCTAssertEqual(model.action, controller.setupStage.action)
+        controller.perform(model.action)
+        XCTAssertEqual(controller.setupStage, .downloading(progress: nil))
+        XCTAssertNil(PermissionCatalog.items(state: controller.state)[2].action)
+        await controller.waitForIdle()
+        XCTAssertEqual(controller.setupStage, .ready)
+    }
+
+    func testDispatcherRejectsAStaleSettingsActionAfterExternalGrant() {
+        let reported = MicrophoneStatus(.denied)
+        var opened = 0
+        var boundary = services(openMicrophoneSettings: { opened += 1 })
+        boundary.microphoneStatus = { reported.value }
+        let controller = PermissionController(services: boundary)
+        defer { controller.teardown() }
+        let stale = PermissionCatalog.items(state: controller.state)[1].action
+        XCTAssertEqual(stale, .openMicrophoneSettings)
+        controller.perform(stale)
+        XCTAssertEqual(opened, 1)
+        reported.value = .granted
+        controller.refresh()
+        XCTAssertEqual(controller.setupStage, .ready)
+        controller.perform(stale)
+        controller.perform(nil)
+        XCTAssertEqual(opened, 1)
     }
 
     func testTeardownIsIdempotentAndIgnoresLateWork() async {
@@ -379,7 +450,7 @@ final class PermissionStateTests: XCTestCase {
             modelReady: false
         ))
 
-        state.requestMicrophone()
+        state.perform(.requestMicrophone)
         await waitUntil { await gate.count == 1 }
         state.teardown()
         state.teardown()
@@ -388,8 +459,8 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(state.microphone, .notDetermined)
 
         state.refresh()
-        state.requestAccessibility()
-        state.downloadModel()
+        state.perform(.requestAccessibility)
+        state.perform(.downloadVoiceModel)
         NotificationCenter.default.post(name: .voiceModelDidBecomeReady, object: nil)
         await state.waitForIdle()
         XCTAssertEqual(state.accessibility, .notGranted)

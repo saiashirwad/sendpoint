@@ -24,7 +24,9 @@ struct SettingsSystemPane: View {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     if index > 0 { SettingsDivider() }
                     SettingsRow(item.title, hint: item.detail) {
-                        CapabilityAccessory(status: item.status, actionTitle: item.actionTitle, action: item.run)
+                        CapabilityAccessory(status: item.status, actionTitle: item.actionTitle) {
+                            permissionState.perform(item.action)
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel(item.title)
@@ -40,7 +42,7 @@ struct SettingsSystemPane: View {
     }
 
     private var items: [PermissionItem] {
-        PermissionCatalog.items(state: permissionState)
+        PermissionCatalog.items(state: permissionState.state)
     }
 }
 

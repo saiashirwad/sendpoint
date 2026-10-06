@@ -64,10 +64,7 @@ final class PermissionController {
     var hasRequestedAccessibility: Bool { state.hasRequestedAccessibility }
     var isWatchingVoiceModel: Bool { state.isWatchingVoiceModel }
     var isTextCaptureReady: Bool { state.isTextCaptureReady }
-    var accessibilityAction: PermissionEvent? { state.accessibilityAction }
-    var microphoneAction: PermissionEvent? { state.microphoneAction }
-    var localVoiceModelAction: PermissionEvent? { state.localVoiceModelAction }
-    var setupStage: SetupHeroStage { SetupHeroStage(state.setupStage) }
+    var setupStage: PermissionSetupStage { state.setupStage }
 
     init(services: PermissionServices) {
         self.services = services
@@ -90,10 +87,12 @@ final class PermissionController {
     func refresh() { send(.refresh) }
     func refreshAccessibility() { send(.refreshAccessibility) }
     func refreshVoiceModel() { send(.refreshVoiceModel) }
-    func requestAccessibility() { send(.requestAccessibility) }
-    func requestMicrophone() { send(.requestMicrophone) }
-    func downloadModel() { send(.downloadVoiceModel) }
-    func openMicrophoneSettings() { send(.openMicrophoneSettings) }
+    func perform(_ action: PermissionAction?) {
+        guard let action,
+              [state.accessibilityAction, state.microphoneAction, state.localVoiceModelAction].contains(action)
+        else { return }
+        send(.action(action))
+    }
 
     func startWatchingVoiceModel(interval: Duration = .seconds(2)) {
         send(.startWatchingVoiceModel(interval))

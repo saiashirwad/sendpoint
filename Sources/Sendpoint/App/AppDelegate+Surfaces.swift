@@ -16,7 +16,7 @@ extension AppDelegate {
     func presentPermissionHelpForCapture() {
         permissionState.refresh()
         if appSettings.hasCompletedSetup {
-            permissionState.requestAccessibility()
+            permissionState.perform(.requestAccessibility)
         } else {
             presentSetup()
         }

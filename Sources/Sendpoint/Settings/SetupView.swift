@@ -2,29 +2,7 @@ import AppKit
 import SendpointDomain
 import SwiftUI
 
-enum SetupHeroStage: Equatable {
-    case accessibility
-    case microphone
-    case microphoneSettings
-    case voiceModel
-    case downloading(progress: Double?)
-    case failedOffline
-    case failedOther
-    case ready
-
-    init(_ stage: PermissionSetupStage) {
-        switch stage {
-        case .accessibility: self = .accessibility
-        case .microphone: self = .microphone
-        case .microphoneSettings: self = .microphoneSettings
-        case .voiceModel: self = .voiceModel
-        case let .downloading(progress): self = .downloading(progress: progress)
-        case .failedOffline: self = .failedOffline
-        case .failedOther: self = .failedOther
-        case .ready: self = .ready
-        }
-    }
-
+extension PermissionSetupStage {
     var label: String {
         switch self {
         case .accessibility: "Accessibility"
@@ -52,12 +30,7 @@ enum SetupHeroStage: Equatable {
         return label
     }
 
-    var isActionable: Bool {
-        switch self {
-        case .ready, .downloading: false
-        default: true
-        }
-    }
+    var isActionable: Bool { action != nil }
 
     static let stepNames = ["Accessibility", "Microphone", "Voice model"]
 
@@ -113,21 +86,6 @@ enum SetupHeroStage: Equatable {
         case .downloading: nil
         case .failedOffline, .failedOther: "Try again"
         case .ready: nil
-        }
-    }
-
-    func perform(on state: PermissionController) {
-        switch self {
-        case .accessibility:
-            state.requestAccessibility()
-        case .microphone:
-            state.requestMicrophone()
-        case .microphoneSettings:
-            state.openMicrophoneSettings()
-        case .voiceModel, .failedOffline, .failedOther:
-            state.downloadModel()
-        case .downloading, .ready:
-            break
         }
     }
 }
@@ -214,7 +172,7 @@ struct SetupView: View {
             if inTour {
                 SetupSteps(names: SetupTour.Step.railNames, step: tour.step.rawValue)
             } else {
-                SetupSteps(names: SetupHeroStage.stepNames, step: stage.step)
+                SetupSteps(names: PermissionSetupStage.stepNames, step: stage.step)
             }
         }
         .animation(Motion.springy, value: inTour)
@@ -280,7 +238,7 @@ struct SetupView: View {
     }
 
     private func activate() {
-        stage.perform(on: permissionState)
+        permissionState.perform(stage.action)
     }
 
     private func finish() {
@@ -290,7 +248,7 @@ struct SetupView: View {
         onComplete()
     }
 
-    private var stage: SetupHeroStage { permissionState.setupStage }
+    private var stage: PermissionSetupStage { permissionState.setupStage }
 }
 
 private struct SetupHeroPill: View {
@@ -299,7 +257,7 @@ private struct SetupHeroPill: View {
     @State private var appeared = false
     @State private var hovering = false
 
-    private var stage: SetupHeroStage { permissionState.setupStage }
+    private var stage: PermissionSetupStage { permissionState.setupStage }
 
     var body: some View {
         WordmarkPill(mode: orbMode, animates: animates)
@@ -328,7 +286,7 @@ private struct SetupHeroPill: View {
 
     private func activate() {
         guard stage.isActionable else { return }
-        stage.perform(on: permissionState)
+        permissionState.perform(stage.action)
     }
 }
 

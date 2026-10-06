@@ -68,7 +68,7 @@ final class VoiceModelWatchOwnershipTests: XCTestCase {
             downloadModel: { _ in try? await Task.sleep(for: .milliseconds(50)) }
         ))
 
-        state.downloadModel()
+        state.perform(.downloadVoiceModel)
         XCTAssertEqual(state.localVoiceModel, .downloading(progress: nil))
 
         state.startWatchingVoiceModel(interval: .milliseconds(5))

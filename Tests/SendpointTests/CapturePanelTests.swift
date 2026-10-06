@@ -168,33 +168,18 @@ final class CapturePanelTests: XCTestCase {
         XCTAssertTrue(setup.collectionBehavior.contains(.moveToActiveSpace))
     }
 
-    func testSetupHeroStageWalksPermissionsInOrder() {
-        func stage(
-            _ accessibility: AccessibilityPermissionState,
-            _ microphone: MicrophonePermissionState,
-            _ model: LocalVoiceModelState
-        ) -> SetupHeroStage {
-            SetupHeroStage(PermissionState(
-                accessibility: accessibility, microphone: microphone, localVoiceModel: model
-            ).setupStage)
-        }
-        XCTAssertEqual(stage(.notGranted, .notDetermined, .notDownloaded), .accessibility)
-        XCTAssertEqual(stage(.granted, .notDetermined, .notDownloaded), .microphone)
-        XCTAssertEqual(stage(.granted, .denied, .notDownloaded), .microphoneSettings)
-        XCTAssertEqual(stage(.granted, .granted, .notDownloaded), .voiceModel)
-        XCTAssertEqual(stage(.granted, .granted, .downloading(progress: 0.4)), .downloading(progress: 0.4))
-        XCTAssertEqual(stage(.granted, .granted, .ready), .ready)
-        XCTAssertEqual(SetupHeroStage.accessibility.title, "Accessibility")
-        XCTAssertEqual(SetupHeroStage.voiceModel.label, "Voice model")
-        XCTAssertTrue(SetupHeroStage.voiceModel.showsDownloadGlyph)
-        XCTAssertNil(SetupHeroStage.voiceModel.accessory)
-        XCTAssertEqual(SetupHeroStage.downloading(progress: 0.4).accessory, "40%")
-        XCTAssertTrue(SetupHeroStage.microphone.isActionable)
-        XCTAssertFalse(SetupHeroStage.ready.isActionable)
-        XCTAssertFalse(SetupHeroStage.downloading(progress: nil).isActionable)
-        XCTAssertEqual(SetupHeroStage.voiceModel.step, SetupHeroStage.downloading(progress: 0.1).step)
-        XCTAssertEqual(SetupHeroStage.accessibility.step, 0)
-        XCTAssertEqual(SetupHeroStage.microphone.step, 1)
-        XCTAssertEqual(SetupHeroStage.ready.step, 3)
+    func testPermissionStagePresentationUsesDomainStageDirectly() {
+        XCTAssertEqual(PermissionSetupStage.accessibility.title, "Accessibility")
+        XCTAssertEqual(PermissionSetupStage.voiceModel.label, "Voice model")
+        XCTAssertTrue(PermissionSetupStage.voiceModel.showsDownloadGlyph)
+        XCTAssertNil(PermissionSetupStage.voiceModel.accessory)
+        XCTAssertEqual(PermissionSetupStage.downloading(progress: 0.4).accessory, "40%")
+        XCTAssertTrue(PermissionSetupStage.microphone.isActionable)
+        XCTAssertFalse(PermissionSetupStage.ready.isActionable)
+        XCTAssertFalse(PermissionSetupStage.downloading(progress: nil).isActionable)
+        XCTAssertEqual(PermissionSetupStage.voiceModel.step, PermissionSetupStage.downloading(progress: 0.1).step)
+        XCTAssertEqual(PermissionSetupStage.accessibility.step, 0)
+        XCTAssertEqual(PermissionSetupStage.microphone.step, 1)
+        XCTAssertEqual(PermissionSetupStage.ready.step, 3)
     }
 }

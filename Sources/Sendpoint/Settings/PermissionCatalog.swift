@@ -7,11 +7,11 @@ struct PermissionItem: Identifiable {
     let detail: String
     let status: CapabilityStatus
     let actionTitle: String?
-    let run: () -> Void
+    let action: PermissionAction?
 }
 
 enum PermissionCatalog {
-    static func items(state: PermissionController) -> [PermissionItem] {
+    static func items(state: PermissionState) -> [PermissionItem] {
         [
             PermissionItem(
                 id: "accessibility",
@@ -19,7 +19,7 @@ enum PermissionCatalog {
                 detail: "Reads the selected text",
                 status: accessibilityStatus(state),
                 actionTitle: accessibilityActionTitle(state),
-                run: { performAccessibilityAction(state) }
+                action: state.accessibilityAction
             ),
             PermissionItem(
                 id: "microphone",
@@ -27,7 +27,7 @@ enum PermissionCatalog {
                 detail: "For voice notes",
                 status: microphoneStatus(state),
                 actionTitle: microphoneActionTitle(state),
-                run: { performMicrophoneAction(state) }
+                action: state.microphoneAction
             ),
             PermissionItem(
                 id: "voice-model",
@@ -35,19 +35,19 @@ enum PermissionCatalog {
                 detail: "Transcribes on this Mac",
                 status: voiceModelStatus(state),
                 actionTitle: voiceModelActionTitle(state),
-                run: { performVoiceModelAction(state) }
+                action: state.localVoiceModelAction
             ),
         ]
     }
 
-    private static func accessibilityStatus(_ state: PermissionController) -> CapabilityStatus {
+    private static func accessibilityStatus(_ state: PermissionState) -> CapabilityStatus {
         switch state.accessibility {
         case .notGranted: .attention("Required")
         case .granted: .ready("Granted")
         }
     }
 
-    private static func microphoneStatus(_ state: PermissionController) -> CapabilityStatus {
+    private static func microphoneStatus(_ state: PermissionState) -> CapabilityStatus {
         switch state.microphone {
         case .notDetermined: .neutral("Not enabled")
         case .denied: .attention("Denied")
@@ -56,7 +56,7 @@ enum PermissionCatalog {
         }
     }
 
-    private static func voiceModelStatus(_ state: PermissionController) -> CapabilityStatus {
+    private static func voiceModelStatus(_ state: PermissionState) -> CapabilityStatus {
         switch state.localVoiceModel {
         case .notDownloaded: .neutral("Not downloaded")
         case let .downloading(progress):
@@ -70,14 +70,14 @@ enum PermissionCatalog {
         }
     }
 
-    private static func accessibilityActionTitle(_ state: PermissionController) -> String? {
+    private static func accessibilityActionTitle(_ state: PermissionState) -> String? {
         switch state.accessibilityAction {
         case .requestAccessibility: "Grant"
         default: nil
         }
     }
 
-    private static func microphoneActionTitle(_ state: PermissionController) -> String? {
+    private static func microphoneActionTitle(_ state: PermissionState) -> String? {
         switch state.microphoneAction {
         case .requestMicrophone: "Allow"
         case .openMicrophoneSettings: "Settings"
@@ -85,31 +85,10 @@ enum PermissionCatalog {
         }
     }
 
-    private static func voiceModelActionTitle(_ state: PermissionController) -> String? {
+    private static func voiceModelActionTitle(_ state: PermissionState) -> String? {
         guard state.localVoiceModelAction == .downloadVoiceModel else { return nil }
         if case .failed = state.localVoiceModel { return "Retry" }
         return "Download"
-    }
-
-    private static func performAccessibilityAction(_ state: PermissionController) {
-        guard state.accessibilityAction == .requestAccessibility else { return }
-        state.requestAccessibility()
-    }
-
-    private static func performMicrophoneAction(_ state: PermissionController) {
-        switch state.microphoneAction {
-        case .requestMicrophone:
-            state.requestMicrophone()
-        case .openMicrophoneSettings:
-            state.openMicrophoneSettings()
-        default:
-            break
-        }
-    }
-
-    private static func performVoiceModelAction(_ state: PermissionController) {
-        guard state.localVoiceModelAction == .downloadVoiceModel else { return }
-        state.downloadModel()
     }
 }
 
