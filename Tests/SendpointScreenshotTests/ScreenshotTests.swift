@@ -1,4 +1,5 @@
 import AppKit
+import ObjectiveC
 import SendpointDomain
 import SnapshotTesting
 import SwiftUI
@@ -13,6 +14,7 @@ final class ScreenshotTests: XCTestCase {
     private var record = SnapshotTestingConfiguration.Record.all
     private var suites: [String] = []
     private var hider: (any NSObjectProtocol)?
+    private var mouseIsolation: ScreenshotMouseIsolation?
 
     override func setUp() async throws {
         let environment = ProcessInfo.processInfo.environment
@@ -20,6 +22,7 @@ final class ScreenshotTests: XCTestCase {
             throw XCTSkip("Run ./shots.sh to render every screen.")
         }
         self.directory = directory
+        mouseIsolation = try ScreenshotMouseIsolation()
         appearance = environment["SENDPOINT_SHOTS_APPEARANCE"] ?? "light"
         record = environment["SENDPOINT_SHOTS_RECORD"] == "missing" ? .missing : .all
         NSApplication.shared.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
@@ -35,6 +38,8 @@ final class ScreenshotTests: XCTestCase {
     override func tearDown() async throws {
         hider.map(NotificationCenter.default.removeObserver)
         hider = nil
+        mouseIsolation?.teardown()
+        mouseIsolation = nil
         for suite in suites { UserDefaults.standard.removePersistentDomain(forName: suite) }
         suites = []
     }
@@ -499,6 +504,101 @@ final class ScreenshotTests: XCTestCase {
     }()
 
     private static func registerAppFonts() { _ = fontsRegistered }
+}
+
+@MainActor
+private final class ScreenshotMouseIsolation {
+    private let method: Method
+    private var original: IMP?
+
+    init() throws {
+        let selector = #selector(getter: NSWindow.mouseLocationOutsideOfEventStream)
+        method = try XCTUnwrap(class_getInstanceMethod(NSWindow.self, selector))
+        let replacement = try XCTUnwrap(class_getInstanceMethod(ScreenshotPointerWindow.self, selector))
+        original = method_setImplementation(method, method_getImplementation(replacement))
+    }
+
+    func teardown() {
+        guard let original else { return }
+        method_setImplementation(method, original)
+        self.original = nil
+    }
+}
+
+@MainActor
+private final class ScreenshotPointerWindow: NSWindow {
+    // Invisible windows still initialize SwiftUI hover from the physical pointer.
+    override var mouseLocationOutsideOfEventStream: NSPoint { NSPoint(x: -10_000, y: -10_000) }
+}
+
+@MainActor
+final class ScreenshotHelperTests: XCTestCase {
+    func testMouseIsolationRestoresGetterAfterRepeatedTeardown() throws {
+        let selector = #selector(getter: NSWindow.mouseLocationOutsideOfEventStream)
+        let method = try XCTUnwrap(class_getInstanceMethod(NSWindow.self, selector))
+        let original = method_getImplementation(method)
+        let isolation = try ScreenshotMouseIsolation()
+        defer { isolation.teardown() }
+        XCTAssertNotEqual(method_getImplementation(method), original)
+        isolation.teardown()
+        XCTAssertEqual(method_getImplementation(method), original)
+        isolation.teardown()
+        XCTAssertEqual(method_getImplementation(method), original)
+    }
+
+    func testMouseIsolationPreventsSwiftUIHover() async throws {
+        let selector = #selector(getter: NSWindow.mouseLocationOutsideOfEventStream)
+        let method = try XCTUnwrap(class_getInstanceMethod(NSWindow.self, selector))
+        let centered = try XCTUnwrap(class_getInstanceMethod(CenteredPointerWindow.self, selector))
+        let original = method_setImplementation(method, method_getImplementation(centered))
+        defer { method_setImplementation(method, original) }
+
+        let hovered = HoverReadout()
+        let first = hoverWindow(hovered)
+        defer { first.contentView = nil; first.close() }
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertTrue(hovered.isHovered, "The centered pointer must exercise real SwiftUI hover tracking.")
+
+        let isolation = try ScreenshotMouseIsolation()
+        defer { isolation.teardown() }
+        let unhovered = HoverReadout()
+        let second = hoverWindow(unhovered)
+        defer { second.contentView = nil; second.close() }
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertFalse(unhovered.isHovered)
+        second.sendEvent(try XCTUnwrap(NSEvent.mouseEvent(
+            with: .mouseMoved, location: NSPoint(x: 50, y: 50), modifierFlags: [], timestamp: 0,
+            windowNumber: second.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0
+        )))
+        await Task.yield()
+        XCTAssertFalse(unhovered.isHovered, "Mouse movement must not reintroduce hover during rendering.")
+        isolation.teardown()
+        XCTAssertEqual(method_getImplementation(method), method_getImplementation(centered))
+    }
+
+    private func hoverWindow(_ readout: HoverReadout) -> NSWindow {
+        _ = NSApplication.shared
+        let window = NSWindow(
+            contentRect: NSRect(x: 240, y: 240, width: 100, height: 100),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.animationBehavior = .none
+        window.contentView = NSHostingView(rootView: Rectangle().onHover { readout.isHovered = $0 })
+        window.orderFrontRegardless()
+        return window
+    }
+}
+
+@MainActor
+private final class HoverReadout {
+    var isHovered = false
+}
+
+@MainActor
+private final class CenteredPointerWindow: NSWindow {
+    override var mouseLocationOutsideOfEventStream: NSPoint { NSPoint(x: 50, y: 50) }
 }
 
 private func note(subject: Subject, body: String) -> Note {
