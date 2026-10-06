@@ -11,14 +11,12 @@ final class StackDocumentDecodingTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertNil(object["version"])
         XCTAssertNil(object["stacks"])
+        XCTAssertNil(object["currentStackID"])
     }
 
-    func testDecodedMissingSlotAndInvalidSelectedSlotAreRejected() throws {
+    func testDecodedMissingSlotIsRejected() throws {
         var object = try encodedObject(.empty())
         object.removeValue(forKey: "five")
-        XCTAssertThrowsError(try decode(object))
-        object = try encodedObject(.empty())
-        object["currentStackID"] = 6
         XCTAssertThrowsError(try decode(object))
     }
 

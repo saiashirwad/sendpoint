@@ -72,6 +72,8 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         )
         XCTAssertEqual(effects, [.commit(request)])
         XCTAssertEqual(state.update(.changeNote("A late edit")), [])
+        XCTAssertEqual(state.update(.stackSelected(.five)), [])
+        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
         XCTAssertEqual(state.session?.phase, .saving(request))
 
         XCTAssertEqual(
@@ -81,6 +83,8 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         XCTAssertEqual(state.session?.phase, .saveFailed(
             request, message: "Couldn’t save the note: disk full", retryable: true
         ))
+        XCTAssertEqual(state.update(.stackSelected(.three)), [])
+        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
 
         XCTAssertEqual(state.update(.retry), [.retry])
         XCTAssertEqual(state.session?.phase, .saving(request))

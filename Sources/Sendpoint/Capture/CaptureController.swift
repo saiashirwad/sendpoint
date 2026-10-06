@@ -69,7 +69,7 @@ final class CaptureController {
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
-        let id = state.session?.destinationStackID ?? store.selectedStackID
+        let id = state.session?.destinationStackID ?? store.currentStackID
         return StackUIFacts(store: store).stack(id: id)
     }
     var destinationStacks: [StackItemFacts] {
@@ -196,7 +196,7 @@ final class CaptureController {
             return nil
         }
         if !isOpen { previousApp = NSWorkspace.shared.frontmostApplication }
-        return NoteCaptureContext(stackID: store.selectedStackID)
+        return NoteCaptureContext(stackID: store.currentStackID)
     }
 
     func send(_ event: CaptureEvent) {
@@ -277,7 +277,7 @@ final class CaptureController {
                 guard let self, !self.state.isTornDown else { return }
                 self.send(.saved(request, outcome))
             }
-        case let .switchStack(id): store?.mutate(.switchStack(stackID: id))
+        case let .switchStack(id): store?.select(id)
         case .retry: store?.retryPendingMutations()
         case let .show(surface): surfaces.show(surface)
         case .focusEditor: surfaces.focus()

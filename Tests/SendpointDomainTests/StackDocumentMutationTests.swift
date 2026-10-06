@@ -7,22 +7,10 @@ final class StackDocumentMutationTests: XCTestCase {
     private let firstID = StackSlot.one
     private let secondID = StackSlot.two
 
-    func testSwitchMovesTheCurrentStackAndRejectsUnknownStacks() {
-        let initial = StackDocument(
-            stacks: filled([Stack(id: firstID), Stack(id: secondID)]),
-            currentStackID: firstID
-        )
-
-        let switched = applied(.switchStack(stackID: secondID), to: initial)
-        XCTAssertEqual(switched.currentStackID, secondID)
-        XCTAssertEqual(switched.stacks, initial.stacks)
-        XCTAssertEqual(StackDocumentMutations.applying(.switchStack(stackID: secondID), to: switched), .noOp)
-    }
-
     func testStacksAreNumberedByPlace() {
         let stacks = StackDocument.empty().stacks
         XCTAssertEqual(stacks.count, StackDocument.stackCount)
-        XCTAssertEqual(stacks.map { stacks.number(of: $0.id) }, [1, 2, 3, 4, 5])
+        XCTAssertEqual(stacks.map { $0.id.number }, [1, 2, 3, 4, 5])
         XCTAssertEqual(stacks.stack(number: 3), stacks[2])
         XCTAssertNil(stacks.stack(number: 0))
         XCTAssertNil(stacks.stack(number: 6))
@@ -69,7 +57,7 @@ final class StackDocumentMutationTests: XCTestCase {
         let two = makeNote(id: UUID(), body: "two")
         let three = makeNote(id: UUID(), body: "three")
         let stack = Stack(id: firstID, notes: [one, two, three])
-        let initial = StackDocument(stacks: filled([stack]), currentStackID: firstID)
+        let initial = StackDocument(stacks: filled([stack]))
 
         let movedDown = applied(
             .moveNote(stackID: firstID, noteID: one.id, destinationIndex: 2),
@@ -95,19 +83,17 @@ final class StackDocumentMutationTests: XCTestCase {
         )
     }
 
-    func testMovingANoteAcrossStacksAppendsItAndMakesTheDestinationCurrent() {
+    func testMovingANoteAcrossStacksAppendsIt() {
         let moved = makeNote(id: UUID(), body: "moved")
         let stays = makeNote(id: UUID(), body: "stays")
         let waiting = makeNote(id: UUID(), body: "waiting")
         let initial = StackDocument(
-            stacks: filled([Stack(id: firstID, notes: [moved, stays]), Stack(id: secondID, notes: [waiting])]),
-            currentStackID: firstID
+            stacks: filled([Stack(id: firstID, notes: [moved, stays]), Stack(id: secondID, notes: [waiting])])
         )
 
         let result = applied(.moveNoteToStack(noteID: moved.id, from: firstID, to: secondID), to: initial)
         XCTAssertEqual(result.stacks[0].notes, [stays])
         XCTAssertEqual(result.stacks[1].notes, [waiting, moved])
-        XCTAssertEqual(result.currentStackID, secondID)
 
         XCTAssertEqual(
             StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: firstID), to: initial),
@@ -120,18 +106,15 @@ final class StackDocumentMutationTests: XCTestCase {
         )
     }
 
-    func testClearCanBeUndoneAfterSwitchingStacks() {
+    func testClearRestoresItsOriginalSlot() {
         let old = makeNote(id: UUID(), body: "old")
         let first = Stack(id: firstID, notes: [old])
         let second = Stack(id: secondID)
-        let initial = StackDocument(stacks: filled([first, second]), currentStackID: firstID)
+        let initial = StackDocument(stacks: filled([first, second]))
 
         let cleared = applied(.clearStack(stackID: firstID), to: initial)
         XCTAssertTrue(cleared.stacks[0].notes.isEmpty)
-        let switched = applied(.switchStack(stackID: secondID), to: cleared)
-        let restored = applied(.undoClear, to: switched)
-
-        XCTAssertEqual(restored.currentStackID, secondID)
+        let restored = applied(.undoClear, to: cleared)
         XCTAssertEqual(restored.stacks[0].notes, [old])
         XCTAssertNil(restored.lastCleared)
     }
@@ -140,7 +123,7 @@ final class StackDocumentMutationTests: XCTestCase {
         let old = makeNote(id: UUID(), body: "old")
         let later = makeNote(id: UUID(), body: "later")
         let first = Stack(id: firstID, notes: [old])
-        let initial = StackDocument(stacks: filled([first]), currentStackID: firstID)
+        let initial = StackDocument(stacks: filled([first]))
         let cleared = applied(.clearStack(stackID: firstID), to: initial)
         let withLater = applied(.addNote(stackID: firstID, note: later), to: cleared)
         var replacement = old
@@ -157,8 +140,7 @@ final class StackDocumentMutationTests: XCTestCase {
     func testClearExportedNotesRejectsSnapshotsOlderThanAnyNoteField() {
         let note = makeNote(id: UUID(), body: "original")
         let initial = StackDocument(
-            stacks: filled([Stack(id: firstID, notes: [note])]),
-            currentStackID: firstID
+            stacks: filled([Stack(id: firstID, notes: [note])])
         )
 
         var changedBody = note
@@ -204,8 +186,7 @@ final class StackDocumentMutationTests: XCTestCase {
         let third = makeNote(id: UUID(), body: "third exported")
         let missing = makeNote(id: UUID(), body: "removed after export")
         let initial = StackDocument(
-            stacks: filled([Stack(id: firstID, notes: [first, edited, second, added, third])]),
-            currentStackID: firstID
+            stacks: filled([Stack(id: firstID, notes: [first, edited, second, added, third])])
         )
 
         let cleared = applied(
@@ -230,8 +211,7 @@ final class StackDocumentMutationTests: XCTestCase {
 
     private func document() -> StackDocument {
         StackDocument(
-            stacks: filled([Stack(id: firstID)]),
-            currentStackID: firstID
+            stacks: filled([Stack(id: firstID)])
         )
     }
 

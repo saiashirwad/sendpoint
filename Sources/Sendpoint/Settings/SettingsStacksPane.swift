@@ -19,7 +19,7 @@ struct SettingsStacksPane: View {
                     onSettingsChanged: onSettingsChanged
                 ) { spec in
                     StackShortcutLabel(title: spec.title, stack: facts?.stack(for: spec.slot)) { id in
-                        store?.mutate(.switchStack(stackID: id))
+                        store?.select(id)
                     }
                 }
             }

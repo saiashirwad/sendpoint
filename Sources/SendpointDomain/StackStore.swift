@@ -34,13 +34,16 @@ public final class StackStore {
     private struct QueuedMutation {
         let mutation: StackDocumentMutation
         let operationID: UUID
+        let selectionRevision: Int
         let outcome: (@MainActor @Sendable (StackMutationOutcome) -> Void)?
     }
 
     private var document: StackDocument
     private let persistence: StorePersistence
     private let onChange: @MainActor @Sendable () -> Void
+    private let onSelection: @MainActor @Sendable (StackSlot) -> Void
     private let diagnostics: DiagnosticSink
+    private var selectionRevision = 0
 
     private var queuedMutations: [QueuedMutation] = []
     @ObservationIgnored private var processingTask: Task<Void, Never>?
@@ -48,31 +51,27 @@ public final class StackStore {
 
     public private(set) var error: StackStoreError?
     public private(set) var state: State = .idle
+    public private(set) var currentStackID: StackSlot
 
     public var stacks: [Stack] {
         document.stacks
     }
 
-    public var currentStackID: StackSlot {
-        document.currentStackID
-    }
-
-    public var selectedStackID: StackSlot {
-        for queued in queuedMutations.reversed() {
-            switch queued.mutation {
-            case let .switchStack(id), let .moveNoteToStack(_, _, id): return id
-            default: continue
-            }
-        }
-        return document.currentStackID
-    }
-
     public var currentStack: Stack {
-        Stack(id: document.currentStackID, notes: document[document.currentStackID])
+        stack(id: currentStackID)
     }
 
-    public func stack(id: StackSlot) -> Stack? {
-        stacks.stack(id: id)
+    public func stack(id: StackSlot) -> Stack {
+        Stack(id: id, notes: document[id])
+    }
+
+    public func select(_ slot: StackSlot) {
+        guard state != .tornDown else { return }
+        selectionRevision += 1
+        guard currentStackID != slot else { return }
+        currentStackID = slot
+        onSelection(slot)
+        onChange()
     }
 
     public var currentNotes: [Note] {
@@ -89,8 +88,10 @@ public final class StackStore {
 
     public init(
         persistence: StorePersistence,
+        initialStack: StackSlot = .one,
         onChange: @escaping @MainActor @Sendable () -> Void = {},
-        diagnostics: @escaping DiagnosticSink = { _ in }
+        diagnostics: @escaping DiagnosticSink = { _ in },
+        onSelection: @escaping @MainActor @Sendable (StackSlot) -> Void = { _ in }
     ) async throws {
         try Task.checkCancellation()
         let loaded = try await persistence.load()
@@ -109,6 +110,8 @@ public final class StackStore {
         self.document = initialDocument
         self.persistence = persistence
         self.onChange = onChange
+        self.currentStackID = initialStack
+        self.onSelection = onSelection
         self.diagnostics = diagnostics
     }
 
@@ -123,7 +126,8 @@ public final class StackStore {
             return
         }
 
-        let queued = QueuedMutation(mutation: mutation, operationID: operationID, outcome: outcome)
+        let queued = QueuedMutation(mutation: mutation, operationID: operationID,
+                                    selectionRevision: selectionRevision, outcome: outcome)
         diagnose(queued, .accepted)
         queuedMutations.append(queued)
         startProcessingIfNeeded()
@@ -188,7 +192,7 @@ public final class StackStore {
         while state == .processing, !Task.isCancelled, let queuedMutation = queuedMutations.first {
             switch StackDocumentMutations.applying(queuedMutation.mutation, to: document) {
             case let .applied(candidate):
-                switch await commit(candidate) {
+                switch await commit(candidate, queued: queuedMutation) {
                 case .committed:
                     guard state == .processing, !Task.isCancelled else {
                         finishProcessing()
@@ -227,7 +231,7 @@ public final class StackStore {
         finishProcessing()
     }
 
-    private func commit(_ candidate: StackDocument) async -> CommitOutcome {
+    private func commit(_ candidate: StackDocument, queued: QueuedMutation) async -> CommitOutcome {
         do {
             try Task.checkCancellation()
             try await persistence.commit(candidate)
@@ -244,6 +248,12 @@ public final class StackStore {
         guard state != .tornDown else { return .cancelled }
         document = candidate
         error = nil
+        if case let .moveNoteToStack(_, from, to) = queued.mutation,
+           selectionRevision == queued.selectionRevision, currentStackID == from {
+            currentStackID = to
+            selectionRevision += 1
+            onSelection(to)
+        }
         onChange()
         return .committed
     }

@@ -47,7 +47,7 @@ final class AppCompositionTests: XCTestCase {
         app.captureController.send(.begin(.text, context))
         app.captureController.send(.selection(context, CapturedSelection(text: "")))
         XCTAssertEqual(app.captureController.state.session?.destinationStackID, store.currentStackID)
-        store.mutate(.switchStack(stackID: store.stacks[1].id))
+        store.select(store.stacks[1].id)
         await store.waitForIdle()
         XCTAssertEqual(store.currentStackID, store.stacks[1].id)
         XCTAssertEqual(app.captureController.state.session?.destinationStackID, store.stacks[1].id)
@@ -285,7 +285,7 @@ final class AppCompositionTests: XCTestCase {
 
     private func makeStore(onChange: @escaping @MainActor @Sendable () -> Void = {}) async throws -> StackStore {
         let stacks = filled([Stack(notes: [Note(subject: .standalone, body: "Original")])])
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: stacks)
         return try await StackStore(
             persistence: StorePersistence(load: { document }, commit: { _ in }), onChange: onChange
         )

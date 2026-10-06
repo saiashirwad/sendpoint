@@ -44,7 +44,7 @@ extension AppDelegate {
                         guard let self else { return false }
                         return self.surfaces.visible.isDisjoint(with: [.palette, .captureEditor, .captureVoice, .latestNoteEditor])
                     },
-                    showReadout: { [weak readout] in readout?.show(number: $0) },
+                    showReadout: { [weak readout] in readout?.show() },
                     hideReadout: { [weak readout] in readout?.hide() }
                 )
                 refreshStatusItem()
@@ -60,7 +60,7 @@ extension AppDelegate {
 
     func storeDidChange() {
         palette?.documentChanged()
-        if let store { captureController.send(.stackSelected(store.selectedStackID)) }
+        if let store { captureController.send(.stackSelected(store.currentStackID)) }
         refreshStatusItem()
     }
 

@@ -96,7 +96,7 @@ final class SetupTourTests: XCTestCase {
                 Note(subject: .selection(quote: "q"), body: "3"),
             ]),
         ]
-        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks))
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         XCTAssertEqual(SetupTour.noteCount(in: store), 3)

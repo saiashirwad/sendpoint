@@ -225,13 +225,13 @@ final class PaletteWorkflowTests: XCTestCase {
         harness.send(.open)
 
         harness.send(.key(.commandDigit(2), textHasSelection: false))
-        XCTAssertEqual(harness.mutation, .switchStack(stackID: secondStackID))
+        XCTAssertEqual(harness.selectedStack, secondStackID)
+        XCTAssertFalse(harness.state.isBusy)
 
         harness = makeHarness()
         harness.send(.open)
         harness.send(.selectStack(1))
-        XCTAssertEqual(harness.mutation, .switchStack(stackID: firstStackID),
-            "a queued switch elsewhere may be pending, so the store decides what is a no-op")
+        XCTAssertEqual(harness.selectedStack, firstStackID)
 
         harness = makeHarness()
         harness.send(.open)
@@ -378,9 +378,9 @@ final class PaletteWorkflowTests: XCTestCase {
 
         guard case let .applied(document) = StackDocumentMutations.applying(
             try XCTUnwrap(harness.mutation),
-            to: StackDocument(stacks: harness.context.stacks, currentStackID: firstStackID)
+            to: StackDocument(stacks: harness.context.stacks)
         ) else { return XCTFail("the move applies") }
-        harness.context = makeContext(stacks: Array(document.stacks.prefix(2)), currentStackID: document.currentStackID)
+        harness.context = makeContext(stacks: Array(document.stacks.prefix(2)), currentStackID: secondStackID)
         harness.send(.documentChanged)
         harness.send(.mutationResult(id, .committed))
 
@@ -566,6 +566,10 @@ private struct Harness {
             if case let .copyStack(id) = effect { return id }
         }
         return nil
+    }
+
+    var selectedStack: StackSlot? {
+        effects.compactMap { if case let .selectStack(slot) = $0 { return slot } else { return nil } }.last
     }
 
     var mutationID: UUID? {

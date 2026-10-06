@@ -129,7 +129,8 @@ final class ExportController {
 
     func copy(store: StackStore, stackID: StackSlot, template: Template,
               pasteTarget: pid_t? = nil, report: @escaping (String) -> Void) {
-        guard let stack = store.stack(id: stackID), !stack.notes.isEmpty else {
+        let stack = store.stack(id: stackID)
+        guard !stack.notes.isEmpty else {
             report("Nothing to copy")
             return
         }

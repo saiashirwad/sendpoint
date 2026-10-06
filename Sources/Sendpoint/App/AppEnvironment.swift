@@ -26,10 +26,7 @@ struct AppEnvironment {
         exportServices: ExportServices? = nil,
         selectionCapture: SelectionCapture? = nil,
         captureSurfaces: ((CaptureController) -> CaptureSurfaces)? = nil,
-        loadStore: @escaping StoreLoader = { onChange in
-            try await StackStore(persistence: .live(diagnostics: Diag.record), onChange: onChange,
-                                 diagnostics: Diag.record)
-        }
+        loadStore: StoreLoader? = nil
     ) {
         let appSettings = AppSettings(defaults: defaults)
         let shortcutSettings = ShortcutSettings(defaults: defaults)
@@ -43,7 +40,12 @@ struct AppEnvironment {
         let selection = selectionCapture ?? SelectionCapture.live(monitor: selectionMonitor)
 
         self.appSettings = appSettings
-        self.loadStore = loadStore
+        self.loadStore = loadStore ?? { onChange in
+            try await StackStore(persistence: .live(diagnostics: Diag.record),
+                                 initialStack: appSettings.lastStackSlot,
+                                 onChange: onChange, diagnostics: Diag.record,
+                                 onSelection: { appSettings.send(.selectedStack($0)) })
+        }
         self.shortcutSettings = shortcutSettings
         self.templateSettings = templateSettings
         self.voiceSettings = voiceSettings

@@ -8,15 +8,15 @@ final class StackSelectMachineTests: XCTestCase {
     func testSelectingAnotherStackSwitchesAndShowsItsReadout() {
         var machine = StackSelectMachine()
         XCTAssertEqual(send(.select(3), to: &machine), [
-            .switchTo(stacks[2]), .showReadout(number: 3), .startTimer(generation: 1),
+            .switchTo(stacks[2]), .showReadout, .startTimer(generation: 1),
         ])
-        XCTAssertEqual(machine.state, .showing(stacks[2], generation: 1))
+        XCTAssertEqual(machine.state, .showing(generation: 1))
     }
 
-    func testSelectingTheCurrentStackStillQueuesTheSwitchSoTheLatestPressWins() {
+    func testSelectingTheCurrentStackStillShowsAReadout() {
         var machine = StackSelectMachine()
         XCTAssertEqual(send(.select(1), to: &machine), [
-            .switchTo(stacks[0]), .showReadout(number: 1), .startTimer(generation: 1),
+            .switchTo(stacks[0]), .showReadout, .startTimer(generation: 1),
         ])
     }
 
@@ -42,26 +42,13 @@ final class StackSelectMachineTests: XCTestCase {
         var machine = StackSelectMachine()
         _ = send(.select(2), to: &machine)
         _ = send(.select(3), to: &machine)
-        XCTAssertEqual(machine.state, .showing(stacks[2], generation: 2))
+        XCTAssertEqual(machine.state, .showing(generation: 2))
 
         XCTAssertEqual(send(.readoutElapsed(generation: 1), to: &machine), [], "a stale timer is inert")
-        XCTAssertEqual(machine.state, .showing(stacks[2], generation: 2))
+        XCTAssertEqual(machine.state, .showing(generation: 2))
         XCTAssertEqual(send(.readoutElapsed(generation: 2), to: &machine), [.hideReadout])
         XCTAssertEqual(machine.state, .idle)
         XCTAssertEqual(send(.readoutElapsed(generation: 2), to: &machine), [])
-    }
-
-    func testAFailedSwitchTakesDownOnlyItsOwnReadout() {
-        var machine = StackSelectMachine()
-        _ = send(.select(2), to: &machine)
-        XCTAssertEqual(send(.switchFailed(stacks[1]), to: &machine), [.hideReadout, .beep])
-        XCTAssertEqual(machine.state, .idle)
-
-        _ = send(.select(2), to: &machine)
-        _ = send(.select(3), to: &machine)
-        XCTAssertEqual(send(.switchFailed(stacks[1]), to: &machine), [.beep],
-            "a later press already replaced the failed switch's readout")
-        XCTAssertEqual(machine.state, .showing(stacks[2], generation: 3))
     }
 
     func testTeardownHidesOnceAndThenIgnoresEverything() {
@@ -80,6 +67,6 @@ final class StackSelectMachineTests: XCTestCase {
     private func send(
         _ event: StackSelectEvent, to machine: inout StackSelectMachine, showsReadout: Bool = true
     ) -> [StackSelectEffect] {
-        machine.update(event, stacks: stacks, showsReadout: showsReadout)
+        machine.update(event, showsReadout: showsReadout)
     }
 }

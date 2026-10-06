@@ -202,9 +202,9 @@ final class CaptureControllerTests: XCTestCase {
         await waitForObservation { !f.controller.isOpen }
 
         XCTAssertEqual(f.store.currentStackID, destination.id)
-        XCTAssertTrue(f.store.stack(id: sourceID)?.notes.isEmpty == true)
-        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.map(\.body), ["Filed elsewhere"])
-        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.first?.subject,
+        XCTAssertTrue(f.store.stack(id: sourceID).notes.isEmpty)
+        XCTAssertEqual(f.store.stack(id: destination.id).notes.map(\.body), ["Filed elsewhere"])
+        XCTAssertEqual(f.store.stack(id: destination.id).notes.first?.subject,
             .selection(quote: "A passage"))
     }
 
@@ -260,8 +260,8 @@ final class CaptureControllerTests: XCTestCase {
         await f.store.waitForIdle()
         await waitForObservation { !f.controller.isOpen }
 
-        XCTAssertEqual(f.store.stack(id: destination.id)?.notes.map(\.body), ["Lands in the third stack"])
-        XCTAssertTrue(f.store.stack(id: sourceID)?.notes.isEmpty == true)
+        XCTAssertEqual(f.store.stack(id: destination.id).notes.map(\.body), ["Lands in the third stack"])
+        XCTAssertTrue(f.store.stack(id: sourceID).notes.isEmpty)
     }
 
     func testRejectedDestinationChoicesDoNotChangeTheCurrentStack() async throws {

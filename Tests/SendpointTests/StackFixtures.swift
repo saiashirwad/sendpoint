@@ -8,7 +8,7 @@ func filled(_ leading: [Stack]) -> [Stack] {
 }
 
 extension StackDocument {
-    init(stacks: [Stack], currentStackID: StackSlot) {
+    init(stacks: [Stack]) {
         self.init()
         for stack in stacks {
             for note in stack.notes {
@@ -17,9 +17,6 @@ extension StackDocument {
                 }
                 self = next
             }
-        }
-        if case let .applied(next) = StackDocumentMutations.applying(.switchStack(stackID: currentStackID), to: self) {
-            self = next
         }
     }
 }

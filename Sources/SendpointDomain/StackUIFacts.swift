@@ -14,14 +14,13 @@ public func stackTitle(_ number: Int) -> String {
 
 public struct StackItemFacts: Equatable, Identifiable {
     public let id: StackSlot
-    public let number: Int
+    public var number: Int { id.number }
     public let noteCount: Int
     public let isCurrent: Bool
     public let startedAt: Date?
 
-    public init(id: StackSlot, number: Int, noteCount: Int, isCurrent: Bool, startedAt: Date? = nil) {
+    public init(id: StackSlot, noteCount: Int, isCurrent: Bool, startedAt: Date? = nil) {
         self.id = id
-        self.number = number
         self.noteCount = noteCount
         self.isCurrent = isCurrent
         self.startedAt = startedAt
@@ -34,13 +33,12 @@ public struct StackItemFacts: Equatable, Identifiable {
 
 public struct StackUndoFacts: Equatable {
     public let stackID: StackSlot
-    public let stackName: String
+    public var stackName: String { stackTitle(stackID.number) }
     public let noteCount: Int
     public let isCurrentStack: Bool
 
-    public init(stackID: StackSlot, stackName: String, noteCount: Int, isCurrentStack: Bool) {
+    public init(stackID: StackSlot, noteCount: Int, isCurrentStack: Bool) {
         self.stackID = stackID
-        self.stackName = stackName
         self.noteCount = noteCount
         self.isCurrentStack = isCurrentStack
     }
@@ -67,10 +65,9 @@ public struct StackUIFacts: Equatable {
     }
 
     public init(stacks: [Stack], currentStackID: StackSlot, lastCleared: ClearedBatch?) {
-        self.stacks = stacks.enumerated().map { index, stack in
+        self.stacks = stacks.map { stack in
             StackItemFacts(
                 id: stack.id,
-                number: index + 1,
                 noteCount: stack.notes.count,
                 isCurrent: stack.id == currentStackID,
                 startedAt: stack.startedAt
@@ -78,10 +75,9 @@ public struct StackUIFacts: Equatable {
         }
         self.currentStackID = currentStackID
 
-        if let lastCleared, let number = stacks.number(of: lastCleared.stackID) {
+        if let lastCleared {
             undo = StackUndoFacts(
                 stackID: lastCleared.stackID,
-                stackName: stackTitle(number),
                 noteCount: lastCleared.notes.count,
                 isCurrentStack: lastCleared.stackID == currentStackID
             )

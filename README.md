@@ -37,6 +37,8 @@ Dictation is a side feature: hold <kbd>⌥Space</kbd>, speak, release, and the w
 
 Notes collect in a stack. There are always five, one per home-row key, and you never create, name or delete them. Reading two articles at once means one key to switch between them. New notes go to the current stack, and the menu bar shows its number.
 
+Switching stacks is immediate, even while notes are saving or storage needs a retry. Sendpoint remembers the last selected slot separately from the notes file. A capture follows your selection until you save; a saved request and an existing-note edit keep their original destination.
+
 Stacks are meant to be thrown away. Exporting empties the stack, so each round with the model starts fresh. If you clear one by mistake, Undo Clear in the menu bar brings the notes back.
 
 In the stack viewer, highlight a note and add <kbd>⇧</kbd> to a stack key to move it there: <kbd>⌥⇧J</kbd> sends it to the end of stack 2.

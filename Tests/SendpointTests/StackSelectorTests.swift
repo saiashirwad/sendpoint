@@ -72,11 +72,11 @@ final class StackSelectorTests: XCTestCase {
         selector.teardown()
     }
 
-    func testAFailedCommitTakesTheReadoutDownAndLeavesTheCurrentStack() async throws {
+    func testSelectionDoesNotNeedACommitAndKeepsItsReadout() async throws {
         let document = StackDocument.empty()
         let store = try await StackStore(persistence: StorePersistence(
             load: { document },
-            commit: { _ in throw StorePersistenceError.unavailable }
+            commit: { _ in XCTFail("Selection must not commit notes") }
         ))
         let spy = Spy()
         let selector = makeSelector(store: store, spy: spy, clock: ManualSleep())
@@ -84,9 +84,9 @@ final class StackSelectorTests: XCTestCase {
         selector.select(2)
         await store.waitForIdle()
 
-        XCTAssertEqual(store.currentStackID, document.currentStackID)
+        XCTAssertEqual(store.currentStackID, .two)
         XCTAssertEqual(spy.shown, [2])
-        XCTAssertEqual(spy.hidden, 1)
+        XCTAssertEqual(spy.hidden, 0)
         selector.teardown()
     }
 
@@ -128,7 +128,7 @@ final class StackSelectorTests: XCTestCase {
         StackSelector(
             store: store,
             showsReadout: { spy.showsReadout },
-            showReadout: { spy.shown.append($0) },
+            showReadout: { spy.shown.append(store.currentStackID.number) },
             hideReadout: { spy.hidden += 1 },
             sleep: { try await clock.sleep($0) }
         )

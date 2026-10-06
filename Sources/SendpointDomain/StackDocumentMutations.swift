@@ -1,7 +1,6 @@
 import Foundation
 
 public enum StackDocumentMutation: Equatable, Sendable {
-    case switchStack(stackID: StackSlot)
     case addNote(stackID: StackSlot, note: Note)
     case updateNoteBody(stackID: StackSlot, noteID: UUID, body: String, expected: Note? = nil)
     case removeNote(stackID: StackSlot, noteID: UUID)
@@ -25,10 +24,6 @@ public enum StackDocumentMutations {
     ) -> StackDocumentMutationResult {
         var document = source
         switch mutation {
-        case let .switchStack(slot):
-            guard document.currentStackID != slot else { return .noOp }
-            document.currentStackID = slot
-
         case let .addNote(slot, note):
             guard !document[slot].contains(where: { $0.id == note.id }) else {
                 return .rejected("The note already exists.")
@@ -72,7 +67,6 @@ public enum StackDocumentMutations {
             }
             let note = document[from].remove(at: index)
             document[to].append(note)
-            document.currentStackID = to
 
         case let .clearStack(slot):
             let notes = document[slot]

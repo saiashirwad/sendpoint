@@ -63,7 +63,6 @@ public struct StackDocument: Codable, Hashable, Sendable {
     private var three: [Note] = []
     private var four: [Note] = []
     private var five: [Note] = []
-    public internal(set) var currentStackID: StackSlot = .one
     public internal(set) var lastCleared: ClearedBatch?
 
     public init() {}
@@ -93,7 +92,7 @@ public struct StackDocument: Codable, Hashable, Sendable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case one, two, three, four, five, currentStackID, lastCleared }
+    private enum CodingKeys: String, CodingKey { case one, two, three, four, five, lastCleared }
 
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -102,7 +101,6 @@ public struct StackDocument: Codable, Hashable, Sendable {
         three = try values.decode([Note].self, forKey: .three)
         four = try values.decode([Note].self, forKey: .four)
         five = try values.decode([Note].self, forKey: .five)
-        currentStackID = try values.decode(StackSlot.self, forKey: .currentStackID)
         lastCleared = try values.decodeIfPresent(ClearedBatch.self, forKey: .lastCleared)
         for slot in StackSlot.allCases {
             let notes = self[slot]
@@ -127,10 +125,6 @@ public struct StackDocument: Codable, Hashable, Sendable {
 public extension Array where Element == Stack {
     func stack(id: StackSlot) -> Stack? {
         first { $0.id == id }
-    }
-
-    func number(of id: StackSlot) -> Int? {
-        id.number
     }
 
     func stack(number: Int) -> Stack? {

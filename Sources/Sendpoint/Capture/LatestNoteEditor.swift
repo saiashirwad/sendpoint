@@ -61,7 +61,7 @@ final class LatestNoteEditor {
         }
         return .began(LatestNoteDraft(
             stackID: store.currentStackID,
-            stackName: stackTitle(store.stacks.number(of: store.currentStackID)!),
+            stackName: stackTitle(store.currentStackID.number),
             original: note,
             text: note.body
         ))

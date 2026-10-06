@@ -82,7 +82,7 @@ extension AppDelegate {
             : nil
         exportController.copy(
             store: store,
-            stackID: store.selectedStackID,
+            stackID: store.currentStackID,
             template: templateSettings.activeTemplate,
             pasteTarget: target
         ) { [weak self] message in
@@ -91,11 +91,11 @@ extension AppDelegate {
     }
 
     private func clearStack() {
-        guard let store, let stack = store.stack(id: store.selectedStackID), !stack.notes.isEmpty else {
+        guard let store, !store.currentNotes.isEmpty else {
             NSSound.beep()
             return
         }
-        clearStack(stack.id)
+        clearStack(store.currentStackID)
     }
 
     private func clearStack(_ stackID: StackSlot) {

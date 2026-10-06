@@ -66,9 +66,9 @@ final class DiagnosticTests: XCTestCase {
         defer { store.teardown() }
         let note = Note(subject: .standalone, body: "private")
         let exportID = UUID()
-        store.mutate(.addNote(stackID: document.currentStackID, note: note), operationID: note.id)
+        store.mutate(.addNote(stackID: store.currentStackID, note: note), operationID: note.id)
         await store.waitForIdle()
-        store.mutate(.clearExportedNotes(stackID: document.currentStackID, notes: [note]), operationID: exportID)
+        store.mutate(.clearExportedNotes(stackID: store.currentStackID, notes: [note]), operationID: exportID)
         await store.waitForIdle()
         XCTAssertEqual(records.values.map(\.outcome), [.accepted, .succeeded, .accepted, .succeeded])
         XCTAssertEqual(records.values.map(\.noteID), Array(repeating: note.id, count: 4))

@@ -70,6 +70,7 @@ final class StackPaletteController {
         switch effect {
         case let .mutate(id, mutation):
             store.mutate(mutation) { [weak self] outcome in self?.send(.mutationResult(id, outcome)) }
+        case let .selectStack(slot): store.select(slot)
         case .retryPendingStoreChanges: store.retryPendingMutations()
         case let .copyStack(id):
             export.copy(store: store, stackID: id, template: settings.activeTemplate) { [weak self] message in

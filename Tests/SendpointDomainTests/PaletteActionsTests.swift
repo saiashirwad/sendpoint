@@ -3,8 +3,8 @@ import XCTest
 import SendpointDomain
 
 final class PaletteActionsTests: XCTestCase {
-    private let stackID = StackSlot.one
-    private let otherStackID = StackSlot.two
+    private let stackID = StackSlot.two
+    private let otherStackID = StackSlot.one
     private let firstNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
     private let secondNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
     private let thirdNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!
@@ -50,14 +50,14 @@ final class PaletteActionsTests: XCTestCase {
     }
 
     private func stack(noteCount: Int) -> StackItemFacts {
-        StackItemFacts(id: stackID, number: 2, noteCount: noteCount, isCurrent: true, startedAt: nil)
+        StackItemFacts(id: stackID, noteCount: noteCount, isCurrent: true, startedAt: nil)
     }
 
     func testNoteActionsComeFirstThenTheCurrentStacksThenTheTemplate() {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .note(id: secondNoteID, index: 1, count: 3),
             stack: stack(noteCount: 3),
-            undo: StackUndoFacts(stackID: otherStackID, stackName: "Stack 1", noteCount: 1, isCurrentStack: false)
+            undo: StackUndoFacts(stackID: otherStackID, noteCount: 1, isCurrentStack: false)
         ))
         XCTAssertEqual(items.map(\.action), [
             .editNote(secondNoteID), .copyNote(secondNoteID),
@@ -91,7 +91,7 @@ final class PaletteActionsTests: XCTestCase {
 
         let cleared = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .nothing, stack: stack(noteCount: 0),
-            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 3, isCurrentStack: true)
+            undo: StackUndoFacts(stackID: stackID, noteCount: 3, isCurrentStack: true)
         ))
         XCTAssertEqual(cleared.map(\.action), [.undoClear, .chooseTemplate])
     }
@@ -100,7 +100,7 @@ final class PaletteActionsTests: XCTestCase {
         let items = PaletteActionCatalog.items(for: PaletteActionContext(
             focus: .note(id: secondNoteID, index: 1, count: 3),
             stack: stack(noteCount: 3),
-            undo: StackUndoFacts(stackID: stackID, stackName: "Stack 2", noteCount: 1, isCurrentStack: true)
+            undo: StackUndoFacts(stackID: stackID, noteCount: 1, isCurrentStack: true)
         ))
         XCTAssertEqual(
             PaletteActionCatalog.menu(items, query: "").map(\.action),

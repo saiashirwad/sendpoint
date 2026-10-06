@@ -2,14 +2,13 @@ import Foundation
 
 public nonisolated enum StackSelectEvent: Equatable {
     case select(Int)
-    case switchFailed(StackSlot)
     case readoutElapsed(generation: Int)
     case teardown
 }
 
 public nonisolated enum StackSelectEffect: Equatable {
     case switchTo(StackSlot)
-    case showReadout(number: Int)
+    case showReadout
     case hideReadout
     case startTimer(generation: Int)
     case beep
@@ -18,7 +17,7 @@ public nonisolated enum StackSelectEffect: Equatable {
 public nonisolated struct StackSelectMachine: Equatable {
     public enum State: Equatable {
         case idle
-        case showing(StackSlot, generation: Int)
+        case showing(generation: Int)
         case tornDown
     }
 
@@ -32,7 +31,7 @@ public nonisolated struct StackSelectMachine: Equatable {
     }
 
     public mutating func update(
-        _ event: StackSelectEvent, stacks: [StackSlot], showsReadout: Bool
+        _ event: StackSelectEvent, showsReadout: Bool
     ) -> [StackSelectEffect] {
         guard state != .tornDown else { return [] }
         switch event {
@@ -42,26 +41,20 @@ public nonisolated struct StackSelectMachine: Equatable {
             return wasShowing ? [.hideReadout] : []
 
         case let .select(number):
-            guard stacks.indices.contains(number - 1) else { return [.beep] }
-            let id = stacks[number - 1]
+            guard let id = StackSlot(rawValue: number) else { return [.beep] }
             var effects: [StackSelectEffect] = [.switchTo(id)]
             if showsReadout {
                 generation += 1
-                state = .showing(id, generation: generation)
-                effects += [.showReadout(number: number), .startTimer(generation: generation)]
+                state = .showing(generation: generation)
+                effects += [.showReadout, .startTimer(generation: generation)]
             } else if isShowing {
                 state = .idle
                 effects.append(.hideReadout)
             }
             return effects
 
-        case let .switchFailed(id):
-            guard case .showing(id, _) = state else { return [.beep] }
-            state = .idle
-            return [.hideReadout, .beep]
-
         case let .readoutElapsed(elapsed):
-            guard case .showing(_, elapsed) = state else { return [] }
+            guard case .showing(elapsed) = state else { return [] }
             state = .idle
             return [.hideReadout]
         }

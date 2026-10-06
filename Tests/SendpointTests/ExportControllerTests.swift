@@ -8,7 +8,7 @@ final class ExportControllerTests: XCTestCase {
     func testEveryBuiltInPastesItsPromptAndClearsWithoutOverridingDefaults() async throws {
         for template in Template.builtIns {
             let stack = Stack(notes: [note])
-            let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+            let document = StackDocument(stacks: filled([stack]))
             let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
             defer { store.teardown() }
             var written = ""
@@ -46,11 +46,11 @@ final class ExportControllerTests: XCTestCase {
         let stackB = Stack(notes: [Note(subject: .standalone, body: "B")])
         let commits = FailingExportCommit()
         let storeA = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: filled([stackA]), currentStackID: stackA.id) },
+            load: { StackDocument(stacks: filled([stackA])) },
             commit: { _ in try await commits.commit() }
         ))
         let storeB = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: filled([stackB]), currentStackID: stackB.id) },
+            load: { StackDocument(stacks: filled([stackB])) },
             commit: { _ in XCTFail("Rejected B must not be committed") }
         ))
         defer { storeA.teardown(); storeB.teardown() }
@@ -78,10 +78,10 @@ final class ExportControllerTests: XCTestCase {
         let stackA = Stack(notes: [note])
         let stackB = Stack(notes: [Note(subject: .standalone, body: "B")])
         let storeA = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: filled([stackA]), currentStackID: stackA.id) }, commit: { _ in }
+            load: { StackDocument(stacks: filled([stackA])) }, commit: { _ in }
         ))
         let storeB = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: filled([stackB]), currentStackID: stackB.id) }, commit: { _ in }
+            load: { StackDocument(stacks: filled([stackB])) }, commit: { _ in }
         ))
         defer { storeA.teardown(); storeB.teardown() }
         var template = Template.plain
@@ -101,7 +101,7 @@ final class ExportControllerTests: XCTestCase {
 
     func testClipboardWriteFailureDoesNotClear() async throws {
         let stack = Stack(notes: [note])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(
             persistence: StorePersistence(load: { document }, commit: { _ in })
         )
@@ -125,7 +125,7 @@ final class ExportControllerTests: XCTestCase {
     func testPasteCompletionClearsOnlyUnchangedExportedSnapshot() async throws {
         let unchanged = Note(subject: .standalone, body: "unchanged")
         let stack = Stack(notes: [note, unchanged])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         let gate = ExportPasteGate()
@@ -153,7 +153,7 @@ final class ExportControllerTests: XCTestCase {
 
     func testBoundaryCancellationKeepsNotesAndFinishesTheAcceptedRequest() async throws {
         let stack = Stack(notes: [note])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         let reported = expectation(description: "cancelled paste reported")
@@ -171,7 +171,7 @@ final class ExportControllerTests: XCTestCase {
 
     func testSupersededAndTornDownPasteCannotApplyStaleResults() async throws {
         let stack = Stack(notes: [note])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         let first = ExportPasteGate()
@@ -206,7 +206,7 @@ final class ExportControllerTests: XCTestCase {
 
     func testReentrantTeardownDuringNoteCopyCancellationCannotWriteClipboard() async throws {
         let stack = Stack(notes: [note])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
         defer { store.teardown() }
         let gate = ExportPasteGate()
@@ -227,7 +227,7 @@ final class ExportControllerTests: XCTestCase {
 
     func testSuccessfulWriteUsesTheTemplateAndClearsTheStack() async throws {
         let stack = Stack(notes: [note])
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(
             persistence: StorePersistence(load: { document }, commit: { _ in })
         )

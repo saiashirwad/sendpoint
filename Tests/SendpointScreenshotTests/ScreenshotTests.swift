@@ -127,7 +127,7 @@ final class ScreenshotTests: XCTestCase {
         let many = (1...12).map { note(subject: .standalone, body: "Note \($0)") }
         let stacks = filled([Stack(notes: quoted), Stack(), Stack(notes: many)])
         let store = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: stacks, currentStackID: stacks[0].id) }, commit: { _ in }
+            load: { StackDocument(stacks: stacks) }, commit: { _ in }
         ))
         let defaults = makeDefaults()
         let model = StackPaletteController(
@@ -150,13 +150,13 @@ final class ScreenshotTests: XCTestCase {
         try await show([panel])
 
         for (index, name) in ["notes", "empty", "long"].enumerated() {
-            store.mutate(.switchStack(stackID: stacks[index].id))
+            store.select(stacks[index].id)
             await store.waitForIdle()
             model.send(.documentChanged)
             try await settle()
             try shoot([panel], "stack-\(name)")
         }
-        store.mutate(.switchStack(stackID: stacks[0].id))
+        store.select(stacks[0].id)
         await store.waitForIdle()
         model.send(.documentChanged)
         model.send(.query("sound"))
@@ -181,7 +181,7 @@ final class ScreenshotTests: XCTestCase {
             controller.teardown()
             store.teardown()
         }
-        controller.show(number: 1)
+        controller.show()
         try await show([controller.panel])
         try shoot([controller.panel], "stack-readout")
     }
@@ -217,7 +217,7 @@ final class ScreenshotTests: XCTestCase {
         struct Refused: LocalizedError { var errorDescription: String? { "The disk is full." } }
         let stacks = filled([Stack(notes: [note(subject: .standalone, body: "Ship the export fix on Friday.")])])
         let store = try await StackStore(persistence: StorePersistence(
-            load: { StackDocument(stacks: stacks, currentStackID: stacks[0].id) }, commit: { _ in throw Refused() }
+            load: { StackDocument(stacks: stacks) }, commit: { _ in throw Refused() }
         ))
         let model = LatestNoteEditor(store: store)
         let window = LatestNoteEditorWindow(model: model, surfaces: SurfaceCoordinator(setRegularActivation: { _ in }))
@@ -363,7 +363,7 @@ final class ScreenshotTests: XCTestCase {
     }
 
     private func makeStore(_ leading: [Stack]) async throws -> StackStore {
-        let document = StackDocument(stacks: filled(leading), currentStackID: leading[0].id)
+        let document = StackDocument(stacks: filled(leading))
         return try await StackStore(persistence: StorePersistence(load: { document }, commit: { _ in }))
     }
 

@@ -22,6 +22,10 @@ _Avoid_: Active stack, shown stack (as separate product concepts)
 
 **Stack slot**: One of five permanent destinations, represented by `StackSlot.one` through `.five`. A slot is its identity and number; only notes have UUID identities. `slots.json` stores the five note arrays and last cleared batch in a versioned disk envelope. Incompatible old `store.json` data remains untouched; there is no migration or import path.
 
+**Current stack**: `StackStore.currentStackID` is the single immediate selection. Selection is not a note mutation and never waits for disk. `AppSettings` remembers the last selected slot as a preference read at bootstrap, not a second live selection. Note mutations remain serial and publish only after atomic commit. A completed move follows its destination only when no newer selection has occurred; failed moves retain their operation and can later report success on retry.
+
+**Ownership choice**: Keep selection and the durable queue behind the existing `StackStore` façade, with separate writable state and a small preference callback. A separate observable selection owner would add a dependency and lifetime to every store consumer without removing more facts. `StackDocument` owns only note content and clear undo; `StackSelectMachine` owns only readout timing. Views and controllers call `store.select(slot)` for navigation and `store.mutate(...)` for durable note changes.
+
 **Cleared batch**: The most recently removed group of notes, retained for Undo Clear. It belongs to its original stack.
 
 ## Capture and dictation

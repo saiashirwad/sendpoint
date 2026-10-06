@@ -1,35 +1,21 @@
 import AppKit
-import Observation
 import SendpointDomain
 import SwiftUI
 
-@Observable
-final class StackReadoutModel {
-    let store: StackStore
-    var number = 1
-
-    init(store: StackStore) {
-        self.store = store
-    }
-}
-
 struct StackReadoutView: View {
-    let model: StackReadoutModel
+    let store: StackStore
 
     static let margin: CGFloat = Spacing.lg
     static let height: CGFloat = 56
 
     var body: some View {
         let palette = OverlayPalette.dark
-        let facts = StackUIFacts(store: model.store)
+        let facts = StackUIFacts(store: store)
         HStack(spacing: Spacing.xl) {
-            if let stack = facts.stack(number: model.number) {
+            if let stack = facts.current {
                 StackReadoutLabel(stack: stack, numeralSize: 26, detailSize: 13)
             }
-            StackStrip(stacks: facts.stacks.map { stack in
-                StackItemFacts(id: stack.id, number: stack.number, noteCount: stack.noteCount,
-                    isCurrent: stack.number == model.number, startedAt: stack.startedAt)
-            }, size: 12, accent: palette.accent)
+            StackStrip(stacks: facts.stacks, size: 12, accent: palette.accent)
         }
         .fixedSize()
         .padding(.horizontal, Spacing.xl)
@@ -45,12 +31,10 @@ final class StackReadoutController {
     private enum Lifecycle { case active, tornDown }
 
     let panel: NSPanel
-    private let model: StackReadoutModel
     private var lifecycle: Lifecycle = .active
 
     init(store: StackStore) {
-        model = StackReadoutModel(store: store)
-        let hosting = NSHostingView(rootView: StackReadoutView(model: model))
+        let hosting = NSHostingView(rootView: StackReadoutView(store: store))
         hosting.sizingOptions = [.intrinsicContentSize]
         panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: hosting.fittingSize),
@@ -70,9 +54,8 @@ final class StackReadoutController {
         panel.contentView = hosting
     }
 
-    func show(number: Int) {
+    func show() {
         guard lifecycle == .active else { return }
-        model.number = number
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if let visible = screen?.visibleFrame {
             let size = panel.contentView?.fittingSize ?? panel.frame.size

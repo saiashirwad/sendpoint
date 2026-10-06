@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import ServiceManagement
+import SendpointDomain
 
 enum StackExportMode: Equatable, Sendable {
     case paste
@@ -34,6 +35,7 @@ enum AppSettingsEvent: Equatable {
     case launchAtLogin(Bool)
     case exportMode(StackExportMode)
     case restoreFocusAfterSave(Bool)
+    case selectedStack(StackSlot)
 }
 
 @Observable
@@ -42,6 +44,7 @@ final class AppSettings {
         static let pasteDirectly = "pasteDirectly"
         static let restoreFocusAfterSave = "restoreFocusAfterSave"
         static let hasCompletedSetup = "hasCompletedSetup"
+        static let lastStackSlot = "lastStackSlot"
     }
 
     private let defaults: UserDefaults
@@ -54,6 +57,10 @@ final class AppSettings {
     private(set) var launchAtLogin: Bool
 
     var stackExportMode: StackExportMode { StackExportMode(pasteDirectly: pasteDirectly) }
+
+    var lastStackSlot: StackSlot {
+        StackSlot(rawValue: defaults.integer(forKey: Key.lastStackSlot)) ?? .one
+    }
 
     init(
         defaults: UserDefaults = .standard,
@@ -108,6 +115,7 @@ final class AppSettings {
         case .launchAtLogin(let enabled): setLaunchAtLogin(enabled)
         case .exportMode(let mode): setPasteDirectly(mode == .paste)
         case .restoreFocusAfterSave(let enabled): setRestoreFocusAfterSave(enabled)
+        case .selectedStack(let slot): defaults.set(slot.number, forKey: Key.lastStackSlot)
         }
     }
 }

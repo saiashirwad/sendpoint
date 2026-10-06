@@ -113,6 +113,7 @@ public struct PaletteContext {
 
 public enum PaletteEffect {
     case mutate(UUID, StackDocumentMutation)
+    case selectStack(StackSlot)
     case retryPendingStoreChanges
     case copyStack(StackSlot)
     case copyNote(Note)
@@ -158,9 +159,8 @@ public struct PaletteProjection {
 
     public var problem: String? {
         guard case let .failed(pending, message, _) = state.interaction else { return nil }
-        guard pending.stackID != context.currentStackID,
-              let number = context.stacks.number(of: pending.stackID) else { return message }
-        return "\(stackTitle(number)): \(message)"
+        guard pending.stackID != context.currentStackID else { return message }
+        return "\(stackTitle(pending.stackID.number)): \(message)"
     }
 
     var actionContext: PaletteActionContext {
@@ -269,8 +269,8 @@ public struct PaletteUpdate {
         case let .chooseNote(id): chooseNote(id, editing: false)
         case let .selectStack(number):
             guard let stack = context.stacks.stack(number: number) else { effects.append(.beep); break }
-            guard !finishEdit(before: event) else { break }
-            enqueue(.switchStack(stackID: stack.id))
+            finishEdit(before: nil)
+            effects.append(.selectStack(stack.id))
         case let .perform(action):
             guard !finishEdit(before: event) else { break }
             if action != .chooseTemplate { state.interaction = .browsing }
@@ -410,6 +410,7 @@ public struct PaletteUpdate {
 
     private mutating func handle(_ key: PaletteKey, textHasSelection: Bool) -> Bool {
         if state.isBusy {
+            if case let .commandDigit(number) = key { return update(.selectStack(number)) }
             if key == .escape {
                 if case .failed(_, _, retryable: true) = state.interaction { update(.close) } else { update(.cancelEdit) }
             }

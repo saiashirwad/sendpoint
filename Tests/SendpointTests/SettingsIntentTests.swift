@@ -77,6 +77,9 @@ final class SettingsIntentTests: XCTestCase {
         settings.send(.restoreFocusAfterSave(false))
         XCTAssertFalse(settings.restoreFocusAfterSave)
 
+        settings.send(.selectedStack(.four))
+        XCTAssertEqual(settings.lastStackSlot, .four)
+
         settings.send(.launchAtLogin(true))
         XCTAssertTrue(settings.launchAtLogin)
 
@@ -85,8 +88,30 @@ final class SettingsIntentTests: XCTestCase {
             registerLoginItem: {},
             unregisterLoginItem: {}
         )
+        XCTAssertEqual(reloaded.lastStackSlot, .four)
         XCTAssertTrue(reloaded.pasteDirectly)
         XCTAssertFalse(reloaded.restoreFocusAfterSave)
+    }
+
+    func testLastStackPreferenceRejectsInvalidDefaultsAndBootstrapsImmediateSelection() async throws {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let settings = AppSettings(defaults: defaults, registerLoginItem: {}, unregisterLoginItem: {})
+        XCTAssertEqual(settings.lastStackSlot, .one)
+        for invalid in [-1, 0, 6] {
+            defaults.set(invalid, forKey: "lastStackSlot")
+            XCTAssertEqual(settings.lastStackSlot, .one)
+        }
+        settings.send(.selectedStack(.three))
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { .empty() }, commit: { _ in XCTFail("Selecting must not commit notes") }
+        ), initialStack: settings.lastStackSlot, onSelection: { settings.send(.selectedStack($0)) })
+        XCTAssertEqual(store.currentStackID, .three)
+        store.select(.five)
+        XCTAssertEqual(settings.lastStackSlot, .five)
+        XCTAssertEqual(AppSettings(defaults: defaults).lastStackSlot, .five)
+        XCTAssertFalse(store.hasPendingMutations)
+        store.teardown()
     }
 
     func testAppSettingsFailedLoginItemChangeRollsBack() {

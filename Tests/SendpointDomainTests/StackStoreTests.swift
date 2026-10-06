@@ -40,7 +40,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.currentStackID, store.stacks[0].id)
         let commits = await recorder.documents()
         XCTAssertEqual(commits, [
-            StackDocument(stacks: store.stacks, currentStackID: store.currentStackID)
+            StackDocument(stacks: store.stacks)
         ])
     }
 
@@ -136,7 +136,7 @@ final class StackStoreTests: XCTestCase {
         var outcomes: [StackMutationOutcome] = []
         var pendingStates: [Bool] = []
 
-        store.mutate(.switchStack(stackID: stackID), outcome: { outcome in
+        store.mutate(.removeNote(stackID: stackID, noteID: UUID()), outcome: { outcome in
             outcomes.append(outcome)
             pendingStates.append(store.hasPendingMutations)
         })
@@ -349,7 +349,7 @@ final class StackStoreTests: XCTestCase {
         XCTAssertEqual(store.currentNotes, [added])
     }
 
-    func testSelectedStackFollowsQueuedSwitchesBeforeTheyCommit() async throws {
+    func testCurrentStackChangesImmediatelyWhileANoteCommitIsSuspended() async throws {
         let original = document()
         let other = original.stacks[1].id
         let gate = AsyncGate()
@@ -357,19 +357,123 @@ final class StackStoreTests: XCTestCase {
             load: { original },
             commit: { _ in await gate.wait() }
         ))
-        XCTAssertEqual(store.selectedStackID, stackID)
-
-        store.mutate(.switchStack(stackID: other))
-        XCTAssertEqual(store.currentStackID, stackID, "the committed stack has not moved yet")
-        XCTAssertEqual(store.selectedStackID, other)
-
-        store.mutate(.switchStack(stackID: stackID))
-        XCTAssertEqual(store.selectedStackID, stackID, "the last press wins")
+        let note = makeNote(body: "saved to the frozen slot")
+        store.mutate(.addNote(stackID: stackID, note: note))
+        store.select(other)
+        XCTAssertEqual(store.currentStackID, other)
+        XCTAssertEqual(store.currentNotes, [])
+        XCTAssertEqual(store.stack(id: stackID).notes, [])
+        store.select(stackID)
+        XCTAssertEqual(store.currentStackID, stackID, "the last press wins immediately")
 
         await gate.open()
         await store.waitForIdle()
         XCTAssertEqual(store.currentStackID, stackID)
-        XCTAssertEqual(store.selectedStackID, stackID)
+        XCTAssertEqual(store.currentNotes, [note])
+    }
+
+    func testInitialSelectionAndPreferenceAreIndependentOfNotesAndTeardown() async throws {
+        var selected: [StackSlot] = []
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { .empty() }, commit: { _ in XCTFail("Navigation must not write notes") }
+        ), initialStack: .three, onSelection: { selected.append($0) })
+        XCTAssertEqual(store.currentStackID, .three)
+        store.select(.five)
+        XCTAssertEqual(StackUIFacts(store: store).current?.id, .five)
+        XCTAssertFalse(store.hasPendingMutations)
+        XCTAssertEqual(store.state, .idle)
+        XCTAssertEqual(selected, [.five])
+        store.teardown()
+        store.teardown()
+        store.select(.one)
+        XCTAssertEqual(store.currentStackID, .five)
+        XCTAssertEqual(selected, [.five])
+    }
+
+    func testMoveFollowsItsDestinationOnlyAfterCommit() async throws {
+        let note = makeNote(body: "moving")
+        let original = StackDocument(stacks: filled([Stack(notes: [note])]))
+        let gate = AsyncGate()
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { original }, commit: { _ in await gate.wait() }
+        ))
+        var outcomes: [StackMutationOutcome] = []
+        store.mutate(.moveNoteToStack(noteID: note.id, from: .one, to: .two)) {
+            outcomes.append($0)
+            if $0 == .committed {
+                XCTAssertEqual(store.currentStackID, .two)
+                XCTAssertEqual(store.currentNotes, [note])
+            }
+        }
+        await Task.yield()
+        XCTAssertEqual(store.currentStackID, .one)
+        XCTAssertEqual(store.currentNotes, [note])
+        XCTAssertEqual(store.stack(id: .two).notes, [])
+        XCTAssertEqual(outcomes, [])
+        await gate.open()
+        await store.waitForIdle()
+        XCTAssertEqual(outcomes, [.committed])
+        XCTAssertEqual(store.stack(id: .one).notes, [])
+        store.teardown()
+    }
+
+    func testNewerSelectionIncludingTheSameSlotSurvivesAMoveCommit() async throws {
+        for newest in [StackSlot.five, .one] {
+            let note = makeNote(body: "moving")
+            let original = StackDocument(stacks: filled([Stack(notes: [note])]))
+            let gate = AsyncGate()
+            let store = try await StackStore(persistence: StorePersistence(
+                load: { original }, commit: { _ in await gate.wait() }
+            ))
+            store.mutate(.moveNoteToStack(noteID: note.id, from: .one, to: .two))
+            store.select(newest)
+            await gate.open()
+            await store.waitForIdle()
+            XCTAssertEqual(store.currentStackID, newest)
+            XCTAssertEqual(store.stack(id: .two).notes, [note])
+            store.teardown()
+        }
+    }
+
+    func testHaltedMoveAllowsSelectionAndReportsSuccessOnlyAfterRetryCommits() async throws {
+        let note = makeNote(body: "moving")
+        let original = StackDocument(stacks: filled([Stack(notes: [note])]))
+        let recorder = AttemptRecorder(failingAttempts: [1])
+        let store = try await StackStore(persistence: StorePersistence(
+            load: { original }, commit: { try await recorder.commit($0) }
+        ))
+        var outcomes: [StackMutationOutcome] = []
+        store.mutate(.moveNoteToStack(noteID: note.id, from: .one, to: .two)) { outcomes.append($0) }
+        await store.waitForIdle()
+        XCTAssertEqual(store.state, .halted)
+        XCTAssertTrue(store.hasPendingMutations)
+        XCTAssertEqual(store.currentNotes, [note])
+        guard case .commitFailed = outcomes.first else { return XCTFail("Expected commit failure") }
+        store.select(.five)
+        XCTAssertEqual(store.currentStackID, .five)
+        store.retryPendingMutations()
+        await store.waitForIdle()
+        XCTAssertEqual(outcomes.count, 2)
+        XCTAssertEqual(outcomes.last, .committed)
+        XCTAssertEqual(store.currentStackID, .five)
+        XCTAssertEqual(store.stack(id: .two).notes, [note])
+        XCTAssertFalse(store.hasPendingMutations)
+        store.teardown()
+    }
+
+    func testUndoRestoresItsSlotWithoutChangingTheNewSelection() async throws {
+        let note = makeNote(body: "cleared")
+        let original = StackDocument(stacks: filled([Stack(notes: [note])]))
+        let store = try await StackStore(persistence: StorePersistence(load: { original }, commit: { _ in }))
+        store.mutate(.clearStack(stackID: .one))
+        await store.waitForIdle()
+        store.select(.five)
+        store.mutate(.undoClear)
+        await store.waitForIdle()
+        XCTAssertEqual(store.currentStackID, .five)
+        XCTAssertEqual(store.stack(id: .one).notes, [note])
+        XCTAssertNil(store.lastCleared)
+        store.teardown()
     }
 
     func testDrainGivesUpAfterTheTimeoutAndLeavesTheStoreProcessing() async throws {
@@ -428,8 +532,7 @@ final class StackStoreTests: XCTestCase {
 
     private func document() -> StackDocument {
         StackDocument(
-            stacks: filled([Stack(id: stackID)]),
-            currentStackID: stackID
+            stacks: filled([Stack(id: stackID)])
         )
     }
 

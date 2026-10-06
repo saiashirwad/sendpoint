@@ -8,7 +8,7 @@ func filled(_ leading: [Stack]) -> [Stack] {
 }
 
 extension StackDocument {
-    init(stacks: [Stack], currentStackID: StackSlot, lastCleared: ClearedBatch? = nil) {
+    init(stacks: [Stack]) {
         self.init()
         for stack in stacks {
             for note in stack.notes {
@@ -18,7 +18,5 @@ extension StackDocument {
                 self = next
             }
         }
-        self.currentStackID = currentStackID
-        self.lastCleared = lastCleared
     }
 }

@@ -7,7 +7,7 @@ final class StackSelector {
 
     private let store: StackStore
     private let showsReadout: () -> Bool
-    private let showReadout: (Int) -> Void
+    private let showReadout: () -> Void
     private let hideReadout: () -> Void
     private let sleep: @MainActor (Duration) async throws -> Void
     private var machine = StackSelectMachine()
@@ -15,7 +15,7 @@ final class StackSelector {
 
     init(store: StackStore,
          showsReadout: @escaping () -> Bool,
-         showReadout: @escaping (Int) -> Void,
+         showReadout: @escaping () -> Void,
          hideReadout: @escaping () -> Void,
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.store = store
@@ -34,21 +34,16 @@ final class StackSelector {
     }
 
     private func send(_ event: StackSelectEvent) {
-        let effects = machine.update(event, stacks: store.stacks.map(\.id), showsReadout: showsReadout())
+        let effects = machine.update(event, showsReadout: showsReadout())
         for effect in effects { run(effect) }
     }
 
     private func run(_ effect: StackSelectEffect) {
         switch effect {
         case let .switchTo(id):
-            store.mutate(.switchStack(stackID: id)) { [weak self] outcome in
-                switch outcome {
-                case .committed, .noOp: break
-                case .rejected, .commitFailed, .cancelled: self?.send(.switchFailed(id))
-                }
-            }
-        case let .showReadout(number):
-            showReadout(number)
+            store.select(id)
+        case .showReadout:
+            showReadout()
         case .hideReadout:
             timer?.cancel()
             timer = nil

@@ -8,7 +8,7 @@ import XCTest
 final class CaptureDestinationPanelLayoutTests: XCTestCase {
     func testRetainedVoiceWindowDoesNotPresentTextCaptureDestinationPicker() async throws {
         let stack = Stack()
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -55,7 +55,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
 
     func testBeginningATextCaptureFocusesTheNoteWithNoScrollInset() async throws {
         let stack = Stack()
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -93,7 +93,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
             Stack(),
             Stack(notes: [Note(subject: .standalone, body: "One")]),
         ]
-        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks))
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
@@ -134,7 +134,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
 
     func testPickerClearsTheWholeCardWhenCaptionsAreOn() async throws {
         let stack = Stack()
-        let document = StackDocument(stacks: filled([stack]), currentStackID: stack.id)
+        let document = StackDocument(stacks: filled([stack]))
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))

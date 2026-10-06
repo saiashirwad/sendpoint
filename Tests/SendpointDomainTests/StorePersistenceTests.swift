@@ -12,8 +12,7 @@ final class StorePersistenceTests: XCTestCase {
         let persistence = StorePersistence.live(directory: directory)
         let second = Stack(id: .two)
         let expected = StackDocument(
-            stacks: filled([Stack(id: stackID), second]),
-            currentStackID: second.id
+            stacks: filled([Stack(id: stackID), second])
         )
 
         try await persistence.commit(expected)
@@ -236,8 +235,7 @@ final class StorePersistenceTests: XCTestCase {
 
     private func document() -> StackDocument {
         StackDocument(
-            stacks: filled([Stack(id: stackID)]),
-            currentStackID: stackID
+            stacks: filled([Stack(id: stackID)])
         )
     }
 

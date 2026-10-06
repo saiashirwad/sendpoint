@@ -12,15 +12,16 @@ final class StackReadoutTests: XCTestCase {
             Stack(),
             Stack(notes: (1...12).map { Note(subject: .standalone, body: "\($0)") }),
         ]
-        let document = StackDocument(stacks: filled(stacks), currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: filled(stacks))
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
         let controller = StackReadoutController(store: store)
         defer { controller.teardown() }
 
-        for number in [2, 3] {
-            controller.show(number: number)
+        for slot in [StackSlot.two, .three] {
+            store.select(slot)
+            controller.show()
             let panel = controller.panel
             let hosting = try XCTUnwrap(panel.contentView)
             hosting.layoutSubtreeIfNeeded()

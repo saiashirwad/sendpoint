@@ -19,7 +19,7 @@ final class LatestNoteEditorTests: XCTestCase {
         let firstStack = store.currentStackID
         model.text = "Corrected transcription"
         let session = model.state.draft?.sessionID
-        store.mutate(.switchStack(stackID: store.stacks[1].id))
+        store.select(store.stacks[1].id)
         await store.waitForIdle()
         model.send(.open)
         XCTAssertEqual(model.state.draft?.sessionID, session)
@@ -33,7 +33,7 @@ final class LatestNoteEditorTests: XCTestCase {
         XCTAssertFalse(model.isOpen)
         var expected = latest
         expected.body = "Corrected transcription"
-        XCTAssertEqual(store.stack(id: firstStack)?.notes, [expected, older])
+        XCTAssertEqual(store.stack(id: firstStack).notes, [expected, older])
         XCTAssertTrue(store.currentNotes.isEmpty)
     }
 
@@ -127,7 +127,7 @@ final class LatestNoteEditorTests: XCTestCase {
         blocked = nil
         model.send(.open)
         XCTAssertEqual(messages.last, "No notes to edit")
-        fixture.store.mutate(.switchStack(stackID: fixture.store.stacks[1].id))
+        fixture.store.mutate(.addNote(stackID: .two, note: Note(subject: .standalone, body: "Pending")))
         model.send(.open)
         XCTAssertEqual(messages.last, "Finish saving pending changes before editing a note.")
         XCTAssertFalse(model.isOpen)
@@ -223,7 +223,7 @@ final class LatestNoteEditorTests: XCTestCase {
     private func makeStore(notes: [Note] = [Note(subject: .standalone, body: "Original")]) async throws
         -> (store: StackStore, disk: EditorDisk) {
         let stacks = filled([Stack(notes: notes)])
-        let document = StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        let document = StackDocument(stacks: stacks)
         let disk = EditorDisk()
         let store = try await StackStore(persistence: StorePersistence(load: { document }, commit: { try await disk.commit($0) }))
         return (store, disk)
