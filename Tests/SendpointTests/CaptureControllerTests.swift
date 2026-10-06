@@ -274,7 +274,6 @@ final class CaptureControllerTests: XCTestCase {
         f.controller.chooseDestination(destination.id, context: context)
         f.controller.send(.toggleDestinations(context))
         f.controller.chooseDestination(destination.id, context: NoteCaptureContext(stackID: sourceID))
-        f.controller.chooseDestination(UUID(), context: context)
         f.controller.send(.dismiss)
         f.controller.chooseDestination(destination.id, context: context)
         await f.store.waitForIdle()

@@ -2,14 +2,14 @@ import Foundation
 
 public nonisolated struct LatestNoteDraft: Equatable, Sendable {
     public let sessionID: UUID
-    public let stackID: UUID
+    public let stackID: StackSlot
     public let stackName: String
     public let original: Note
     public var text: String
 
     public init(
         sessionID: UUID = UUID(),
-        stackID: UUID,
+        stackID: StackSlot,
         stackName: String,
         original: Note,
         text: String

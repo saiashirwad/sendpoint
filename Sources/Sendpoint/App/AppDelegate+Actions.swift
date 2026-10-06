@@ -98,7 +98,7 @@ extension AppDelegate {
         clearStack(stack.id)
     }
 
-    private func clearStack(_ stackID: UUID) {
+    private func clearStack(_ stackID: StackSlot) {
         enqueueMenuMutation(.clearStack(stackID: stackID))
     }
 

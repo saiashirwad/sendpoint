@@ -92,7 +92,7 @@ Selection works in most apps. Some terminal apps handle the mouse themselves and
 Everything stays on your Mac. The microphone is open only while you're recording. Transcription runs locally (Parakeet via Core ML). There are no analytics. Sendpoint goes online only to download the voice model once and to check for signed updates through Sparkle.
 
 ```
-~/Library/Application Support/Sendpoint/store.json                          notes
+~/Library/Application Support/Sendpoint/slots.json                          notes
 ~/Library/Application Support/Sendpoint/debug.log                           log
 ~/Library/Application Support/FluidAudio/Models/parakeet-unified-en-0.6b    voice model
 ~/Library/Preferences/app.sendpoint.plist                                   settings

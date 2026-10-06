@@ -9,11 +9,11 @@ public struct DiagnosticRecord: Codable, Equatable, Sendable {
     public let stage: Stage
     public let outcome: Outcome
     public let operationID: UUID?
-    public let stackID: UUID?
+    public let stackID: StackSlot?
     public let noteID: UUID?
 
     public init(_ stage: Stage, _ outcome: Outcome, operationID: UUID? = nil,
-                stackID: UUID? = nil, noteID: UUID? = nil) {
+                stackID: StackSlot? = nil, noteID: UUID? = nil) {
         self.stage = stage
         self.outcome = outcome
         self.operationID = operationID

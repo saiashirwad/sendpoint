@@ -1,15 +1,14 @@
 import Foundation
 
 public enum StackDocumentMutation: Equatable, Sendable {
-    case switchStack(stackID: UUID)
-    case addNote(stackID: UUID, note: Note)
-    case updateNoteBody(stackID: UUID, noteID: UUID, body: String, expected: Note? = nil)
-    case removeNote(stackID: UUID, noteID: UUID)
-
-    case moveNote(stackID: UUID, noteID: UUID, destinationIndex: Int)
-    case moveNoteToStack(noteID: UUID, from: UUID, to: UUID)
-    case clearStack(stackID: UUID)
-    case clearExportedNotes(stackID: UUID, notes: [Note])
+    case switchStack(stackID: StackSlot)
+    case addNote(stackID: StackSlot, note: Note)
+    case updateNoteBody(stackID: StackSlot, noteID: UUID, body: String, expected: Note? = nil)
+    case removeNote(stackID: StackSlot, noteID: UUID)
+    case moveNote(stackID: StackSlot, noteID: UUID, destinationIndex: Int)
+    case moveNoteToStack(noteID: UUID, from: StackSlot, to: StackSlot)
+    case clearStack(stackID: StackSlot)
+    case clearExportedNotes(stackID: StackSlot, notes: [Note])
     case undoClear
 }
 
@@ -19,110 +18,39 @@ public enum StackDocumentMutationResult: Equatable, Sendable {
     case rejected(String)
 }
 
-public struct StackDocumentValidationError: Error, Equatable, Sendable, CustomStringConvertible {
-    public let message: String
-
-    public init(_ message: String) {
-        self.message = message
-    }
-
-    public var description: String { message }
-}
-
 public enum StackDocumentMutations {
-    public static func validate(_ document: StackDocument) throws {
-        guard document.version == StackDocument.currentVersion else {
-            throw StackDocumentValidationError("unsupported document version: \(document.version)")
-        }
-        guard document.stacks.count == StackDocument.stackCount else {
-            throw StackDocumentValidationError("a document holds exactly \(StackDocument.stackCount) stacks")
-        }
-        guard Set(document.stacks.map(\.id)).count == document.stacks.count else {
-            throw StackDocumentValidationError("stack IDs must be unique")
-        }
-        guard document.stacks.contains(where: { $0.id == document.currentStackID }) else {
-            throw StackDocumentValidationError("currentStackID must identify a stack")
-        }
-
-        for stack in document.stacks {
-            guard Set(stack.notes.map(\.id)).count == stack.notes.count else {
-                throw StackDocumentValidationError("note IDs must be unique within a stack")
-            }
-        }
-
-        if let batch = document.lastCleared {
-            guard !batch.notes.isEmpty else {
-                throw StackDocumentValidationError("lastCleared must not be empty")
-            }
-            guard document.stacks.contains(where: { $0.id == batch.stackID }) else {
-                throw StackDocumentValidationError("lastCleared must identify a stack")
-            }
-            guard Set(batch.notes.map(\.id)).count == batch.notes.count else {
-                throw StackDocumentValidationError("lastCleared note IDs must be unique")
-            }
-        }
-    }
-
     public static func applying(
         _ mutation: StackDocumentMutation,
         to source: StackDocument
     ) -> StackDocumentMutationResult {
-        do {
-            try validate(source)
-        } catch {
-            return .rejected("The stack document is invalid: \(error)")
-        }
-
         var document = source
         switch mutation {
-        case let .switchStack(stackID):
-            guard stackIndex(stackID, in: document) != nil else {
-                return .rejected("The stack no longer exists.")
-            }
-            guard document.currentStackID != stackID else { return .noOp }
-            document.currentStackID = stackID
+        case let .switchStack(slot):
+            guard document.currentStackID != slot else { return .noOp }
+            document.currentStackID = slot
 
-        case let .addNote(stackID, note):
-            guard let stackIndex = stackIndex(stackID, in: document) else {
-                return .rejected("The target stack no longer exists.")
-            }
-            guard !document.stacks[stackIndex].notes.contains(where: { $0.id == note.id }) else {
+        case let .addNote(slot, note):
+            guard !document[slot].contains(where: { $0.id == note.id }) else {
                 return .rejected("The note already exists.")
             }
-            document.stacks[stackIndex].notes.append(note)
+            document[slot].append(note)
 
-        case let .updateNoteBody(stackID, noteID, note, expected):
-            guard let stackIndex = stackIndex(stackID, in: document),
-                  let noteIndex = document.stacks[stackIndex].notes.firstIndex(where: {
-                      $0.id == noteID
-                  })
-            else {
+        case let .updateNoteBody(slot, noteID, body, expected):
+            guard let index = document[slot].firstIndex(where: { $0.id == noteID }) else {
                 return expected == nil ? .noOp : .rejected("The note was moved or deleted. Your draft has been kept.")
             }
-            if let expected, document.stacks[stackIndex].notes[noteIndex] != expected {
+            if let expected, document[slot][index] != expected {
                 return .rejected("The note changed elsewhere. Your draft has been kept.")
             }
-            guard document.stacks[stackIndex].notes[noteIndex].body != note else {
-                return .noOp
-            }
-            document.stacks[stackIndex].notes[noteIndex].body = note
+            guard document[slot][index].body != body else { return .noOp }
+            document[slot][index].body = body
 
-        case let .removeNote(stackID, noteID):
-            guard let stackIndex = stackIndex(stackID, in: document) else {
-                return .rejected("The target stack no longer exists.")
-            }
-            guard let noteIndex = document.stacks[stackIndex].notes.firstIndex(where: {
-                $0.id == noteID
-            }) else {
-                return .noOp
-            }
-            document.stacks[stackIndex].notes.remove(at: noteIndex)
+        case let .removeNote(slot, noteID):
+            guard let index = document[slot].firstIndex(where: { $0.id == noteID }) else { return .noOp }
+            document[slot].remove(at: index)
 
-        case let .moveNote(stackID, noteID, destinationIndex):
-            guard let stackIndex = stackIndex(stackID, in: document) else {
-                return .rejected("The target stack no longer exists.")
-            }
-            var notes = document.stacks[stackIndex].notes
+        case let .moveNote(slot, noteID, destinationIndex):
+            var notes = document[slot]
             guard let sourceIndex = notes.firstIndex(where: { $0.id == noteID }) else {
                 return .rejected("The note no longer exists.")
             }
@@ -132,65 +60,41 @@ public enum StackDocumentMutations {
             guard sourceIndex != destinationIndex else { return .noOp }
             let note = notes.remove(at: sourceIndex)
             notes.insert(note, at: destinationIndex)
-            document.stacks[stackIndex].notes = notes
+            document[slot] = notes
 
         case let .moveNoteToStack(noteID, from, to):
-            guard let sourceIndex = stackIndex(from, in: document),
-                  let destinationIndex = stackIndex(to, in: document)
-            else { return .rejected("The stack no longer exists.") }
             guard from != to else { return .noOp }
-            guard let noteIndex = document.stacks[sourceIndex].notes.firstIndex(where: { $0.id == noteID }) else {
+            guard let index = document[from].firstIndex(where: { $0.id == noteID }) else {
                 return .rejected("The note no longer exists.")
             }
-            guard !document.stacks[destinationIndex].notes.contains(where: { $0.id == noteID }) else {
+            guard !document[to].contains(where: { $0.id == noteID }) else {
                 return .rejected("The note already exists.")
             }
-            let note = document.stacks[sourceIndex].notes.remove(at: noteIndex)
-            document.stacks[destinationIndex].notes.append(note)
+            let note = document[from].remove(at: index)
+            document[to].append(note)
             document.currentStackID = to
 
-        case let .clearStack(stackID):
-            guard let stackIndex = stackIndex(stackID, in: document) else {
-                return .rejected("The target stack no longer exists.")
-            }
-            let notes = document.stacks[stackIndex].notes
+        case let .clearStack(slot):
+            let notes = document[slot]
             guard !notes.isEmpty else { return .noOp }
-            document.lastCleared = ClearedBatch(stackID: stackID, notes: notes)
-            document.stacks[stackIndex].notes.removeAll()
+            document.lastCleared = ClearedBatch(stackID: slot, notes: notes)
+            document[slot].removeAll()
 
-        case let .clearExportedNotes(stackID, exported):
-            guard let index = stackIndex(stackID, in: document) else {
-                return .rejected("The target stack no longer exists.")
-            }
+        case let .clearExportedNotes(slot, exported):
             let exportedNotes = Set(exported)
-            let removed = document.stacks[index].notes.filter { exportedNotes.contains($0) }
+            let removed = document[slot].filter { exportedNotes.contains($0) }
             guard !removed.isEmpty else { return .noOp }
             let ids = Set(removed.map(\.id))
-            document.stacks[index].notes.removeAll { ids.contains($0.id) }
-            document.lastCleared = ClearedBatch(stackID: stackID, notes: removed)
+            document[slot].removeAll { ids.contains($0.id) }
+            document.lastCleared = ClearedBatch(stackID: slot, notes: removed)
 
         case .undoClear:
             guard let batch = document.lastCleared else { return .noOp }
-            guard let stackIndex = stackIndex(batch.stackID, in: document) else {
-                return .rejected("The cleared stack no longer exists.")
-            }
             let clearedIDs = Set(batch.notes.map(\.id))
-            let entriesAddedAfterClear = document.stacks[stackIndex].notes.filter {
-                !clearedIDs.contains($0.id)
-            }
-            document.stacks[stackIndex].notes = batch.notes + entriesAddedAfterClear
+            let laterNotes = document[batch.stackID].filter { !clearedIDs.contains($0.id) }
+            document[batch.stackID] = batch.notes + laterNotes
             document.lastCleared = nil
         }
-
-        do {
-            try validate(document)
-        } catch {
-            return .rejected("The mutation would create an invalid stack document: \(error)")
-        }
         return .applied(document)
-    }
-
-    private static func stackIndex(_ id: UUID, in document: StackDocument) -> Int? {
-        document.stacks.firstIndex(where: { $0.id == id })
     }
 }

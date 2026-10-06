@@ -2,13 +2,13 @@ import Foundation
 
 public nonisolated enum StackSelectEvent: Equatable {
     case select(Int)
-    case switchFailed(UUID)
+    case switchFailed(StackSlot)
     case readoutElapsed(generation: Int)
     case teardown
 }
 
 public nonisolated enum StackSelectEffect: Equatable {
-    case switchTo(UUID)
+    case switchTo(StackSlot)
     case showReadout(number: Int)
     case hideReadout
     case startTimer(generation: Int)
@@ -18,7 +18,7 @@ public nonisolated enum StackSelectEffect: Equatable {
 public nonisolated struct StackSelectMachine: Equatable {
     public enum State: Equatable {
         case idle
-        case showing(UUID, generation: Int)
+        case showing(StackSlot, generation: Int)
         case tornDown
     }
 
@@ -32,7 +32,7 @@ public nonisolated struct StackSelectMachine: Equatable {
     }
 
     public mutating func update(
-        _ event: StackSelectEvent, stacks: [UUID], showsReadout: Bool
+        _ event: StackSelectEvent, stacks: [StackSlot], showsReadout: Bool
     ) -> [StackSelectEffect] {
         guard state != .tornDown else { return [] }
         switch event {

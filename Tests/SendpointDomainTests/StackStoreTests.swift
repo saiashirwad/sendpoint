@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class StackStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+    private let stackID = StackSlot.one
 
     func testLoadsExistingDocumentWithoutReplacingOrCommittingIt() async throws {
         let original = document()
@@ -111,14 +111,14 @@ final class StackStoreTests: XCTestCase {
         let kept = makeNote(body: "kept")
 
         store.mutate(
-            .addNote(stackID: UUID(), note: makeNote(body: "nowhere")),
+            .moveNote(stackID: stackID, noteID: UUID(), destinationIndex: 0),
             outcome: { outcomes.append($0) }
         )
         store.mutate(.addNote(stackID: stackID, note: kept), outcome: { outcomes.append($0) })
         await store.waitForIdle()
 
         XCTAssertEqual(outcomes, [
-            .rejected("The target stack no longer exists."),
+            .rejected("The note no longer exists."),
             .committed,
         ])
         XCTAssertEqual(store.currentNotes, [kept])

@@ -112,8 +112,8 @@ enum CaptureDestinationPanelLayout {
 private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
     @Binding var isPresented: Bool
     let rows: [StackItemFacts]
-    let selectedID: UUID
-    let onSelect: (UUID) -> Void
+    let selectedID: StackSlot
+    let onSelect: (StackSlot) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -149,8 +149,8 @@ private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
             anchor: NSView,
             isPresented: Bool,
             rows: [StackItemFacts],
-            selectedID: UUID,
-            onSelect: @escaping (UUID) -> Void,
+            selectedID: StackSlot,
+            onSelect: @escaping (StackSlot) -> Void,
             onDismiss: @escaping () -> Void
         ) {
             guard !tornDown else { return }
@@ -274,8 +274,8 @@ private struct CaptureDestinationPanelAnchor: NSViewRepresentable {
 
 struct CaptureDestinationPanelSurface: View {
     let rows: [StackItemFacts]
-    let selectedID: UUID
-    let onSelect: (UUID) -> Void
+    let selectedID: StackSlot
+    let onSelect: (StackSlot) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -296,8 +296,8 @@ struct CaptureDestinationPanelSurface: View {
 
 struct CaptureDestinationList: View {
     let rows: [StackItemFacts]
-    let selectedID: UUID
-    let onSelect: (UUID) -> Void
+    let selectedID: StackSlot
+    let onSelect: (StackSlot) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {

@@ -42,7 +42,7 @@ struct SettingsStacksPane: View {
 private struct StackShortcutLabel: View {
     let title: String
     let stack: StackItemFacts?
-    let onSelect: (UUID) -> Void
+    let onSelect: (StackSlot) -> Void
 
     @Environment(\.colorScheme) private var scheme
 

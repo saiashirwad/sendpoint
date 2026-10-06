@@ -20,6 +20,8 @@ _Avoid_: Active stack, shown stack (as separate product concepts)
 
 **Destination**: The stack a note will be saved to. An existing-note edit belongs to the original note even if the current stack changes.
 
+**Stack slot**: One of five permanent destinations, represented by `StackSlot.one` through `.five`. A slot is its identity and number; only notes have UUID identities. `slots.json` stores the five note arrays and last cleared batch in a versioned disk envelope. Incompatible old `store.json` data remains untouched; there is no migration or import path.
+
 **Cleared batch**: The most recently removed group of notes, retained for Undo Clear. It belongs to its original stack.
 
 ## Capture and dictation

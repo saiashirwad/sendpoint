@@ -10,7 +10,7 @@ final class DiagnosticTests: XCTestCase {
         let journal = DiagnosticJournal(file: file, maxBytes: 512)
         let id = UUID()
         for _ in 0..<100 {
-            journal.record(DiagnosticRecord(.save, .succeeded, operationID: id, stackID: id, noteID: id))
+            journal.record(DiagnosticRecord(.save, .succeeded, operationID: id, stackID: .one, noteID: id))
         }
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertEqual(Set(names), ["diagnostics.jsonl", "diagnostics.jsonl.1"])

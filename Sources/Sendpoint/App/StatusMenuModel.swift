@@ -9,7 +9,7 @@ enum StatusMenuAction: Hashable {
     case selectStack(Int)
     case selectTemplate(UUID)
     case copyMarkdown
-    case clearStack(UUID)
+    case clearStack(StackSlot)
     case undoClear
     case retryPendingMutations
     case checkForUpdates

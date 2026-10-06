@@ -18,8 +18,8 @@ final class StatusMenuModelTests: XCTestCase {
             try shortcuts.setShortcut(combo, for: slot)
         }
     }
-    private let firstStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-    private let secondStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+    private let firstStackID = StackSlot.one
+    private let secondStackID = StackSlot.two
 
     func testDisabledCopyTitleExplainsStoreStatus() {
         withSettings { settings in
@@ -188,11 +188,11 @@ final class StatusMenuModelTests: XCTestCase {
         )
     }
 
-    private func facts(stacks: [Stack], current: UUID, lastCleared: ClearedBatch? = nil) -> StackUIFacts {
+    private func facts(stacks: [Stack], current: StackSlot, lastCleared: ClearedBatch? = nil) -> StackUIFacts {
         StackUIFacts(stacks: filled(stacks), currentStackID: current, lastCleared: lastCleared)
     }
 
-    private func stack(id: UUID, noteCount: Int) -> Stack {
+    private func stack(id: StackSlot, noteCount: Int) -> Stack {
         Stack(id: id, notes: (0..<noteCount).map { _ in makeNote() })
     }
 

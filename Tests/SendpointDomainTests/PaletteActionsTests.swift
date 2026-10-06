@@ -3,8 +3,8 @@ import XCTest
 import SendpointDomain
 
 final class PaletteActionsTests: XCTestCase {
-    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-    private let otherStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+    private let stackID = StackSlot.one
+    private let otherStackID = StackSlot.two
     private let firstNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
     private let secondNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
     private let thirdNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!

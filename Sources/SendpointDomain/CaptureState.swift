@@ -42,10 +42,10 @@ public nonisolated struct DictationTarget: Equatable, Sendable {
 
 public nonisolated struct CaptureSaveRequest: Equatable {
     public let target: NoteCaptureTarget
-    public let destinationStackID: UUID
+    public let destinationStackID: StackSlot
     public let note: Note
 
-    public init(target: NoteCaptureTarget, destinationStackID: UUID, note: Note) {
+    public init(target: NoteCaptureTarget, destinationStackID: StackSlot, note: Note) {
         self.target = target
         self.destinationStackID = destinationStackID
         self.note = note
@@ -75,7 +75,7 @@ public nonisolated struct CaptureSession: Equatable {
     public var target: NoteCaptureTarget?
     public var phase: CapturePhase
     public var liveTranscript: String? = nil
-    public var destinationStackID: UUID
+    public var destinationStackID: StackSlot
     public var destinationPicker: CaptureDestinationPicker = .closed
     public var saveAwaitsSelection = false
     public var dictationTarget: DictationTarget? = nil
@@ -129,8 +129,8 @@ public nonisolated enum CaptureEvent {
     case changeNote(String)
     case toggleDestinations(NoteCaptureContext)
     case dismissDestinations(NoteCaptureContext)
-    case chooseDestination(NoteCaptureContext, UUID)
-    case stackSelected(UUID)
+    case chooseDestination(NoteCaptureContext, StackSlot)
+    case stackSelected(StackSlot)
     case save
     case finishVoice
     case cancelVoice
@@ -153,7 +153,7 @@ public nonisolated enum CaptureEffect: Equatable {
     case transcribe(NoteCaptureContext)
     case insert(NoteCaptureContext, String, DictationTarget)
     case commit(CaptureSaveRequest)
-    case switchStack(UUID)
+    case switchStack(StackSlot)
     case retry
     case show(CaptureSurface)
     case focusEditor
@@ -459,11 +459,11 @@ public nonisolated struct CaptureState: Equatable {
 }
 
 public nonisolated struct NoteCaptureContext: Equatable {
-    public let stackID: UUID
+    public let stackID: StackSlot
     public let noteID: UUID
     public let createdAt: Date
 
-    public init(stackID: UUID, noteID: UUID = UUID(), createdAt: Date = Date()) {
+    public init(stackID: StackSlot, noteID: UUID = UUID(), createdAt: Date = Date()) {
         self.stackID = stackID
         self.noteID = noteID
         self.createdAt = createdAt

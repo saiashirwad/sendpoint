@@ -3,7 +3,7 @@ import XCTest
 import SendpointDomain
 
 final class StackSelectMachineTests: XCTestCase {
-    private let stacks = (0..<5).map { _ in UUID() }
+    private let stacks = StackSlot.allCases
 
     func testSelectingAnotherStackSwitchesAndShowsItsReadout() {
         var machine = StackSelectMachine()

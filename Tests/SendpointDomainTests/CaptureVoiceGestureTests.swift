@@ -3,11 +3,11 @@ import XCTest
 import SendpointDomain
 
 final class CaptureVoiceGestureTests: XCTestCase {
-    private let context = NoteCaptureContext(stackID: UUID())
+    private let context = NoteCaptureContext(stackID: .one)
     private let selection = CapturedSelection(text: "")
 
     func testHoldReleaseClosesThePickerAndTranscribesToTheLastExplicitDestination() {
-        let destination = UUID()
+        let destination = StackSlot.two
         var state = recording(mode: .hold)
         _ = state.update(.toggleDestinations(context))
         _ = state.update(.chooseDestination(context, destination))
@@ -29,7 +29,7 @@ final class CaptureVoiceGestureTests: XCTestCase {
     }
 
     func testTapStopShortcutStillWorksWithTheDestinationPickerOpen() {
-        let destination = UUID()
+        let destination = StackSlot.two
         var state = recording(mode: .tap)
         XCTAssertEqual(state.update(.voiceReleased), [], "the first release keeps tap mode recording")
         _ = state.update(.toggleDestinations(context))
@@ -67,7 +67,7 @@ final class CaptureVoiceGestureTests: XCTestCase {
         XCTAssertEqual(state.update(.stackSelected(context.stackID)), [])
         XCTAssertEqual(state.session?.destinationPicker, .open)
 
-        let other = UUID()
+        let other = StackSlot.two
         XCTAssertEqual(state.update(.stackSelected(other)), [])
         XCTAssertEqual(state.session?.destinationStackID, other)
         XCTAssertEqual(state.session?.destinationPicker, .closed)
@@ -242,7 +242,7 @@ final class CaptureVoiceGestureTests: XCTestCase {
             [.insert(context, "hello there", target)])
         XCTAssertEqual(state.session?.phase, .inserting)
         XCTAssertEqual(state.update(.voiceEscape), [], "a paste in flight cannot be cancelled")
-        XCTAssertEqual(state.update(.inserted(NoteCaptureContext(stackID: UUID()), true)), [], "stale")
+        XCTAssertEqual(state.update(.inserted(NoteCaptureContext(stackID: .two), true)), [], "stale")
         XCTAssertEqual(state.update(.inserted(context, true)), [.close])
         XCTAssertEqual(state.lifecycle, .idle)
         XCTAssertEqual(state.voice, VoiceGesture())

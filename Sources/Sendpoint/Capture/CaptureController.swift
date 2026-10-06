@@ -77,7 +77,7 @@ final class CaptureController {
         return StackUIFacts(store: store).stacks
     }
 
-    func chooseDestination(_ id: UUID, context: NoteCaptureContext) {
+    func chooseDestination(_ id: StackSlot, context: NoteCaptureContext) {
         guard state.session?.context == context,
               destinationStacks.contains(where: { $0.id == id }) else { return }
         send(.chooseDestination(context, id))

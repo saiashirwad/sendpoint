@@ -236,6 +236,6 @@ private actor EditorDisk {
     func setFail(_ fail: Bool) { self.fail = fail }
     func commit(_ document: StackDocument) throws {
         attempts += 1
-        if fail { throw StorePersistenceError.invalidDocument("The disk is full.") }
+        if fail { throw NSError(domain: "EditorDisk", code: 1, userInfo: [NSLocalizedDescriptionKey: "The disk is full."]) }
     }
 }

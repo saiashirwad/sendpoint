@@ -63,7 +63,7 @@ final class AppCompositionTests: XCTestCase {
         app.bootstrapStore()
         let failed = try XCTUnwrap(app.bootstrapTask)
         await loader.waitForCalls(1)
-        loader.fail(0, error: StorePersistenceError.invalidDocument("Bootstrap failed"))
+        loader.fail(0, error: NSError(domain: "StoreLoader", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bootstrap failed"]))
         await failed.value
         guard case let .unavailable(message) = app.storeState else { return XCTFail("Expected unavailable store") }
         XCTAssertTrue(message.contains("Bootstrap failed"))
@@ -167,7 +167,7 @@ final class AppCompositionTests: XCTestCase {
         let store = try await makeStore()
         loader.succeed(1, store: store)
         await current.value
-        loader.fail(0, error: StorePersistenceError.invalidDocument("Stale failure"))
+        loader.fail(0, error: NSError(domain: "StoreLoader", code: 1, userInfo: [NSLocalizedDescriptionKey: "Stale failure"]))
         await old.value
         XCTAssertTrue(app.store === store)
         XCTAssertEqual(app.statusMenuStoreStatus, .available)

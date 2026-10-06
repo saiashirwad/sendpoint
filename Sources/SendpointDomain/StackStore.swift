@@ -53,11 +53,11 @@ public final class StackStore {
         document.stacks
     }
 
-    public var currentStackID: UUID {
+    public var currentStackID: StackSlot {
         document.currentStackID
     }
 
-    public var selectedStackID: UUID {
+    public var selectedStackID: StackSlot {
         for queued in queuedMutations.reversed() {
             switch queued.mutation {
             case let .switchStack(id), let .moveNoteToStack(_, _, id): return id
@@ -68,10 +68,10 @@ public final class StackStore {
     }
 
     public var currentStack: Stack {
-        stacks.stack(id: document.currentStackID)!
+        Stack(id: document.currentStackID, notes: document[document.currentStackID])
     }
 
-    public func stack(id: UUID) -> Stack? {
+    public func stack(id: StackSlot) -> Stack? {
         stacks.stack(id: id)
     }
 
@@ -97,11 +97,9 @@ public final class StackStore {
         try Task.checkCancellation()
         let initialDocument: StackDocument
         if let loaded {
-            try StackDocumentMutations.validate(loaded)
             initialDocument = loaded
         } else {
             let candidate = StackDocument.empty()
-            try StackDocumentMutations.validate(candidate)
             try Task.checkCancellation()
             try await persistence.commit(candidate)
             try Task.checkCancellation()

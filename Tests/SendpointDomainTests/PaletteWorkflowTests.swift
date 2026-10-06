@@ -4,8 +4,8 @@ import SendpointDomain
 
 @MainActor
 final class PaletteWorkflowTests: XCTestCase {
-    private let firstStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-    private let secondStackID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+    private let firstStackID = StackSlot.one
+    private let secondStackID = StackSlot.two
     private let firstNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000101")!
     private let secondNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000102")!
     private let thirdNoteID = UUID(uuidString: "00000000-0000-0000-0000-000000000103")!
@@ -511,14 +511,14 @@ final class PaletteWorkflowTests: XCTestCase {
         Harness(state: PaletteWorkflow(), context: makeContext(stacks: stacks))
     }
 
-    private let padding = (0..<StackDocument.stackCount).map { _ in Stack() }
+    private let padding = StackSlot.allCases.map { Stack(id: $0) }
 
     private func paddedStacks(_ leading: [Stack]) -> [Stack] {
         leading + padding.dropFirst(leading.count)
     }
 
     private func makeContext(
-        stacks: [Stack], currentStackID: UUID? = nil, lastCleared: ClearedBatch? = nil,
+        stacks: [Stack], currentStackID: StackSlot? = nil, lastCleared: ClearedBatch? = nil,
         moveShortcuts: [Int: String] = [:]
     ) -> PaletteContext {
         PaletteContext(
@@ -561,7 +561,7 @@ private struct Harness {
         effects.compactMap { if case let .clearFlashLater(generation) = $0 { return generation } else { return nil } }
     }
 
-    var copiedStackID: UUID? {
+    var copiedStackID: StackSlot? {
         for effect in effects {
             if case let .copyStack(id) = effect { return id }
         }

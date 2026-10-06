@@ -4,7 +4,7 @@ import SendpointDomain
 
 final class LatestNoteStateTests: XCTestCase {
     private let session = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    private let stackID = StackSlot.one
 
     private var draft: LatestNoteDraft {
         LatestNoteDraft(

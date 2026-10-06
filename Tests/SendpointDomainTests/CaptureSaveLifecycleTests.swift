@@ -4,14 +4,14 @@ import SendpointDomain
 
 final class CaptureSaveLifecycleTests: XCTestCase {
     private let context = NoteCaptureContext(
-        stackID: UUID(), createdAt: Date(timeIntervalSince1970: 123)
+        stackID: .one, createdAt: Date(timeIntervalSince1970: 123)
     )
     private let selection = CapturedSelection(
         text: "Selection", screenRect: nil
     )
 
     func testTypedCaptureCommitsToTheExplicitDestinationWithoutChangingItsSourceOrDraft() throws {
-        let destination = UUID()
+        let destination = StackSlot.two
         var state = try editing(body: "Keep this draft")
         let target = try XCTUnwrap(state.session?.target)
 
@@ -38,7 +38,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
     }
 
     func testQueuedTypedSaveKeepsTheLastExplicitDestinationUntilThePassageArrives() throws {
-        let destination = UUID()
+        let destination = StackSlot.two
         var state = CaptureState()
         _ = state.update(.begin(.text, context))
         _ = state.update(.selectionPending(context))
@@ -102,7 +102,7 @@ final class CaptureSaveLifecycleTests: XCTestCase {
         var (state, request) = try saving()
         let otherNote = Note(subject: .standalone, body: "Other")
         for stale in [
-            CaptureSaveRequest(target: request.target, destinationStackID: UUID(), note: request.note),
+            CaptureSaveRequest(target: request.target, destinationStackID: .five, note: request.note),
             CaptureSaveRequest(
                 target: request.target,
                 destinationStackID: request.destinationStackID,

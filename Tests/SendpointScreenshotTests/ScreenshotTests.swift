@@ -506,5 +506,7 @@ private func note(subject: Subject, body: String) -> Note {
 }
 
 private func filled(_ leading: [Stack]) -> [Stack] {
-    leading + (leading.count..<StackDocument.stackCount).map { _ in Stack() }
+    StackSlot.allCases.enumerated().map { index, slot in
+        Stack(id: slot, notes: index < leading.count ? leading[index].notes : [])
+    }
 }

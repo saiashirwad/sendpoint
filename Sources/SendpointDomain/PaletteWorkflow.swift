@@ -5,11 +5,11 @@ public enum PaletteField: Hashable {
 }
 
 public struct PaletteEdit: Equatable {
-    public let stackID: UUID
+    public let stackID: StackSlot
     public let noteID: UUID
     public var text: String
 
-    public init(stackID: UUID, noteID: UUID, text: String) {
+    public init(stackID: StackSlot, noteID: UUID, text: String) {
         self.stackID = stackID
         self.noteID = noteID
         self.text = text
@@ -32,7 +32,7 @@ public enum PaletteEvent {
 
 public struct PalettePending {
     let id: UUID
-    let stackID: UUID
+    let stackID: StackSlot
     let draft: PaletteEdit?
     var continuation: PaletteEvent?
 }
@@ -49,7 +49,7 @@ public struct PaletteWorkflow {
     public enum Lifecycle { case closed, open, tornDown }
     public var lifecycle: Lifecycle = .closed
     public var query = ""
-    public var shownStackID: UUID?
+    public var shownStackID: StackSlot?
     public var noteState = NoteHighlightState()
     public var interaction: PaletteInteraction = .browsing
     public var overlayQuery = ""
@@ -88,7 +88,7 @@ public struct PaletteWorkflow {
 
 public struct PaletteContext {
     public let stacks: [Stack]
-    public let currentStackID: UUID
+    public let currentStackID: StackSlot
     public let lastCleared: ClearedBatch?
     public let templates: [Template]
     public let activeTemplate: Template
@@ -96,7 +96,7 @@ public struct PaletteContext {
 
     public init(
         stacks: [Stack],
-        currentStackID: UUID,
+        currentStackID: StackSlot,
         lastCleared: ClearedBatch?,
         templates: [Template],
         activeTemplate: Template,
@@ -114,7 +114,7 @@ public struct PaletteContext {
 public enum PaletteEffect {
     case mutate(UUID, StackDocumentMutation)
     case retryPendingStoreChanges
-    case copyStack(UUID)
+    case copyStack(StackSlot)
     case copyNote(Note)
     case selectTemplate(UUID)
     case clearFlashLater(Int)

@@ -4,13 +4,13 @@ import XCTest
 
 final class StorePersistenceTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let stackID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+    private let stackID = StackSlot.one
 
     func testLiveRoundTripUsesVersionedStoreJSON() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let persistence = StorePersistence.live(directory: directory)
-        let second = Stack(id: UUID(uuidString: "00000000-0000-0000-0000-000000000020")!)
+        let second = Stack(id: .two)
         let expected = StackDocument(
             stacks: filled([Stack(id: stackID), second]),
             currentStackID: second.id
@@ -32,7 +32,7 @@ final class StorePersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(StorePersistence.fileName)
-        try Data(#"{"version":\#(StackDocument.currentVersion)}"#.utf8).write(to: file)
+        try Data(#"{"version":\#(StorePersistence.currentVersion)}"#.utf8).write(to: file)
         let fixedNow = now
         let persistence = StorePersistence.live(directory: directory, now: { fixedNow })
 
@@ -44,7 +44,7 @@ final class StorePersistenceTests: XCTestCase {
     }
 
     func testUnsupportedVersionsAreRejectedWithoutQuarantine() async throws {
-        for version in [StackDocument.currentVersion - 1, StackDocument.currentVersion + 1] {
+        for version in [StorePersistence.currentVersion - 1, StorePersistence.currentVersion + 1] {
             let directory = temporaryDirectory()
             defer { try? FileManager.default.removeItem(at: directory) }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -64,28 +64,21 @@ final class StorePersistenceTests: XCTestCase {
         }
     }
 
-    func testInvalidCommitDoesNotReplaceLastCommittedDocument() async throws {
+    func testOldStoreIsLeftUntouchedByFreshSlotStorage() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let persistence = StorePersistence.live(directory: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let oldFile = directory.appendingPathComponent("store.json")
+        let oldData = Data("old user notes".utf8)
+        try oldData.write(to: oldFile)
+        let missing = try await persistence.load()
+        XCTAssertNil(missing)
         let original = document()
         try await persistence.commit(original)
-        let invalid = StackDocument(
-            stacks: original.stacks,
-            currentStackID: UUID()
-        )
-
-        do {
-            try await persistence.commit(invalid)
-            XCTFail("Expected invalid document")
-        } catch let error as StorePersistenceError {
-            guard case .invalidDocument = error else {
-                return XCTFail("Expected invalid document, got \(error)")
-            }
-        }
-
         let loaded = try await persistence.load()
         XCTAssertEqual(loaded, original)
+        XCTAssertEqual(try Data(contentsOf: oldFile), oldData)
     }
 
     func testMissingFileLoadsNilWithoutQuarantine() async throws {
@@ -151,11 +144,7 @@ final class StorePersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let file = directory.appendingPathComponent(StorePersistence.fileName)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let invalid = try encoder.encode(
-            StackDocument(stacks: [], currentStackID: UUID())
-        )
+        let invalid = Data(#"{"version":1,"document":{"one":[],"two":[],"three":[],"four":[]}}"#.utf8)
         try invalid.write(to: file)
         let fixedNow = now
         let persistence = StorePersistence.live(directory: directory, now: { fixedNow })

@@ -51,6 +51,6 @@ private actor PaletteRetryDisk {
 
     func commit(_ document: StackDocument) throws {
         attempts += 1
-        if attempts == 1 { throw StorePersistenceError.invalidDocument("disk full") }
+        if attempts == 1 { throw StorePersistenceError.unavailable }
     }
 }

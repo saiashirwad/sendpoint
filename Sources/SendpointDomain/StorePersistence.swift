@@ -2,15 +2,12 @@ import Foundation
 
 public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
     case unsupportedVersion(Int)
-    case invalidDocument(String)
     case unavailable
 
     public var errorDescription: String? {
         switch self {
         case .unsupportedVersion:
             "This notes file uses an unsupported format."
-        case let .invalidDocument(message):
-            message
         case .unavailable:
             "Notes storage is unavailable."
         }
@@ -18,7 +15,8 @@ public enum StorePersistenceError: Error, Equatable, LocalizedError, Sendable {
 }
 
 public struct StorePersistence: Sendable {
-    public static let fileName = "store.json"
+    public static let fileName = "slots.json"
+    public static let currentVersion = 1
 
     private let loadOperation: @Sendable () async throws -> StackDocument?
     private let commitOperation: @Sendable (StackDocument) async throws -> Void
@@ -62,6 +60,11 @@ public struct StorePersistence: Sendable {
 }
 
 private actor AtomicJSONStore {
+    private struct DiskEnvelope: Codable {
+        let version: Int
+        let document: StackDocument
+    }
+
     private struct VersionEnvelope: Decodable {
         var version: Int
     }
@@ -120,14 +123,13 @@ private actor AtomicJSONStore {
             try quarantine(using: fileManager)
             return nil
         }
-        guard version == StackDocument.currentVersion else {
+        guard version == StorePersistence.currentVersion else {
             diagnostics(DiagnosticRecord(.load, .unsupported))
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
         do {
-            let document = try decoder.decode(StackDocument.self, from: data)
-            try StackDocumentMutations.validate(document)
+            let document = try decoder.decode(DiskEnvelope.self, from: data).document
             diagnostics(DiagnosticRecord(.load, .succeeded))
             return document
         } catch {
@@ -137,16 +139,7 @@ private actor AtomicJSONStore {
     }
 
     func commit(_ document: StackDocument) throws {
-        guard document.version == StackDocument.currentVersion else {
-            throw StorePersistenceError.unsupportedVersion(document.version)
-        }
-        do {
-            try StackDocumentMutations.validate(document)
-        } catch let error as StackDocumentValidationError {
-            throw StorePersistenceError.invalidDocument(error.message)
-        }
-
-        let data = try encoder.encode(document)
+        let data = try encoder.encode(DiskEnvelope(version: StorePersistence.currentVersion, document: document))
         let fileManager = FileManager.default
         try fileManager.createDirectory(
             at: directory,

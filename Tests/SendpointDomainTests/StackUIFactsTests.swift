@@ -3,8 +3,8 @@ import XCTest
 import SendpointDomain
 
 final class StackUITests: XCTestCase {
-    private let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-    private let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+    private let firstID = StackSlot.one
+    private let secondID = StackSlot.two
 
     func testStacksAreKnownByNumberWithTheirCountAndAge() {
         let early = Note(subject: .standalone, body: "Early", createdAt: Date(timeIntervalSince1970: 100))

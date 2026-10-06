@@ -4,8 +4,8 @@ import XCTest
 
 final class StackDocumentMutationTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
-    private let firstID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
-    private let secondID = UUID(uuidString: "00000000-0000-0000-0000-000000000020")!
+    private let firstID = StackSlot.one
+    private let secondID = StackSlot.two
 
     func testSwitchMovesTheCurrentStackAndRejectsUnknownStacks() {
         let initial = StackDocument(
@@ -17,10 +17,6 @@ final class StackDocumentMutationTests: XCTestCase {
         XCTAssertEqual(switched.currentStackID, secondID)
         XCTAssertEqual(switched.stacks, initial.stacks)
         XCTAssertEqual(StackDocumentMutations.applying(.switchStack(stackID: secondID), to: switched), .noOp)
-        XCTAssertEqual(
-            StackDocumentMutations.applying(.switchStack(stackID: UUID()), to: switched),
-            .rejected("The stack no longer exists.")
-        )
     }
 
     func testStacksAreNumberedByPlace() {
@@ -30,7 +26,6 @@ final class StackDocumentMutationTests: XCTestCase {
         XCTAssertEqual(stacks.stack(number: 3), stacks[2])
         XCTAssertNil(stacks.stack(number: 0))
         XCTAssertNil(stacks.stack(number: 6))
-        XCTAssertNil(stacks.number(of: UUID()))
     }
 
     func testStartedAtIsTheEarliestNote() {
@@ -122,10 +117,6 @@ final class StackDocumentMutationTests: XCTestCase {
             StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: secondID), to: result),
             .rejected("The note no longer exists."),
             "a repeated move finds the note already gone"
-        )
-        XCTAssertEqual(
-            StackDocumentMutations.applying(.moveNoteToStack(noteID: moved.id, from: firstID, to: UUID()), to: initial),
-            .rejected("The stack no longer exists.")
         )
     }
 
@@ -230,58 +221,11 @@ final class StackDocumentMutationTests: XCTestCase {
         )
     }
 
-    func testValidationRejectsDuplicateStackNoteAndClearedBatchIDs() {
-        let one = makeNote(id: UUID(), body: "one")
-        let duplicateStackIDs = StackDocument(
-            stacks: filled([Stack(id: firstID), Stack(id: firstID)]),
-            currentStackID: firstID
-        )
-        XCTAssertThrowsError(try StackDocumentMutations.validate(duplicateStackIDs)) {
-            XCTAssertEqual(
-                ($0 as? StackDocumentValidationError)?.message,
-                "stack IDs must be unique"
-            )
-        }
-
-        let duplicateNoteIDs = StackDocument(
-            stacks: filled([Stack(id: firstID, notes: [one, one])]),
-            currentStackID: firstID
-        )
-        XCTAssertThrowsError(try StackDocumentMutations.validate(duplicateNoteIDs)) {
-            XCTAssertEqual(
-                ($0 as? StackDocumentValidationError)?.message,
-                "note IDs must be unique within a stack"
-            )
-        }
-
-        let duplicateClearedIDs = StackDocument(
-            stacks: filled([Stack(id: firstID)]),
-            currentStackID: firstID,
-            lastCleared: ClearedBatch(stackID: firstID, notes: [one, one])
-        )
-        XCTAssertThrowsError(try StackDocumentMutations.validate(duplicateClearedIDs)) {
-            XCTAssertEqual(
-                ($0 as? StackDocumentValidationError)?.message,
-                "lastCleared note IDs must be unique"
-            )
-        }
-    }
-
-    func testValidationRejectsInvalidCurrentStackAndWrongStackCounts() {
-        XCTAssertThrowsError(
-            try StackDocumentMutations.validate(
-                StackDocument(stacks: filled([]), currentStackID: UUID())
-            )
-        )
-        for count in [0, 1, StackDocument.stackCount - 1, StackDocument.stackCount + 1] {
-            let stacks = (0..<count).map { _ in Stack() }
-            XCTAssertThrowsError(
-                try StackDocumentMutations.validate(
-                    StackDocument(stacks: stacks, currentStackID: stacks.first?.id ?? UUID())
-                ),
-                "\(count) stacks"
-            )
-        }
+    func testDuplicateAddsAreRejectedWithoutChangingTheDocument() {
+        let note = makeNote(id: UUID(), body: "one")
+        let initial = applied(.addNote(stackID: firstID, note: note), to: .empty())
+        XCTAssertEqual(StackDocumentMutations.applying(.addNote(stackID: firstID, note: note), to: initial),
+                       .rejected("The note already exists."))
     }
 
     private func document() -> StackDocument {

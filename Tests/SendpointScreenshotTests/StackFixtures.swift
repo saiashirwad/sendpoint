@@ -1,11 +1,4 @@
-import Foundation
 import SendpointDomain
-
-func filled(_ leading: [Stack]) -> [Stack] {
-    StackSlot.allCases.enumerated().map { index, slot in
-        Stack(id: slot, notes: index < leading.count ? leading[index].notes : [])
-    }
-}
 
 extension StackDocument {
     init(stacks: [Stack], currentStackID: StackSlot) {

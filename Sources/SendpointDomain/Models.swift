@@ -24,11 +24,18 @@ public struct Note: Codable, Hashable, Sendable, Identifiable {
     }
 }
 
-public struct Stack: Codable, Hashable, Sendable, Identifiable {
-    public let id: UUID
+public enum StackSlot: Int, Codable, CaseIterable, Hashable, Sendable, Identifiable {
+    case one = 1, two, three, four, five
+
+    public var id: Self { self }
+    public var number: Int { rawValue }
+}
+
+public struct Stack: Hashable, Sendable, Identifiable {
+    public let id: StackSlot
     public var notes: [Note]
 
-    public init(id: UUID = UUID(), notes: [Note] = []) {
+    public init(id: StackSlot = .one, notes: [Note] = []) {
         self.id = id
         self.notes = notes
     }
@@ -39,52 +46,94 @@ public struct Stack: Codable, Hashable, Sendable, Identifiable {
 }
 
 public struct ClearedBatch: Codable, Hashable, Sendable {
-    public var stackID: UUID
+    public let stackID: StackSlot
     public var notes: [Note]
 
-    public init(stackID: UUID, notes: [Note]) {
+    public init(stackID: StackSlot, notes: [Note]) {
         self.stackID = stackID
         self.notes = notes
     }
 }
 
 public struct StackDocument: Codable, Hashable, Sendable {
-    public static let currentVersion = 4
-    public static let stackCount = 5
+    public static let stackCount = StackSlot.allCases.count
 
-    public var version: Int
-    public var stacks: [Stack]
-    public var currentStackID: UUID
-    public var lastCleared: ClearedBatch?
+    private var one: [Note] = []
+    private var two: [Note] = []
+    private var three: [Note] = []
+    private var four: [Note] = []
+    private var five: [Note] = []
+    public internal(set) var currentStackID: StackSlot = .one
+    public internal(set) var lastCleared: ClearedBatch?
 
-    public init(
-        version: Int = StackDocument.currentVersion,
-        stacks: [Stack],
-        currentStackID: UUID,
-        lastCleared: ClearedBatch? = nil
-    ) {
-        self.version = version
-        self.stacks = stacks
-        self.currentStackID = currentStackID
-        self.lastCleared = lastCleared
+    public init() {}
+
+    public var stacks: [Stack] {
+        StackSlot.allCases.map { Stack(id: $0, notes: self[$0]) }
+    }
+
+    public internal(set) subscript(slot: StackSlot) -> [Note] {
+        get {
+            switch slot {
+            case .one: one
+            case .two: two
+            case .three: three
+            case .four: four
+            case .five: five
+            }
+        }
+        set {
+            switch slot {
+            case .one: one = newValue
+            case .two: two = newValue
+            case .three: three = newValue
+            case .four: four = newValue
+            case .five: five = newValue
+            }
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey { case one, two, three, four, five, currentStackID, lastCleared }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        one = try values.decode([Note].self, forKey: .one)
+        two = try values.decode([Note].self, forKey: .two)
+        three = try values.decode([Note].self, forKey: .three)
+        four = try values.decode([Note].self, forKey: .four)
+        five = try values.decode([Note].self, forKey: .five)
+        currentStackID = try values.decode(StackSlot.self, forKey: .currentStackID)
+        lastCleared = try values.decodeIfPresent(ClearedBatch.self, forKey: .lastCleared)
+        for slot in StackSlot.allCases {
+            let notes = self[slot]
+            guard Set(notes.map(\.id)).count == notes.count else {
+                throw DecodingError.dataCorruptedError(forKey: .one, in: values,
+                    debugDescription: "Note IDs must be unique within a stack.")
+            }
+        }
+        if let batch = lastCleared {
+            guard !batch.notes.isEmpty, Set(batch.notes.map(\.id)).count == batch.notes.count else {
+                throw DecodingError.dataCorruptedError(forKey: .lastCleared, in: values,
+                    debugDescription: "The cleared batch must contain unique notes.")
+            }
+        }
     }
 
     public static func empty() -> StackDocument {
-        let stacks = (0..<stackCount).map { _ in Stack() }
-        return StackDocument(stacks: stacks, currentStackID: stacks[0].id)
+        StackDocument()
     }
 }
 
 public extension Array where Element == Stack {
-    func stack(id: UUID) -> Stack? {
+    func stack(id: StackSlot) -> Stack? {
         first { $0.id == id }
     }
 
-    func number(of id: UUID) -> Int? {
-        firstIndex { $0.id == id }.map { $0 + 1 }
+    func number(of id: StackSlot) -> Int? {
+        id.number
     }
 
     func stack(number: Int) -> Stack? {
-        indices.contains(number - 1) ? self[number - 1] : nil
+        StackSlot(rawValue: number).flatMap { stack(id: $0) }
     }
 }
