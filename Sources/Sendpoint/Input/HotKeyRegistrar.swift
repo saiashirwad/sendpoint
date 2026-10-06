@@ -30,6 +30,8 @@ final class HotKeyRegistrar {
         let plan = settings.bindingPlan
         for slot in ShortcutSlot.allCases {
             center.unregister(name: .slot(slot))
+        }
+        for slot in ShortcutSlot.allCases {
             guard let combo = plan.bindings[slot] else { continue }
             let action: () -> Void
             var released: (() -> Void)?

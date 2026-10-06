@@ -305,6 +305,47 @@ final class HotKeyRegistrarTests: XCTestCase {
                        [.displaced(slot: .editLatest, combo: combo, by: .capture)])
     }
 
+    func testRebindingAStackReleasesItsOldClaimBeforeRestoringLatestNote() throws {
+        let (defaults, suite) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let edit = ShortcutSlot.editLatest.defaultCombo
+        defaults.set(try JSONEncoder().encode(ShortcutPreference.custom(edit)), forKey: "selectStack1Preference")
+        let settings = ShortcutSettings(defaults: defaults)
+        var active: [EventHotKeyRef: (key: UInt32, modifiers: UInt32, id: UInt32)] = [:]
+        var nextRef = 1
+        let center = HotKeyCenter(registerEvent: { key, modifiers, id in
+            guard !active.values.contains(where: { $0.key == key && $0.modifiers == modifiers }) else {
+                return (-9876, nil)
+            }
+            let ref = EventHotKeyRef(bitPattern: nextRef)!
+            nextRef += 1
+            active[ref] = (key, modifiers, id.id)
+            return (noErr, ref)
+        }, unregisterEvent: { active[$0] = nil })
+        var escaped = 0
+        center.registerRaw(name: .voiceEscape, keyCode: UInt16(kVK_Escape), carbonModifiers: 0,
+                           pressed: { escaped += 1 })
+        let escapeID = try XCTUnwrap(active.values.first { $0.key == UInt32(kVK_Escape) }?.id)
+        let registrar = HotKeyRegistrar(settings: settings, center: center)
+        var edited = 0
+        var actions = makeActions()
+        actions.editLatest = { edited += 1 }
+        XCTAssertTrue(registrar.register(actions).isEmpty)
+        XCTAssertNil(settings.combo(for: .editLatest))
+
+        try registrar.rebind(KeyCombo(keyCode: UInt16(kVK_ANSI_1), modifiers: [.control, .option]),
+                             for: .selectStack(1))
+
+        XCTAssertTrue(settings.registrationFailures.isEmpty)
+        let editID = try XCTUnwrap(active.values.first {
+            $0.key == UInt32(edit.keyCode) && $0.modifiers == edit.carbonModifiers
+        }?.id)
+        center.fire(id: editID, released: false)
+        XCTAssertEqual(edited, 1)
+        center.fire(id: escapeID, released: false)
+        XCTAssertEqual(escaped, 1)
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let suite = "SendpointHotKeyRegistrarTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
