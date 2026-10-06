@@ -3,14 +3,21 @@ import Observation
 
 @Observable
 final class InputLevelMonitor {
-    private(set) var isRunning = false
+    private enum Phase: Equatable {
+        case stopped, starting(UUID), running, tornDown
+    }
+    private enum Event {
+        case start(MicrophoneOrder), stop, started(UUID), teardown
+    }
+
+    private var phase = Phase.stopped
+    var isRunning: Bool { phase == .running }
     var level: Float { meter.current }
 
     @ObservationIgnored private let meter: VoiceLevelMeter
     @ObservationIgnored private let microphone: Microphone
     @ObservationIgnored private let isAuthorized: () -> Bool
-    @ObservationIgnored private var stopTask: Task<Void, Never>?
-    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var task: Task<Void, Never>?
 
     init(meter: VoiceLevelMeter = VoiceLevelMeter(decay: 0.82),
          microphone: Microphone? = nil,
@@ -20,91 +27,51 @@ final class InputLevelMonitor {
         self.isAuthorized = isAuthorized
     }
 
-    func start(_ order: MicrophoneOrder) async {
-        generation += 1
-        let current = generation
-        scheduleStop()
-        await stopTask?.value
-        guard !Task.isCancelled, current == generation,
-              isAuthorized() else { return }
-        do {
-            _ = try await microphone.start(order)
-            if current != generation {
-                // A newer start or stop already scheduled the microphone stop.
-                await stopTask?.value
-                return
-            }
-            if Task.isCancelled {
-                stop()
-                await stopTask?.value
-                return
-            }
-            isRunning = true
-        } catch {
+    func start(_ order: MicrophoneOrder) { send(.start(order)) }
+    func stop() { send(.stop) }
+    func teardown() { send(.teardown) }
+    func waitUntilSettled() async { await task?.value }
+
+    private func send(_ event: Event) {
+        guard phase != .tornDown else { return }
+        let next: (UUID, MicrophoneOrder)?
+        switch event {
+        case let .start(order):
+            let id = UUID()
+            phase = .starting(id)
+            next = (id, order)
+        case .stop:
+            phase = .stopped
+            next = nil
+        case .teardown:
+            phase = .tornDown
+            next = nil
+        case let .started(id):
+            guard phase == .starting(id) else { return }
+            phase = .running
+            return
         }
-    }
-
-    func stop() {
-        generation += 1
-        scheduleStop()
-    }
-
-    private func scheduleStop() {
-        isRunning = false
         meter.reset()
-        let previous = stopTask
-        let current = generation
-        stopTask = Task { [weak self, microphone] in
+        let previous = task
+        previous?.cancel()
+        let terminating = phase == .tornDown
+        task = Task { [weak self, microphone] in
             await previous?.value
             await microphone.stop()
-            guard let self, self.generation == current else { return }
-            self.stopTask = nil
+            if terminating {
+                await microphone.teardown()
+                return
+            }
+            guard let (id, order) = next, !Task.isCancelled,
+                  let self, self.phase == .starting(id), self.isAuthorized() else { return }
+            do {
+                _ = try await microphone.start(order)
+                guard !Task.isCancelled, self.phase == .starting(id) else { return }
+                self.send(.started(id))
+            } catch {
+                guard !Task.isCancelled, self.phase == .starting(id) else { return }
+                self.send(.stop)
+            }
         }
-    }
-}
-
-final class MicrophonePreviewOwner {
-    struct Engine {
-        var start: (MicrophoneOrder) async -> Void
-        var stop: () -> Void
-        var isRunning: () -> Bool
-        var level: () -> Float
-
-        static func live(_ monitor: InputLevelMonitor) -> Engine {
-            Engine(
-                start: { await monitor.start($0) },
-                stop: { monitor.stop() },
-                isRunning: { monitor.isRunning },
-                level: { monitor.level }
-            )
-        }
-    }
-
-    private let engine: Engine
-    private var task: Task<Void, Never>?
-
-    var level: Float { engine.level() }
-    var isActive: Bool { engine.isRunning() }
-
-    init(engine: Engine) {
-        self.engine = engine
-    }
-
-    convenience init(monitor: InputLevelMonitor = InputLevelMonitor()) {
-        self.init(engine: .live(monitor))
-    }
-
-    func start(_ order: MicrophoneOrder) {
-        task?.cancel()
-        task = Task { @MainActor [weak self] in
-            guard let self, !Task.isCancelled else { return }
-            await self.engine.start(order)
-        }
-    }
-
-    func stop() {
-        task?.cancel()
-        task = nil
-        engine.stop()
     }
 }

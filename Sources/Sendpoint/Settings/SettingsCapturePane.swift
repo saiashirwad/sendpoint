@@ -9,7 +9,7 @@ struct SettingsCapturePane: View {
     let onSettingsChanged: () -> Void
 
     @State private var inputDevices = AudioInputDeviceList()
-    @State private var preview = MicrophonePreviewOwner()
+    @State private var preview = InputLevelMonitor()
     @State private var windowIsVisible = false
 
     var body: some View {
@@ -31,7 +31,7 @@ struct SettingsCapturePane: View {
                     rows: microphones.rows,
                     tucked: microphones.tucked,
                     level: preview.level,
-                    isListening: preview.isActive,
+                    isListening: preview.isRunning,
                     onMove: { captureController.updateMicrophones(.moveMicrophone(uid: $0, toIndex: $1)) },
                     onToggle: { captureController.updateMicrophones(.microphoneEnabled(uid: $0, $1)) },
                     onForget: { captureController.updateMicrophones(.forgetMicrophone(uid: $0)) }
