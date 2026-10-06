@@ -123,8 +123,7 @@ struct SettingsView: View {
             )
         case .preview:
             SettingsPreviewPane(
-                voiceSettings: voiceSettings,
-                captureController: captureController
+                voiceSettings: voiceSettings
             )
         case .stacks:
             SettingsStacksPane(

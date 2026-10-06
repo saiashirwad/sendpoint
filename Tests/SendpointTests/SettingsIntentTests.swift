@@ -167,6 +167,25 @@ final class SettingsIntentTests: XCTestCase {
         XCTAssertEqual(reloaded.microphones, voice.microphones)
     }
 
+    func testPreviewStepsBelongToVoiceSettingsAndPersistAtBounds() {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let voice = VoiceSettings(defaults: defaults)
+        voice.send(.stepPreviewLines(-1))
+        voice.send(.stepPreviewFontSize(1))
+        voice.send(.stepPreviewOpacity(-1))
+        XCTAssertEqual(voice.transcriptionPreviewLines, 3)
+        XCTAssertEqual(voice.transcriptionPreviewFontSize, 14)
+        XCTAssertEqual(voice.transcriptionPreviewOpacity, 70)
+        voice.send(.stepPreviewLines(-20))
+        voice.send(.stepPreviewFontSize(20))
+        voice.send(.stepPreviewOpacity(-20))
+        let reloaded = VoiceSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.transcriptionPreviewLines, VoiceSettings.previewLinesMin)
+        XCTAssertEqual(reloaded.transcriptionPreviewFontSize, VoiceSettings.previewFontSizeMax)
+        XCTAssertEqual(reloaded.transcriptionPreviewOpacity, VoiceSettings.previewOpacityMin)
+    }
+
     func testShortcutIntentPreservesBindingsAndFeedbackText() {
         let (defaults, suite) = makeCenterDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }

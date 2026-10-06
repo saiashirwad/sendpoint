@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsPreviewPane: View {
     @Bindable var voiceSettings: VoiceSettings
-    let captureController: CaptureController
 
     var body: some View {
         SettingsPage {
@@ -12,7 +11,7 @@ struct SettingsPreviewPane: View {
                     detail: cardFootnote,
                     isOn: Binding(
                         get: { voiceSettings.transcriptionPreview },
-                        set: { captureController.setTranscriptionPreview($0) }
+                        set: { voiceSettings.send(.transcriptionPreview($0)) }
                     )
                 )
                 if voiceSettings.transcriptionPreview {
@@ -23,10 +22,10 @@ struct SettingsPreviewPane: View {
                         canDecrement: voiceSettings.transcriptionPreviewLines > VoiceSettings.previewLinesMin,
                         canIncrement: voiceSettings.transcriptionPreviewLines < VoiceSettings.previewLinesMax,
                         decrement: {
-                            captureController.stepTranscriptionPreviewLines(bySteps: -1)
+                            voiceSettings.send(.stepPreviewLines(-1))
                         },
                         increment: {
-                            captureController.stepTranscriptionPreviewLines(bySteps: 1)
+                            voiceSettings.send(.stepPreviewLines(1))
                         }
                     )
                     SettingsDivider()
@@ -36,10 +35,10 @@ struct SettingsPreviewPane: View {
                         canDecrement: voiceSettings.transcriptionPreviewFontSize > VoiceSettings.previewFontSizeMin,
                         canIncrement: voiceSettings.transcriptionPreviewFontSize < VoiceSettings.previewFontSizeMax,
                         decrement: {
-                            captureController.stepTranscriptionPreviewFontSize(bySteps: -1)
+                            voiceSettings.send(.stepPreviewFontSize(-1))
                         },
                         increment: {
-                            captureController.stepTranscriptionPreviewFontSize(bySteps: 1)
+                            voiceSettings.send(.stepPreviewFontSize(1))
                         }
                     )
                 }
@@ -51,10 +50,10 @@ struct SettingsPreviewPane: View {
                     canDecrement: voiceSettings.transcriptionPreviewOpacity > VoiceSettings.previewOpacityMin,
                     canIncrement: voiceSettings.transcriptionPreviewOpacity < VoiceSettings.previewOpacityMax,
                     decrement: {
-                        captureController.stepTranscriptionPreviewOpacity(bySteps: -1)
+                        voiceSettings.send(.stepPreviewOpacity(-1))
                     },
                     increment: {
-                        captureController.stepTranscriptionPreviewOpacity(bySteps: 1)
+                        voiceSettings.send(.stepPreviewOpacity(1))
                     }
                 )
             }

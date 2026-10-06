@@ -158,24 +158,6 @@ final class CaptureController {
     var transcriptionPreviewFontSize: Int { voiceSettings.transcriptionPreviewFontSize }
     var transcriptionPreviewOpacity: Int { voiceSettings.transcriptionPreviewOpacity }
 
-    func setTranscriptionPreview(_ on: Bool) {
-        voiceSettings.send(.transcriptionPreview(on))
-    }
-
-    func stepTranscriptionPreviewLines(bySteps steps: Int) {
-        voiceSettings.send(.transcriptionPreviewLines(transcriptionPreviewLines + steps))
-    }
-
-    func stepTranscriptionPreviewFontSize(bySteps steps: Int) {
-        voiceSettings.send(.transcriptionPreviewFontSize(transcriptionPreviewFontSize + steps))
-    }
-
-    func stepTranscriptionPreviewOpacity(bySteps steps: Int) {
-        voiceSettings.send(.transcriptionPreviewOpacity(
-            transcriptionPreviewOpacity + steps * VoiceSettings.previewOpacityStep
-        ))
-    }
-
     func updateMicrophones(_ event: VoiceSettingsEvent) {
         voiceSettings.send(event)
         recorder.rankMicrophones(voiceSettings.microphones)

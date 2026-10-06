@@ -97,8 +97,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
-        let controller = makeController(store: store)
-        controller.setTranscriptionPreview(false)
+        let controller = makeController(store: store, captions: false)
         let context = NoteCaptureContext(stackID: stacks[0].id)
         controller.send(.begin(.voice, context))
         controller.send(.recordingStarted(context))
@@ -138,9 +137,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
         let store = try await StackStore(persistence: StorePersistence(
             load: { document }, commit: { _ in }
         ))
-        let controller = makeController(store: store)
-        controller.setTranscriptionPreview(true)
-        controller.stepTranscriptionPreviewLines(bySteps: 3 - controller.transcriptionPreviewLines)
+        let controller = makeController(store: store, lines: 3)
         let lines = controller.transcriptionPreviewLines
         let fontSize = CGFloat(controller.transcriptionPreviewFontSize)
         let hosting = CaptureHostingView(rootView: VoiceCaptureView(
@@ -172,8 +169,11 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
         )
     }
 
-    private func makeController(store: StackStore) -> CaptureController {
+    private func makeController(store: StackStore, captions: Bool = true, lines: Int = 4) -> CaptureController {
         let defaults = UserDefaults(suiteName: "CaptureDestinationPanelLayoutTests.\(UUID().uuidString)")!
+        let voiceSettings = VoiceSettings(defaults: defaults)
+        voiceSettings.send(.transcriptionPreview(captions))
+        voiceSettings.send(.transcriptionPreviewLines(lines))
         let permissions = PermissionController(services: PermissionServices(
             accessibilityStatus: { .granted }, requestAccessibility: { true },
             microphoneStatus: { .granted }, requestMicrophone: { true },
@@ -182,7 +182,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
         ))
         let controller = CaptureController(
             settings: AppSettings(defaults: defaults),
-            voiceSettings: VoiceSettings(defaults: defaults),
+            voiceSettings: voiceSettings,
             permissionState: permissions,
             selection: SelectionCapture(
                 read: { _, _ in CapturedSelection(text: "") }, paste: { _, _ in false }

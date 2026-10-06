@@ -12,6 +12,9 @@ enum VoiceSettingsEvent: Equatable {
     case transcriptionPreviewLines(Int)
     case transcriptionPreviewFontSize(Int)
     case transcriptionPreviewOpacity(Int)
+    case stepPreviewLines(Int)
+    case stepPreviewFontSize(Int)
+    case stepPreviewOpacity(Int)
 }
 
 @Observable
@@ -137,6 +140,10 @@ final class VoiceSettings {
         case .transcriptionPreviewLines(let lines): setTranscriptionPreviewLines(lines)
         case .transcriptionPreviewFontSize(let size): setTranscriptionPreviewFontSize(size)
         case .transcriptionPreviewOpacity(let percent): setTranscriptionPreviewOpacity(percent)
+        case .stepPreviewLines(let steps): setTranscriptionPreviewLines(transcriptionPreviewLines + steps)
+        case .stepPreviewFontSize(let steps): setTranscriptionPreviewFontSize(transcriptionPreviewFontSize + steps)
+        case .stepPreviewOpacity(let steps):
+            setTranscriptionPreviewOpacity(transcriptionPreviewOpacity + steps * Self.previewOpacityStep)
         }
     }
 }

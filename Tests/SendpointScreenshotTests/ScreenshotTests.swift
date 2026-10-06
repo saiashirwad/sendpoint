@@ -345,8 +345,9 @@ final class ScreenshotTests: XCTestCase {
         -> (CaptureController, NSPanel, NoteCaptureContext, () -> Void) {
         let stacks = [Stack(notes: [note(subject: .standalone, body: "One"), note(subject: .standalone, body: "Two")]), Stack()]
         let store = try await makeStore(stacks)
-        let controller = makeCaptureController(store: store)
-        controller.setTranscriptionPreview(captions)
+        let defaults = makeDefaults()
+        VoiceSettings(defaults: defaults).send(.transcriptionPreview(captions))
+        let controller = makeCaptureController(store: store, defaults: defaults)
         let context = NoteCaptureContext(stackID: stacks[0].id)
         controller.send(.begin(.voice, context))
         controller.send(.recordingStarted(context))
