@@ -111,6 +111,16 @@ final class PermissionMachineTests: XCTestCase {
         XCTAssertEqual(state.setupStage, .ready)
     }
 
+    func testMicrophoneSettingsOnlyOpensForDeniedOrRestrictedPermission() {
+        for microphone in [MicrophonePermissionState.notDetermined, .denied, .restricted, .granted] {
+            var state = live(microphone: microphone)
+            let expected: [PermissionEffect] = microphone == .denied || microphone == .restricted
+                ? [.openMicrophoneSettings] : []
+            XCTAssertEqual(state.update(.action(.openMicrophoneSettings)), expected)
+            XCTAssertEqual(state.microphone, microphone)
+        }
+    }
+
     func testTeardownIsTerminal() throws {
         var state = live(accessibility: .notGranted, microphone: .notDetermined, model: .notDownloaded)
         _ = state.update(.action(.requestMicrophone))

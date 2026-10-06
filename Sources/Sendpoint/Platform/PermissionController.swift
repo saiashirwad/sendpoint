@@ -88,9 +88,7 @@ final class PermissionController {
     func refreshAccessibility() { send(.refreshAccessibility) }
     func refreshVoiceModel() { send(.refreshVoiceModel) }
     func perform(_ action: PermissionAction?) {
-        guard let action,
-              [state.accessibilityAction, state.microphoneAction, state.localVoiceModelAction].contains(action)
-        else { return }
+        guard let action else { return }
         send(.action(action))
     }
 

@@ -441,6 +441,41 @@ final class PermissionStateTests: XCTestCase {
         XCTAssertEqual(opened, 1)
     }
 
+    func testReentrantGrantBeforeQueuedSettingsActionDoesNotLaunchSettings() {
+        @MainActor
+        final class Reentry {
+            weak var controller: PermissionController?
+            var action: PermissionAction?
+            var attempts = 0
+            var opened = 0
+        }
+        let reentry = Reentry()
+        let reported = MicrophoneStatus(.denied)
+        var boundary = services(microphone: .denied, openMicrophoneSettings: { reentry.opened += 1 })
+        boundary.microphoneStatus = { reported.value }
+        boundary.voiceModelFilesExist = {
+            MainActor.assumeIsolated {
+                if let controller = reentry.controller {
+                    reentry.attempts += 1
+                    controller.perform(reentry.action)
+                }
+            }
+            return true
+        }
+        let controller = PermissionController(services: boundary)
+        defer { controller.teardown() }
+        reentry.controller = controller
+        reentry.action = PermissionCatalog.items(state: controller.state)[1].action
+        XCTAssertEqual(reentry.action, .openMicrophoneSettings)
+
+        reported.value = .granted
+        controller.refresh()
+
+        XCTAssertEqual(reentry.attempts, 1)
+        XCTAssertEqual(controller.microphone, .granted)
+        XCTAssertEqual(reentry.opened, 0)
+    }
+
     func testTeardownIsIdempotentAndIgnoresLateWork() async {
         let gate = MicrophoneRequestGate()
         let state = PermissionController(services: services(

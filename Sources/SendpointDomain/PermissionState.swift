@@ -230,6 +230,7 @@ public nonisolated struct PermissionState: Equatable, Sendable {
             microphone = granted ? .granted : .denied
             return []
         case .action(.openMicrophoneSettings):
+            guard microphone == .denied || microphone == .restricted else { return [] }
             return [.openMicrophoneSettings]
         case .action(.downloadVoiceModel):
             guard modelDownload == nil else { return [] }
