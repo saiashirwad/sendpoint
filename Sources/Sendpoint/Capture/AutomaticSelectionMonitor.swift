@@ -6,10 +6,6 @@ final class AutomaticSelectionMonitor {
     private var eventMonitor: Any?
     private var settlementTask: Task<Void, Never>?
     private var settlementToken: Int?
-    private var pending: [AutomaticSelectionEvent] = []
-    private var isDraining = false
-    private var acceptedSettlement = false
-    private var taken: String?
 
     func start() {
         guard eventMonitor == nil, !state.isTornDown else { return }
@@ -30,13 +26,11 @@ final class AutomaticSelectionMonitor {
             pasteboardChangeCount: pasteboard.changeCount,
             now: now
         ))
-        taken = nil
-        send(.take(
+        return send(.take(
             processIdentifier: processIdentifier,
             pasteboardChangeCount: pasteboard.changeCount,
             now: now
         ))
-        return taken
     }
 
     func discard() {
@@ -69,21 +63,9 @@ final class AutomaticSelectionMonitor {
         }
     }
 
-    private func send(_ event: AutomaticSelectionEvent) {
-        pending.append(event)
-        guard !isDraining else { return }
-        isDraining = true
-        while !pending.isEmpty {
-            var next = state
-            let effects = next.update(pending.removeFirst())
-            state = next
-            for effect in effects { run(effect) }
-        }
-        isDraining = false
-    }
-
-    private func run(_ effect: AutomaticSelectionEffect) {
-        switch effect {
+    @discardableResult
+    private func send(_ event: AutomaticSelectionEvent) -> String? {
+        switch state.update(event) {
         case .cancelSettlement:
             settlementToken = nil
             settlementTask?.cancel()
@@ -97,11 +79,12 @@ final class AutomaticSelectionMonitor {
                 self.settlementTask = nil
                 self.settlementToken = nil
             }
-        case .accepted:
-            acceptedSettlement = true
-        case let .took(text):
-            taken = text
+        case let .selection(text):
+            return text
+        case .none:
+            break
         }
+        return nil
     }
 
     private func poll(_ request: AutomaticSelectionRequest) async {
@@ -111,35 +94,19 @@ final class AutomaticSelectionMonitor {
             } catch {
                 return
             }
-            guard !Task.isCancelled, settlementToken == request.token else { return }
+            guard !Task.isCancelled, settlementToken == request.token,
+                  state.settlementRequest == request else { return }
             let pasteboard = NSPasteboard.general
             let text = pasteboard.string(forType: .string)
             let changeCount = pasteboard.changeCount
             let now = Date()
-            guard !Task.isCancelled, settlementToken == request.token else { return }
-            if didAccept(request, text: text, pasteboardChangeCount: changeCount, now: now) {
-                return
-            }
+            guard !Task.isCancelled, settlementToken == request.token,
+                  state.settlementRequest == request else { return }
+            send(.settle(request, text: text, pasteboardChangeCount: changeCount, now: now))
+            if state.settlementRequest != request { return }
         }
         guard !Task.isCancelled, settlementToken == request.token else { return }
         guard state.settlementRequest == request else { return }
         send(.abandon(request))
-    }
-
-    private func didAccept(
-        _ request: AutomaticSelectionRequest,
-        text: String?,
-        pasteboardChangeCount: Int,
-        now: Date
-    ) -> Bool {
-        guard settlementToken == request.token, state.settlementRequest == request else { return false }
-        acceptedSettlement = false
-        send(.settle(
-            request,
-            text: text,
-            pasteboardChangeCount: pasteboardChangeCount,
-            now: now
-        ))
-        return acceptedSettlement
     }
 }

@@ -24,11 +24,11 @@ public nonisolated enum AutomaticSelectionEvent: Equatable, Sendable {
     case teardown
 }
 
-public nonisolated enum AutomaticSelectionEffect: Equatable, Sendable {
+public nonisolated enum AutomaticSelectionResult: Equatable, Sendable {
+    case none
     case beginSettlement(AutomaticSelectionRequest)
     case cancelSettlement
-    case accepted
-    case took(String)
+    case selection(String)
 }
 
 public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
@@ -57,16 +57,16 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
         return nil
     }
 
-    public mutating func update(_ event: AutomaticSelectionEvent) -> [AutomaticSelectionEffect] {
-        guard phase != .tornDown else { return [] }
+    public mutating func update(_ event: AutomaticSelectionEvent) -> AutomaticSelectionResult {
+        guard phase != .tornDown else { return .none }
         switch event {
         case .teardown:
             phase = .tornDown
-            return [.cancelSettlement]
+            return .cancelSettlement
         case let .mouseDown(processIdentifier, pasteboardChangeCount):
             guard processIdentifier > 0 else {
                 phase = .idle
-                return [.cancelSettlement]
+                return .cancelSettlement
             }
             nextToken += 1
             phase = .dragging(
@@ -77,19 +77,19 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
                 ),
                 didDrag: false
             )
-            return [.cancelSettlement]
+            return .cancelSettlement
         case .mouseDragged:
-            guard case let .dragging(request, _) = phase else { return [] }
+            guard case let .dragging(request, _) = phase else { return .none }
             phase = .dragging(request, didDrag: true)
-            return []
+            return .none
         case .mouseUp:
-            guard case let .dragging(request, didDrag) = phase else { return [] }
+            guard case let .dragging(request, didDrag) = phase else { return .none }
             guard didDrag else {
                 phase = .idle
-                return []
+                return .none
             }
             phase = .settling(request)
-            return [.beginSettlement(request)]
+            return .beginSettlement(request)
         case let .settle(request, text, pasteboardChangeCount, now):
             return settle(
                 request,
@@ -98,7 +98,7 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
                 now: now
             )
         case let .settlePending(text, pasteboardChangeCount, now):
-            guard case let .settling(request) = phase else { return [] }
+            guard case let .settling(request) = phase else { return .none }
             return settle(
                 request,
                 text: text,
@@ -106,22 +106,22 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
                 now: now
             )
         case let .abandon(request):
-            guard case let .settling(active) = phase, active == request else { return [] }
+            guard case let .settling(active) = phase, active == request else { return .none }
             phase = .idle
-            return []
+            return .none
         case let .take(processIdentifier, pasteboardChangeCount, now):
             guard case let .available(text, candidateProcess, candidateChangeCount, capturedAt) = phase
-            else { return [] }
+            else { return .none }
             phase = .idle
             guard candidateProcess == processIdentifier,
                   candidateChangeCount == pasteboardChangeCount
-            else { return [] }
+            else { return .none }
             let age = now.timeIntervalSince(capturedAt)
-            guard age >= 0, age <= 15 else { return [] }
-            return [.took(text)]
+            guard age >= 0, age <= 15 else { return .none }
+            return .selection(text)
         case .discard:
             phase = .idle
-            return [.cancelSettlement]
+            return .cancelSettlement
         }
     }
 
@@ -130,12 +130,12 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
         text: String?,
         pasteboardChangeCount: Int,
         now: Date
-    ) -> [AutomaticSelectionEffect] {
-        guard case let .settling(active) = phase, active == request else { return [] }
-        guard pasteboardChangeCount != request.pasteboardChangeCountBeforeDrag else { return [] }
+    ) -> AutomaticSelectionResult {
+        guard case let .settling(active) = phase, active == request else { return .none }
+        guard pasteboardChangeCount != request.pasteboardChangeCountBeforeDrag else { return .none }
         guard let text, text.nonblank != nil else {
             phase = .idle
-            return []
+            return .none
         }
         phase = .available(
             text: text,
@@ -143,6 +143,6 @@ public nonisolated struct AutomaticSelectionTracker: Equatable, Sendable {
             pasteboardChangeCount: pasteboardChangeCount,
             capturedAt: now
         )
-        return [.accepted]
+        return .none
     }
 }

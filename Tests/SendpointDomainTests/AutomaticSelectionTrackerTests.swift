@@ -18,7 +18,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            [.accepted]
+            .none
         )
         XCTAssertEqual(
             tracker.update(.take(
@@ -26,7 +26,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt.addingTimeInterval(1)
             )),
-            [.took("Prime Agent output")]
+            .selection("Prime Agent output")
         )
         XCTAssertEqual(
             tracker.update(.take(
@@ -34,7 +34,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt.addingTimeInterval(1)
             )),
-            []
+            .none
         )
     }
 
@@ -49,7 +49,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 10,
                 now: capturedAt
             )),
-            []
+            .none
         )
     }
 
@@ -65,7 +65,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 10,
                 now: capturedAt
             )),
-            []
+            .none
         )
         XCTAssertEqual(unchanged.phase, .settling(unchangedRequest))
 
@@ -80,7 +80,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
         XCTAssertEqual(empty.phase, .idle)
     }
@@ -98,7 +98,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                     pasteboardChangeCount: 11,
                     now: capturedAt
                 )),
-                [.accepted]
+                .none
             )
             return tracker
         }
@@ -110,7 +110,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
 
         var changedPasteboard = makeTracker()
@@ -120,7 +120,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 12,
                 now: capturedAt
             )),
-            []
+            .none
         )
 
         var expired = makeTracker()
@@ -130,7 +130,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt.addingTimeInterval(16)
             )),
-            []
+            .none
         )
     }
 
@@ -147,7 +147,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 10,
                 now: capturedAt
             )),
-            []
+            .none
         )
         XCTAssertEqual(
             tracker.update(.settlePending(
@@ -155,7 +155,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt.addingTimeInterval(0.15)
             )),
-            [.accepted]
+            .none
         )
         XCTAssertEqual(
             tracker.update(.take(
@@ -163,7 +163,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt.addingTimeInterval(0.15)
             )),
-            [.took("delayed selection")]
+            .selection("delayed selection")
         )
     }
 
@@ -173,7 +173,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
         _ = tracker.update(.mouseDragged)
         let request = mouseUp(&tracker)!
 
-        XCTAssertEqual(tracker.update(.abandon(request)), [])
+        XCTAssertEqual(tracker.update(.abandon(request)), .none)
 
         XCTAssertEqual(
             tracker.update(.settlePending(
@@ -181,7 +181,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
         XCTAssertEqual(
             tracker.update(.take(
@@ -189,7 +189,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
     }
 
@@ -210,7 +210,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 12,
                 now: capturedAt
             )),
-            []
+            .none
         )
         XCTAssertEqual(
             tracker.update(.settle(
@@ -219,7 +219,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 12,
                 now: capturedAt
             )),
-            [.accepted]
+            .none
         )
         XCTAssertEqual(
             tracker.update(.take(
@@ -227,7 +227,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 12,
                 now: capturedAt
             )),
-            [.took("current")]
+            .selection("current")
         )
     }
 
@@ -237,8 +237,8 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
         _ = tracker.update(.mouseDragged)
         let request = mouseUp(&tracker)!
 
-        XCTAssertEqual(tracker.update(.teardown), [.cancelSettlement])
-        XCTAssertEqual(tracker.update(.teardown), [])
+        XCTAssertEqual(tracker.update(.teardown), .cancelSettlement)
+        XCTAssertEqual(tracker.update(.teardown), .none)
         XCTAssertEqual(
             tracker.update(.settle(
                 request,
@@ -246,7 +246,7 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
 
         _ = tracker.update(.mouseDown(processIdentifier: 42, pasteboardChangeCount: 11))
@@ -258,13 +258,13 @@ final class AutomaticSelectionTrackerTests: XCTestCase {
                 pasteboardChangeCount: 11,
                 now: capturedAt
             )),
-            []
+            .none
         )
     }
 
     private func mouseUp(_ tracker: inout AutomaticSelectionTracker) -> AutomaticSelectionRequest? {
-        let effects = tracker.update(.mouseUp)
-        guard case let .beginSettlement(request) = effects.first else { return nil }
+        let result = tracker.update(.mouseUp)
+        guard case let .beginSettlement(request) = result else { return nil }
         return request
     }
 }

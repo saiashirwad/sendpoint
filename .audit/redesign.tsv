@@ -1,0 +1,4 @@
+ts	phase	decision	why	evidence	result
+2026-10-06T08:21:07Z	baseline	Pin the starting app before redesign	Preserve useful behavior and appearance while changing ownership	b54e407; ./check.sh; ./shots.sh	398 behavior tests and 24 script tests passed; 74 screenshots recorded
+2026-10-06T08:21:07Z	scope	Make clean cutovers without compatibility layers	The user accepts fresh app data and removal of implementation-only tests	User instruction in this session	No legacy adapters or data import work planned
+2026-10-06T08:21:07Z	automatic-selection	Return a single typed transition result directly	Every event has at most one result and no synchronous reentrant effects	Sources/SendpointDomain/AutomaticSelectionTracker.swift; Sources/Sendpoint/Capture/AutomaticSelectionMonitor.swift	Removed four scratch and queue fields; 32 source lines removed; check and ship passed
