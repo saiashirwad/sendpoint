@@ -22,7 +22,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onCheckForUpdates: () -> Void
     private let onShowStack: () -> Void
     private var window: NSWindow?
-    private(set) var templateEditor: TemplateEditorController?
 
     init(
         settings: AppSettings,
@@ -52,6 +51,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         self.onSettingsChanged = onSettingsChanged
         self.onCheckForUpdates = onCheckForUpdates
         self.onShowStack = onShowStack
+        templates.onChange = onSettingsChanged
         super.init()
         surfaces.register(.settings, transitions: .init(
             show: { [weak self] in self?.present() },
@@ -69,21 +69,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func requestTemplateSelection(_ templateID: UUID) -> Bool {
-        guard let templateEditor else { return false }
-        switch templateEditor.requestSelection(templateID) {
-        case .needsDecision:
-            _ = TemplateDialogs.resolvePendingSelection(templateEditor)
-        case .selected, .unchanged:
-            break
-        case .rejected:
-            NSSound.beep()
-        }
+        guard templates.workspace.session != nil else { return false }
+        _ = TemplateDialogs.request(.template(templateID), in: templates)
         return true
     }
 
     func canTerminate() -> Bool {
-        guard let templateEditor else { return true }
-        return TemplateDialogs.shouldClose(templateEditor)
+        TemplateDialogs.request(.close, in: templates)
     }
 
     func teardown() {
@@ -92,8 +84,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window?.delegate = nil
         window?.close()
         window = nil
-        templateEditor?.teardown()
-        templateEditor = nil
+        templates.send(.endEditing)
+        templates.onChange = {}
     }
 
     private func present() {
@@ -110,15 +102,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSWindow {
         let window = Self.makeWindowFrame()
-        let templateEditor = TemplateEditorController(settings: templates, onChange: onSettingsChanged)
-        self.templateEditor = templateEditor
+        templates.send(.beginEditing)
         let settingsView = SettingsView(
             settings: settings,
             shortcuts: shortcuts,
             voiceSettings: voiceSettings,
             hotKeyRegistrar: hotKeyRegistrar,
             captureController: captureController,
-            templateEditor: templateEditor,
+            templates: templates,
             permissionState: permissionState,
             storeHandle: storeHandle,
             onSelectTemplate: onSelectTemplate,
@@ -168,8 +159,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard sender === window, let templateEditor else { return true }
-        return TemplateDialogs.shouldClose(templateEditor)
+        guard sender === window else { return true }
+        return TemplateDialogs.request(.close, in: templates)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -177,7 +168,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         surfaces.userClosed(.settings)
         permissionState.stopWatchingVoiceModel()
         window = nil
-        templateEditor?.teardown()
-        templateEditor = nil
+        templates.send(.endEditing)
     }
 }

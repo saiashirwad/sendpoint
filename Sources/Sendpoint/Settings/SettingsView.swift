@@ -39,7 +39,7 @@ struct SettingsView: View {
     @Bindable var settings: AppSettings
     @Bindable var shortcuts: ShortcutSettings
     @Bindable var voiceSettings: VoiceSettings
-    @Bindable var templateEditor: TemplateEditorController
+    @Bindable var templates: TemplateSettings
     @Bindable var permissionState: PermissionController
     let storeHandle: SettingsStoreHandle
     let onSelectTemplate: (UUID) -> Void
@@ -60,7 +60,7 @@ struct SettingsView: View {
         voiceSettings: VoiceSettings,
         hotKeyRegistrar: HotKeyRegistrar,
         captureController: CaptureController,
-        templateEditor: TemplateEditorController,
+        templates: TemplateSettings,
         permissionState: PermissionController,
         storeHandle: SettingsStoreHandle,
         onSelectTemplate: @escaping (UUID) -> Void,
@@ -73,7 +73,7 @@ struct SettingsView: View {
         _settings = Bindable(wrappedValue: settings)
         _shortcuts = Bindable(wrappedValue: shortcuts)
         _voiceSettings = Bindable(wrappedValue: voiceSettings)
-        _templateEditor = Bindable(wrappedValue: templateEditor)
+        _templates = Bindable(wrappedValue: templates)
         _permissionState = Bindable(wrappedValue: permissionState)
         self.storeHandle = storeHandle
         self.onSelectTemplate = onSelectTemplate
@@ -132,7 +132,7 @@ struct SettingsView: View {
         case .templates:
             SettingsTemplatesPane(
                 settings: settings,
-                editor: templateEditor,
+                editor: templates,
                 onSelectTemplate: onSelectTemplate
             )
         case .pasting:

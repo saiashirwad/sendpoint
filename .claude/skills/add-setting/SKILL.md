@@ -9,7 +9,7 @@ Three stores. Extend the one that already owns the value. Do not write the value
 
 - `AppSettings` and `AppSettingsEvent` are the general preferences: paste versus copy, launch at login, and restore focus. The pane calls `settings.send(...)`. See `SettingsPastingPane` and `SettingsSystemPane`.
 - `VoiceSettings` and `VoiceSettingsEvent` are the voice mode, the microphone order, and the transcript preview.
-- `TemplateSettings` is the template collection. It has no event enum.
+- `TemplateSettings` owns a `TemplateWorkspace`: the committed collection and an optional editing session. It receives `TemplateWorkspaceEvent`.
 
 Paste versus copy, as it exists:
 
@@ -40,5 +40,4 @@ A new voice or preview value copies `transcriptionPreview`:
 5. Do not assign the property from the view. `SettingsCapturePane` and `SettingsPreviewPane` call `CaptureController`. `setVoiceMode`, `setTranscriptionPreview`, `stepTranscriptionPreviewLines`, `stepTranscriptionPreviewFontSize`, `stepTranscriptionPreviewOpacity`, and `updateMicrophones` are the methods that send. `updateMicrophones` also pushes the order to the recorder.
 6. Add a test beside `testVoiceSettingsEventsPersistAndClamp` in `SettingsIntentTests.swift`.
 
-A new template field is not an `AppSettingsEvent`. Add the property on `Template`, add a `TemplateEditorEvent`, and handle it in `TemplateEditorState.update`. `SettingsTemplatesPane` already sends `.editName`, `.editPreamble`, and the include and clear flags through `TemplateEditorController`. Save still goes through `editor.save()`, which performs the effect that calls `settings.updateTemplate`. `TemplateSettings.change` returns when the collection is unchanged, then writes the `"templates"` data and, if needed, `"activeTemplateID"`. Switching templates and the unsaved-changes prompt stay on `requestSelection`, `resolvePendingSelection`, and `resolveClose`. Add a test beside `testTemplateEditorEventsUpdateOnlyTheirField` in `SettingsIntentTests.swift`. Persistence of the collection is already covered by `TemplateSettingsTests`.
-
+A new template field is not an `AppSettingsEvent`. Add the property on `Template`, add a `TemplateWorkspaceEvent`, and handle it in `TemplateWorkspace.update`. `SettingsTemplatesPane` sends the field edits through `TemplateSettings.send`. Edits affect only the session draft. `.save` and `.saveAsNew(name:id:)` commit through `TemplateCollection`; failed validation preserves the draft and pending destination. `TemplateSettings.send` persists only committed collection changes to `"templates"` and `"activeTemplateID"`. Template switching and closing share `.request(TemplateDestination)` and `.resolve(TemplateDirtyDecision)`. Add field-intent coverage in `SettingsIntentTests.swift`, transition coverage in `TemplateWorkspaceTests.swift`, and persistence coverage in `TemplateSettingsTests.swift`.

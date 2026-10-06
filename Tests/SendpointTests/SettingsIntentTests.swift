@@ -6,10 +6,11 @@ import XCTest
 
 @MainActor
 final class SettingsIntentTests: XCTestCase {
-    func testTemplateEditorEventsUpdateOnlyTheirField() {
+    func testTemplateWorkspaceEventsUpdateOnlyTheirField() {
         let defaults = makeDefaults()
         defer { remove(defaults) }
-        let editor = TemplateEditorController(settings: TemplateSettings(defaults: defaults))
+        let editor = TemplateSettings(defaults: defaults)
+        editor.send(.beginEditing)
         XCTAssertFalse(editor.isDirty)
 
         var expected = Template.plain
@@ -40,20 +41,21 @@ final class SettingsIntentTests: XCTestCase {
         XCTAssertTrue(editor.isDirty)
     }
 
-    func testTemplateEditorEventsDriveIsDirtyRoundTrip() throws {
+    func testTemplateWorkspaceEventsDriveIsDirtyRoundTrip() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
 
         editor.send(.editPreamble("Changed"))
         XCTAssertTrue(editor.isDirty)
-        editor.revert()
+        editor.send(.revert)
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(editor.draft, .plain)
 
         editor.send(.editIncludeHeading(true))
-        try editor.save()
+        _ = try editor.send(.save).get()
         XCTAssertFalse(editor.isDirty)
         XCTAssertTrue(settings.activeTemplate.includeHeading)
     }

@@ -305,7 +305,7 @@ final class ScreenshotTests: XCTestCase {
             let handle = SettingsStoreHandle()
             handle.store = store
             let templates = TemplateSettings(defaults: defaults)
-            let templateEditor = TemplateEditorController(settings: templates)
+            templates.send(.beginEditing)
             let controller = makeCaptureController(store: store, defaults: defaults)
             let window = makeWindow(size: SettingsView.size, content: SettingsView(
                 settings: AppSettings(defaults: defaults), shortcuts: shortcuts,
@@ -314,7 +314,7 @@ final class ScreenshotTests: XCTestCase {
                     registerEvent: { _, _, _ in (noErr, nil) }, unregisterEvent: { _ in }
                 )),
                 captureController: controller,
-                templateEditor: templateEditor,
+                templates: templates,
                 permissionState: makePermissions(), storeHandle: handle,
                 onSelectTemplate: { _ in }, onSettingsChanged: {}, onCheckForUpdates: {}, onShowStack: {},
                 tab: tab
@@ -323,7 +323,7 @@ final class ScreenshotTests: XCTestCase {
             try shoot([window], "settings-\(tab.rawValue)")
             if tab == .templates {
                 for template in [Template.learn, .steer] {
-                    XCTAssertEqual(templateEditor.requestSelection(template.id), .selected)
+                    XCTAssertEqual(templates.send(.request(.template(template.id))), .success(.changed))
                     try await settle()
                     try shoot([window], "settings-templates-\(template.name.lowercased())")
                 }

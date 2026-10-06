@@ -9,49 +9,48 @@ final class TemplateSettings {
         static let activeTemplateID = "activeTemplateID"
     }
 
-    private let defaults: UserDefaults
-    private var collection: TemplateCollection
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored var onChange: () -> Void = {}
+    private(set) var workspace: TemplateWorkspace
 
-    var templates: [Template] { collection.templates }
-    var activeTemplateID: UUID { collection.activeTemplateID }
-    var activeTemplate: Template { collection.activeTemplate }
+    var templates: [Template] { workspace.collection.templates }
+    var activeTemplateID: UUID { workspace.collection.activeTemplateID }
+    var activeTemplate: Template { workspace.collection.activeTemplate }
+    var draft: Template { workspace.session?.draft ?? activeTemplate }
+    var pendingDestination: TemplateDestination? { workspace.session?.pendingDestination }
+    var isDirty: Bool { workspace.isDirty }
+    var canDelete: Bool { templates.count > 1 }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let decoded = defaults.data(forKey: Key.templates)
             .flatMap { try? JSONDecoder().decode([Template].self, from: $0) }
-        collection = TemplateCollection(
+        workspace = TemplateWorkspace(collection: TemplateCollection(
             restoring: decoded,
             activeTemplateID: defaults.string(forKey: Key.activeTemplateID).flatMap(UUID.init(uuidString:))
-        )
+        ))
         persistTemplates()
         persistActiveTemplateID()
     }
 
-    func selectTemplate(id: UUID) throws { try change { try $0.select(id: id) } }
-    func updateTemplate(_ template: Template) throws { try change { try $0.update(template) } }
-    func addTemplate(_ template: Template) throws { try change { try $0.add(template) } }
+    func template(id: UUID) -> Template? { workspace.collection.template(id: id) }
 
-    func deleteTemplate(id: UUID) throws -> UUID {
-        try change { try $0.delete(id: id) }
-        return activeTemplateID
+    func validatedNewName(_ name: String) throws -> String {
+        try workspace.collection.validatedName(name)
     }
 
-    func template(id: UUID) -> Template? { collection.template(id: id) }
-
-    func validatedName(_ proposedName: String, excluding templateID: UUID?) throws -> String {
-        try collection.validatedName(proposedName, excluding: templateID)
-    }
-
-    private func change(_ mutation: (inout TemplateCollection) throws -> Void) throws {
-        var candidate = collection
-        try mutation(&candidate)
-        guard candidate != collection else { return }
-        let templatesChanged = candidate.templates != templates
-        let selectionChanged = candidate.activeTemplateID != activeTemplateID
-        collection = candidate
+    @discardableResult
+    func send(_ event: TemplateWorkspaceEvent) -> Result<TemplateWorkspaceOutcome, TemplateWorkspaceError> {
+        var candidate = workspace
+        let result = candidate.update(event)
+        guard candidate != workspace else { return result }
+        let templatesChanged = candidate.collection.templates != templates
+        let selectionChanged = candidate.collection.activeTemplateID != activeTemplateID
+        workspace = candidate
         if templatesChanged { persistTemplates() }
         if selectionChanged { persistActiveTemplateID() }
+        if templatesChanged || selectionChanged { onChange() }
+        return result
     }
 
     private func persistTemplates() {

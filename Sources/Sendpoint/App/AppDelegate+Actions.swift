@@ -110,7 +110,7 @@ extension AppDelegate {
     func requestTemplateSelection(_ templateID: UUID) {
         if settingsWindowController?.requestTemplateSelection(templateID) == true { return }
         do {
-            try templateSettings.selectTemplate(id: templateID)
+            _ = try templateSettings.send(.request(.template(templateID))).get()
             refreshStatusItem()
         } catch {
             NSSound.beep()

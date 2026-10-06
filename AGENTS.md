@@ -31,7 +31,7 @@ Machine (SendpointDomain) → controller (app):
 | `PaletteWorkflow` (`PaletteUpdate.update`) | `StackPaletteController` |
 | `PermissionState` | `PermissionController` |
 | `LatestNoteState` | `LatestNoteEditor` |
-| `TemplateEditorState` | `TemplateEditorController` |
+| `TemplateWorkspace` | `TemplateSettings` |
 | `SurfaceState` | `SurfaceCoordinator` |
 | `AutomaticSelectionTracker` | `AutomaticSelectionMonitor` |
 | `ExportState` | `ExportController` (same file) |

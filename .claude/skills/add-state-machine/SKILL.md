@@ -27,5 +27,6 @@ The vocabulary is Event, `update`, Effect, and an XController.
 
 The permission machine and the latest-note machine live in SendpointDomain. `PermissionController` and `LatestNoteEditor` are the controllers.
 
-`TemplateEditorState`, `SurfaceState`, and `AutomaticSelectionTracker` live in SendpointDomain. `TemplateEditorController`, `SurfaceCoordinator`, and `AutomaticSelectionMonitor` are the controllers.
+`SurfaceState` and `AutomaticSelectionTracker` live in SendpointDomain. `SurfaceCoordinator` and `AutomaticSelectionMonitor` are the controllers.
 
+The synchronous template workspace does not need an effect queue. `TemplateWorkspace` owns one committed `TemplateCollection` and an optional editing session. Its `update` returns typed outcomes and errors directly. `TemplateSettings` is the sole observable owner and persists committed changes. `.endEditing` idempotently drops the session; editor-only events then do nothing until `.beginEditing`.

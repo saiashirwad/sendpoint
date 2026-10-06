@@ -21,12 +21,14 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
-        let editor = TemplateEditorController(settings: settings)
-        let cloneID = try editor.saveAsNew(named: "Custom")
+        let editor = settings
+        editor.send(.beginEditing)
+        let cloneID = UUID()
+        _ = try editor.send(.saveAsNew(name: "Custom", id: cloneID)).get()
         XCTAssertTrue(try XCTUnwrap(settings.template(id: cloneID)).clearStackAfterExport)
 
         editor.send(.editClearStackAfterExport(false))
-        try editor.save()
+        _ = try editor.send(.save).get()
         let reloaded = TemplateSettings(defaults: defaults)
         XCTAssertFalse(try XCTUnwrap(reloaded.template(id: cloneID)).clearStackAfterExport)
     }
@@ -71,8 +73,11 @@ final class TemplateSettingsTests: XCTestCase {
             clearStackAfterExport: true
         )
 
-        try settings.addTemplate(custom)
-        try settings.selectTemplate(id: custom.id)
+        settings.send(.beginEditing)
+        settings.send(.editPreamble(custom.preamble))
+        settings.send(.editIncludeHeading(custom.includeHeading))
+        settings.send(.editIncludeNoteNumbers(custom.includeNoteNumbers))
+        _ = try settings.send(.saveAsNew(name: custom.name, id: custom.id)).get()
         let reloaded = TemplateSettings(defaults: defaults)
 
         XCTAssertEqual(reloaded.templates, Template.builtIns + [custom])
@@ -84,16 +89,17 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Unsaved external draft"))
 
-        XCTAssertEqual(editor.requestSelection(Template.plain.id), .needsDecision)
-        XCTAssertFalse(try editor.resolvePendingSelection(.cancel))
+        XCTAssertEqual(editor.send(.request(.template(Template.plain.id))), .success(.needsDecision))
+        XCTAssertEqual(editor.send(.resolve(.cancel)), .success(.cancelled))
 
-        XCTAssertEqual(editor.editedTemplateID, Template.learn.id)
+        XCTAssertEqual(editor.draft.id, Template.learn.id)
         XCTAssertEqual(editor.draft.preamble, "Unsaved external draft")
         XCTAssertTrue(editor.isDirty)
-        XCTAssertNil(editor.pendingTemplateID)
+        XCTAssertNil(editor.pendingDestination)
         XCTAssertEqual(settings.activeTemplateID, Template.learn.id)
     }
 
@@ -101,14 +107,16 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editName(Template.steer.name))
 
-        XCTAssertFalse(try editor.resolveClose(.cancel))
+        XCTAssertEqual(editor.send(.request(.close)), .success(.needsDecision))
+        XCTAssertEqual(editor.send(.resolve(.cancel)), .success(.cancelled))
         XCTAssertTrue(editor.isDirty)
-        XCTAssertThrowsError(try editor.resolveClose(.save)) {
-            XCTAssertEqual($0 as? TemplateError, .duplicateName)
-        }
+        editor.send(.request(.close))
+        XCTAssertEqual(editor.send(.resolve(.save)), .failure(.validation(.duplicateName)))
+        XCTAssertEqual(editor.pendingDestination, .close)
         XCTAssertEqual(editor.draft.name, Template.steer.name)
         XCTAssertEqual(settings.template(id: Template.learn.id), .learn)
     }
@@ -117,15 +125,18 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Discard me"))
 
-        XCTAssertTrue(try editor.resolveClose(.discard))
+        editor.send(.request(.close))
+        XCTAssertEqual(editor.send(.resolve(.discard)), .success(.closed))
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(editor.draft, .learn)
 
         editor.send(.editPreamble("Save me"))
-        XCTAssertTrue(try editor.resolveClose(.save))
+        editor.send(.request(.close))
+        XCTAssertEqual(editor.send(.resolve(.save)), .success(.closed))
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(settings.activeTemplate.preamble, "Save me")
     }
@@ -134,18 +145,19 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Changed"))
 
         XCTAssertTrue(editor.isDirty)
         XCTAssertEqual(settings.activeTemplate, .learn)
 
-        editor.revert()
+        editor.send(.revert)
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(editor.draft, .learn)
 
         editor.send(.editPreamble("Saved"))
-        try editor.save()
+        _ = try editor.send(.save).get()
         XCTAssertFalse(editor.isDirty)
         XCTAssertEqual(settings.activeTemplate.preamble, "Saved")
     }
@@ -154,14 +166,15 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Unsaved"))
 
-        XCTAssertEqual(editor.requestSelection(Template.steer.id), .needsDecision)
+        XCTAssertEqual(editor.send(.request(.template(Template.steer.id))), .success(.needsDecision))
         XCTAssertEqual(settings.activeTemplateID, Template.learn.id)
-        editor.discardAndSelectPending()
+        editor.send(.resolve(.discard))
 
-        XCTAssertEqual(editor.editedTemplateID, Template.steer.id)
+        XCTAssertEqual(editor.draft.id, Template.steer.id)
         XCTAssertEqual(editor.draft, .steer)
         XCTAssertEqual(settings.activeTemplateID, Template.steer.id)
         XCTAssertEqual(defaults.string(forKey: "activeTemplateID"), Template.steer.id.uuidString)
@@ -171,14 +184,15 @@ final class TemplateSettingsTests: XCTestCase {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editName("Renamed Learn"))
 
-        XCTAssertEqual(editor.requestSelection(Template.plain.id), .needsDecision)
-        try editor.saveAndSelectPending()
+        XCTAssertEqual(editor.send(.request(.template(Template.plain.id))), .success(.needsDecision))
+        _ = try editor.send(.resolve(.save)).get()
 
         XCTAssertEqual(settings.template(id: Template.learn.id)?.name, "Renamed Learn")
-        XCTAssertEqual(editor.editedTemplateID, Template.plain.id)
+        XCTAssertEqual(editor.draft.id, Template.plain.id)
         XCTAssertEqual(settings.activeTemplateID, Template.plain.id)
     }
 
@@ -187,42 +201,114 @@ final class TemplateSettingsTests: XCTestCase {
         defer { remove(defaults) }
         let settings = TemplateSettings(defaults: defaults)
         let newID = UUID(uuidString: "00000000-0000-0000-0000-000000000099")!
-        let editor = TemplateEditorController(settings: settings, makeID: { newID })
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Clone only"))
 
-        let result = try editor.saveAsNew(named: "  My Template  ")
+        let result = try editor.send(.saveAsNew(name: "  My Template  ", id: newID)).get()
 
-        XCTAssertEqual(result, newID)
+        XCTAssertEqual(result, .changed)
         XCTAssertEqual(settings.template(id: Template.learn.id), .learn)
         XCTAssertEqual(settings.template(id: newID)?.name, "My Template")
         XCTAssertEqual(settings.template(id: newID)?.preamble, "Clone only")
         XCTAssertEqual(settings.activeTemplateID, newID)
-        XCTAssertEqual(editor.editedTemplateID, newID)
+        XCTAssertEqual(editor.draft.id, newID)
     }
 
     func testDeleteIsGuardedWhileDirtyAndDeletingActiveKeepsValidActiveID() throws {
         let defaults = makeDefaults()
         defer { remove(defaults) }
         let settings = try makeSettingsOnLearn(defaults)
-        let editor = TemplateEditorController(settings: settings)
+        let editor = settings
+        editor.send(.beginEditing)
         editor.send(.editPreamble("Dirty"))
-        XCTAssertThrowsError(try editor.delete()) {
-            XCTAssertEqual($0 as? TemplateEditorError, .unsavedChanges)
-        }
+        XCTAssertEqual(editor.send(.delete), .failure(.unsavedChanges))
 
-        editor.revert()
-        try editor.delete()
+        editor.send(.revert)
+        _ = try editor.send(.delete).get()
         XCTAssertEqual(settings.templates.count, 2)
         XCTAssertFalse(settings.templates.contains(where: { $0.id == Template.learn.id }))
         XCTAssertEqual(settings.activeTemplateID, Template.steer.id)
-        XCTAssertEqual(editor.editedTemplateID, Template.steer.id)
+        XCTAssertEqual(editor.draft.id, Template.steer.id)
 
-        try editor.delete()
+        _ = try editor.send(.delete).get()
         XCTAssertEqual(settings.templates.count, 1)
-        XCTAssertThrowsError(try editor.delete()) {
-            XCTAssertEqual($0 as? TemplateError, .lastTemplate)
-        }
+        XCTAssertEqual(editor.send(.delete), .failure(.validation(.lastTemplate)))
         XCTAssertEqual(settings.activeTemplateID, settings.templates[0].id)
+    }
+
+    func testDraftFailedValidationAndTeardownDoNotPersistOrNotify() throws {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let settings = TemplateSettings(defaults: defaults)
+        let committedData = defaults.data(forKey: "templates")
+        let committedID = defaults.string(forKey: "activeTemplateID")
+        var notifications = 0
+        settings.onChange = { notifications += 1 }
+
+        settings.send(.beginEditing)
+        settings.send(.editName("learn"))
+        settings.send(.editPreamble("Uncommitted"))
+        settings.send(.request(.template(Template.steer.id)))
+        XCTAssertEqual(settings.send(.resolve(.save)), .failure(.validation(.duplicateName)))
+        XCTAssertEqual(settings.pendingDestination, .template(Template.steer.id))
+        XCTAssertEqual(settings.activeTemplate, .plain)
+        XCTAssertEqual(defaults.data(forKey: "templates"), committedData)
+        XCTAssertEqual(defaults.string(forKey: "activeTemplateID"), committedID)
+        XCTAssertEqual(notifications, 0)
+
+        settings.send(.endEditing)
+        settings.send(.endEditing)
+        settings.send(.save)
+        settings.send(.resolve(.save))
+        XCTAssertNil(settings.workspace.session)
+        XCTAssertEqual(defaults.data(forKey: "templates"), committedData)
+        XCTAssertEqual(defaults.string(forKey: "activeTemplateID"), committedID)
+        XCTAssertEqual(notifications, 0)
+        XCTAssertEqual(TemplateSettings(defaults: defaults).activeTemplate, .plain)
+    }
+
+    func testCommittedChangeNotifiesAfterPersistenceAndNavigation() throws {
+        let defaults = makeDefaults()
+        defer { remove(defaults) }
+        let settings = TemplateSettings(defaults: defaults)
+        var published: [TemplateWorkspace] = []
+        var persisted: [Data?] = []
+        var persistedIDs: [String?] = []
+        settings.onChange = { [weak settings] in
+            guard let settings else { return }
+            published.append(settings.workspace)
+            persisted.append(defaults.data(forKey: "templates"))
+            persistedIDs.append(defaults.string(forKey: "activeTemplateID"))
+        }
+
+        settings.send(.beginEditing)
+        settings.send(.editPreamble("Saved source"))
+        settings.send(.request(.template(Template.learn.id)))
+        _ = try settings.send(.resolve(.save)).get()
+        XCTAssertEqual(published.count, 1)
+        XCTAssertEqual(published[0].collection.template(id: Template.plain.id)?.preamble, "Saved source")
+        XCTAssertEqual(published[0].session?.draft, .learn)
+        XCTAssertNil(published[0].session?.pendingDestination)
+        XCTAssertEqual(
+            try JSONDecoder().decode([Template].self, from: XCTUnwrap(persisted[0])),
+            published[0].collection.templates
+        )
+        XCTAssertEqual(persistedIDs[0], Template.learn.id.uuidString)
+
+        let id = UUID()
+        _ = try settings.send(.saveAsNew(name: "Copy", id: id)).get()
+        XCTAssertEqual(published.count, 2)
+        XCTAssertEqual(published[1].session?.draft.id, id)
+        XCTAssertEqual(
+            try JSONDecoder().decode([Template].self, from: XCTUnwrap(persisted[1])),
+            published[1].collection.templates
+        )
+        XCTAssertEqual(persistedIDs[1], id.uuidString)
+        settings.send(.endEditing)
+        settings.send(.beginEditing)
+        XCTAssertEqual(settings.draft.id, id)
+        XCTAssertEqual(published.count, 2)
     }
 
     private enum Seed {
@@ -233,7 +319,7 @@ final class TemplateSettingsTests: XCTestCase {
 
     private func makeSettingsOnLearn(_ defaults: UserDefaults) throws -> TemplateSettings {
         let settings = TemplateSettings(defaults: defaults)
-        try settings.selectTemplate(id: Template.learn.id)
+        _ = try settings.send(.request(.template(Template.learn.id))).get()
         return settings
     }
 

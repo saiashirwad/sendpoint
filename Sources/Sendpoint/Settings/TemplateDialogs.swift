@@ -2,23 +2,20 @@ import AppKit
 import SendpointDomain
 
 enum TemplateDialogs {
-    static func resolvePendingSelection(_ editor: TemplateEditorController) -> Bool {
-        guard editor.pendingTemplateID != nil else { return true }
-        guard let decision = dirtyDecision(for: editor) else {
-            editor.cancelPendingSelection()
+    static func request(_ destination: TemplateDestination, in editor: TemplateSettings) -> Bool {
+        do {
+            let outcome = try editor.send(.request(destination)).get()
+            guard outcome == .needsDecision else { return true }
+            let decision = dirtyDecision(for: editor) ?? .cancel
+            return try editor.send(.resolve(decision)).get() != .cancelled
+        } catch {
+            showError(error)
             return false
         }
-        return resolve(decision, editor: editor, closesWindow: false)
     }
 
-    static func shouldClose(_ editor: TemplateEditorController) -> Bool {
-        guard editor.isDirty else { return true }
-        guard let decision = dirtyDecision(for: editor) else { return false }
-        return resolve(decision, editor: editor, closesWindow: true)
-    }
-
-    static func delete(_ editor: TemplateEditorController) {
-        guard let stored = editor.storedTemplate else { return }
+    static func delete(_ editor: TemplateSettings) {
+        let stored = editor.activeTemplate
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Delete “\(stored.name)”?"
@@ -27,7 +24,7 @@ enum TemplateDialogs {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
-            try editor.delete()
+            _ = try editor.send(.delete).get()
         } catch {
             showError(error)
         }
@@ -43,8 +40,8 @@ enum TemplateDialogs {
     }
 
     private static func dirtyDecision(
-        for editor: TemplateEditorController
-    ) -> TemplateEditorState.DirtyDecision? {
+        for editor: TemplateSettings
+    ) -> TemplateDirtyDecision? {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Save changes to “\(editor.draft.name)”?"
@@ -59,7 +56,7 @@ enum TemplateDialogs {
             return .save
         case .alertSecondButtonReturn:
             guard let name = requestNewName(for: editor) else { return nil }
-            return .saveAsNew(name: name)
+            return .saveAsNew(name: name, id: UUID())
         case .alertThirdButtonReturn:
             return .discard
         default:
@@ -67,24 +64,7 @@ enum TemplateDialogs {
         }
     }
 
-    private static func resolve(
-        _ decision: TemplateEditorState.DirtyDecision,
-        editor: TemplateEditorController,
-        closesWindow: Bool
-    ) -> Bool {
-        do {
-            if closesWindow {
-                return try editor.resolveClose(decision)
-            }
-            return try editor.resolvePendingSelection(decision)
-        } catch {
-            showError(error)
-            if !closesWindow { editor.cancelPendingSelection() }
-            return false
-        }
-    }
-
-    private static func requestNewName(for editor: TemplateEditorController) -> String? {
+    private static func requestNewName(for editor: TemplateSettings) -> String? {
         var proposedName = "\(editor.draft.name) Copy"
         while true {
             let alert = NSAlert()
@@ -102,7 +82,7 @@ enum TemplateDialogs {
             guard alert.runModal() == .alertFirstButtonReturn else { return nil }
             proposedName = field.stringValue
             do {
-                return try editor.validatedNewTemplateName(proposedName)
+                return try editor.validatedNewName(proposedName)
             } catch {
                 showError(error)
             }

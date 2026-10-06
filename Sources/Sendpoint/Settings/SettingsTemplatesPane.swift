@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsTemplatesPane: View {
     @Bindable var settings: AppSettings
-    @Bindable var editor: TemplateEditorController
+    @Bindable var editor: TemplateSettings
     let onSelectTemplate: (UUID) -> Void
 
     @State private var newTemplate: NameDraft?
@@ -41,7 +41,7 @@ struct SettingsTemplatesPane: View {
                                 .keyboardShortcut("s", modifiers: .command)
                                 .help("Save  ⌘S")
                                 .transition(.opacity)
-                            GlyphButton(systemName: "arrow.counterclockwise", label: "Revert", action: editor.revert)
+                            GlyphButton(systemName: "arrow.counterclockwise", label: "Revert") { editor.send(.revert) }
                                 .help("Revert changes")
                                 .transition(.opacity)
                         }
@@ -99,7 +99,7 @@ struct SettingsTemplatesPane: View {
     private var chips: some View {
         FlowLayout(spacing: Spacing.sm) {
             ForEach(editor.templates) { template in
-                let isEdited = template.id == editor.editedTemplateID
+                let isEdited = template.id == editor.draft.id
                 Chip(
                     title: isEdited ? (editor.draft.name.nonblank ?? template.name) : template.name,
                     isSelected: isEdited,
@@ -133,14 +133,13 @@ struct SettingsTemplatesPane: View {
     }
 
     private func save() {
-        do { try editor.save() } catch { TemplateDialogs.showError(error) }
+        do { _ = try editor.send(.save).get() } catch { TemplateDialogs.showError(error) }
     }
 
     private func create() {
         guard let draft = newTemplate else { return }
         do {
-            let name = try editor.validatedNewTemplateName(draft.name)
-            _ = try editor.saveAsNew(named: name)
+            _ = try editor.send(.saveAsNew(name: draft.name, id: UUID())).get()
             newTemplate = nil
         } catch {
             newTemplate?.problem = error.localizedDescription
