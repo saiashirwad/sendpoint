@@ -82,7 +82,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testTextCaptureWaitingForSelectionAndSaveFailure() async throws {
         let store = try await StackStore(persistence: StorePersistence(
-            load: { .empty() }, commit: { _ in throw CocoaError(.fileWriteOutOfSpace) }
+            load: { StackDocument() }, commit: { _ in throw CocoaError(.fileWriteOutOfSpace) }
         ))
         let controller = makeCaptureController(store: store, selection: SelectionCapture(
             read: { _, _ in

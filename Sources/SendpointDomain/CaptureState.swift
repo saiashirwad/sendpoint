@@ -285,9 +285,9 @@ public nonisolated struct CaptureState: Equatable {
             return CaptureSpeech(origin: destination.origin, stage: .transcribing, preview: preview)
         case let .saving(request) where request.input == .voice:
             return CaptureSpeech(origin: .note(.resolved(request.selection), request.destinationStackID),
-                                 stage: .saving, preview: nil)
-        case let .inserting(target, _):
-            return CaptureSpeech(origin: .dictation(target), stage: .inserting, preview: nil)
+                                 stage: .saving, preview: request.note.body)
+        case let .inserting(target, text):
+            return CaptureSpeech(origin: .dictation(target), stage: .inserting, preview: text)
         case let .speechFailed(origin, message):
             return CaptureSpeech(origin: origin, stage: .failed(message), preview: nil)
         default: return nil

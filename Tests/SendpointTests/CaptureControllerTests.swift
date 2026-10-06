@@ -73,6 +73,7 @@ final class CaptureControllerTests: XCTestCase {
         hasFrontApp: Bool = true,
         sleep: (@MainActor (Duration) async throws -> Void)? = nil,
         persistence: StorePersistence? = nil,
+        insertion: (@MainActor () async throws -> Bool)? = nil,
         diagnostics: @escaping DiagnosticSink = { _ in }
     ) async throws -> Fixture {
         let suite = "CaptureControllerTests.\(UUID().uuidString)"
@@ -117,6 +118,7 @@ final class CaptureControllerTests: XCTestCase {
                 paste: { _, _ in false },
                 insertText: { text, pid in
                     pasteboard.inserted.append((text, pid))
+                    if let insertion { return try await insertion() }
                     return pasteboard.pasteSucceeds
                 }
             ),
@@ -196,7 +198,7 @@ final class CaptureControllerTests: XCTestCase {
     func testSaveRetryRunsTheRetainedStoreMutationOnceWithoutASecondEnqueue() async throws {
         let disk = RetryDisk()
         let f = try await makeFixture(persistence: StorePersistence(
-            load: { .empty() }, commit: { try await disk.commit($0) }
+            load: { StackDocument() }, commit: { try await disk.commit($0) }
         ))
         f.controller.beginCapture()
         await f.selectionGate.open(selection)
@@ -395,6 +397,52 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertFalse(f.controller.isOpen, "still down")
         f.controller.send(.dictateReleased)
         XCTAssertEqual(f.controller.state.speechLatch, .up)
+    }
+
+    func testFinalVoiceTextStaysVisibleWhileTheDurableSaveIsSuspended() async throws {
+        let commitGate = Gate<Bool>()
+        let f = try await makeFixture(persistence: StorePersistence(
+            load: { StackDocument() }, commit: { _ in _ = await commitGate.wait() }
+        ))
+        f.controller.send(.voicePressed)
+        await f.recorder.started.open(true)
+        await f.selectionGate.open(selection)
+        await waitForObservation {
+            f.controller.state.speech?.stage == .listening && f.controller.captured == self.selection
+        }
+        f.recorder.partialHandler?("hello")
+        f.controller.send(.voiceReleased)
+        XCTAssertEqual(f.controller.state.speech?.stage, .saving)
+        XCTAssertEqual(f.controller.state.speech?.preview, "hello there")
+        XCTAssertEqual(f.controller.captured, selection)
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
+        await commitGate.open(true)
+        await f.store.waitForIdle()
+        XCTAssertFalse(f.controller.isOpen)
+        XCTAssertEqual(f.store.currentNotes.map(\.body), ["hello there"])
+    }
+
+    func testFinalDictationTextStaysVisibleWhileInsertionIsSuspended() async throws {
+        let insertionGate = Gate<Bool>()
+        let insertionStarted = AsyncAcknowledgement()
+        let f = try await makeFixture(insertion: {
+            insertionStarted.signal()
+            return await insertionGate.wait()
+        })
+        f.controller.send(.dictatePressed)
+        await f.recorder.started.open(true)
+        await waitForObservation { f.controller.state.speech?.stage == .listening }
+        f.recorder.partialHandler?("hello")
+        f.controller.send(.dictateReleased)
+        await insertionStarted.wait()
+        XCTAssertEqual(f.controller.state.speech?.stage, .inserting)
+        XCTAssertEqual(f.controller.state.speech?.preview, "hello there")
+        XCTAssertEqual(f.pasteboard.inserted.map(\.0), ["hello there"])
+        XCTAssertEqual(f.pasteboard.inserted.map(\.1), [frontApp.processIdentifier])
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
+        await insertionGate.open(true)
+        await waitForObservation { !f.controller.isOpen }
+        XCTAssertTrue(f.store.currentNotes.isEmpty)
     }
 
     func testAFailedPasteShowsAMessageAndCloses() async throws {
