@@ -22,6 +22,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let onCheckForUpdates: () -> Void
     private let onShowStack: () -> Void
     private var window: NSWindow?
+    private let microphonePreview = InputLevelMonitor()
 
     init(
         settings: AppSettings,
@@ -79,6 +80,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func teardown() {
+        microphonePreview.teardown()
         surfaces.unregister(.settings)
         permissionState.stopWatchingVoiceModel()
         window?.delegate = nil
@@ -96,6 +98,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func hide() {
+        microphonePreview.stop()
         permissionState.stopWatchingVoiceModel()
         window?.orderOut(nil)
     }
@@ -115,7 +118,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             onSelectTemplate: onSelectTemplate,
             onSettingsChanged: onSettingsChanged,
             onCheckForUpdates: onCheckForUpdates,
-            onShowStack: onShowStack
+            onShowStack: onShowStack,
+            microphonePreview: microphonePreview
         )
         let hosting = NSHostingView(rootView: settingsView)
         hosting.safeAreaRegions = []
@@ -166,6 +170,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closed = notification.object as? NSWindow, closed === window else { return }
         surfaces.userClosed(.settings)
+        microphonePreview.stop()
         permissionState.stopWatchingVoiceModel()
         window = nil
         templates.send(.endEditing)

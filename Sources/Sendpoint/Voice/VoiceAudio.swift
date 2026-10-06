@@ -1,8 +1,14 @@
 import AVFoundation
+import Foundation
 
 nonisolated struct VoiceAudioFrame: Sendable {
     let samples: [Float]
     let sampleRate: Double
+
+    init(samples: [Float], sampleRate: Double) {
+        self.samples = samples
+        self.sampleRate = sampleRate
+    }
 
     init?(buffer: AVAudioPCMBuffer) {
         guard buffer.frameLength > 0 else { return nil }
@@ -10,92 +16,58 @@ nonisolated struct VoiceAudioFrame: Sendable {
         let channelCount = Int(buffer.format.channelCount)
         guard channelCount > 0 else { return nil }
         sampleRate = buffer.format.sampleRate
+        let stride = buffer.stride
+        let interleaved = buffer.format.isInterleaved
         if let channels = buffer.floatChannelData {
-            samples = Self.loudest(channels, frames: frames, channelCount: channelCount)
-        } else if buffer.format.commonFormat == .pcmFormatFloat32,
-                  let pointer = buffer.audioBufferList.pointee.mBuffers.mData
-        {
-            let floats = pointer.assumingMemoryBound(to: Float.self)
-            samples = Self.loudestInterleaved(floats, frames: frames, channelCount: channelCount)
+            samples = Self.loudest(frames: frames, channelCount: channelCount) { frame, channel in
+                channels[interleaved ? 0 : channel][frame * stride + (interleaved ? channel : 0)]
+            }
         } else if let channels = buffer.int16ChannelData {
             let scale = 1 / Float(Int16.max)
-            var best = 0
-            var bestEnergy: Float = -1
-            for channel in 0..<channelCount {
-                var energy: Float = 0
-                let source = channels[channel]
-                for index in 0..<frames {
-                    let sample = Float(source[index])
-                    energy += sample * sample
-                }
-                if energy > bestEnergy {
-                    bestEnergy = energy
-                    best = channel
-                }
+            samples = Self.loudest(frames: frames, channelCount: channelCount) { frame, channel in
+                Float(channels[interleaved ? 0 : channel][frame * stride + (interleaved ? channel : 0)]) * scale
             }
-            let source = channels[best]
-            samples = (0..<frames).map { Float(source[$0]) * scale }
         } else {
             return nil
         }
     }
 
     private static func loudest(
-        _ channels: UnsafePointer<UnsafeMutablePointer<Float>>,
         frames: Int,
-        channelCount: Int
+        channelCount: Int,
+        sample: (Int, Int) -> Float
     ) -> [Float] {
-        var best = 0
-        var bestEnergy: Float = -1
-        for channel in 0..<channelCount {
-            var energy: Float = 0
-            let source = channels[channel]
-            for index in 0..<frames { energy += source[index] * source[index] }
-            if energy > bestEnergy {
-                bestEnergy = energy
-                best = channel
-            }
-        }
-        return Array(UnsafeBufferPointer(start: channels[best], count: frames))
-    }
-
-    private static func loudestInterleaved(
-        _ floats: UnsafePointer<Float>,
-        frames: Int,
-        channelCount: Int
-    ) -> [Float] {
-        guard channelCount > 1 else {
-            return Array(UnsafeBufferPointer(start: floats, count: frames))
-        }
         var best = 0
         var bestEnergy: Float = -1
         for channel in 0..<channelCount {
             var energy: Float = 0
             for index in 0..<frames {
-                let sample = floats[index * channelCount + channel]
-                energy += sample * sample
+                let value = sample(index, channel)
+                energy += value * value
             }
             if energy > bestEnergy {
                 bestEnergy = energy
                 best = channel
             }
         }
-        return (0..<frames).map { floats[$0 * channelCount + best] }
+        return (0..<frames).map { sample($0, best) }
     }
 }
 
-nonisolated final class VoiceAudioQueue: @unchecked Sendable {
-    private let items = Locked<[VoiceAudioFrame]>([])
+nonisolated final class VoiceAudioTake: Sendable {
+    let id: UUID
+    let frames: AsyncStream<VoiceAudioFrame>
+    private let continuation: AsyncStream<VoiceAudioFrame>.Continuation
 
-    nonisolated func append(_ frame: VoiceAudioFrame) {
-        items.withLock { $0.append(frame) }
+    init(id: UUID = UUID()) {
+        self.id = id
+        (frames, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
-    nonisolated func drain() -> [VoiceAudioFrame] {
-        items.withLock { items in
-            let batch = items
-            items.removeAll(keepingCapacity: true)
-            return batch
-        }
+    @discardableResult
+    func append(_ frame: VoiceAudioFrame) -> AsyncStream<VoiceAudioFrame>.Continuation.YieldResult {
+        continuation.yield(frame)
     }
+
+    func close() { continuation.finish() }
 }

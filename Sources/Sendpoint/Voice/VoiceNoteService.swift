@@ -2,21 +2,24 @@ import Foundation
 import SendpointDomain
 
 final class VoiceNoteService {
-    private enum Work: Hashable { case micWarmUp, modelWarmUp, start, stop, stream, finish, settle }
+    private enum Work: Hashable { case micWarmUp, modelWarmUp, start, stop, settle }
+    private enum Settlement { case finish, abandon }
+    private final class Take {
+        let audio: VoiceAudioTake
+        var transcription: Task<String, Error>?
+        init(_ id: UUID) { audio = VoiceAudioTake(id: id) }
+    }
 
-    static let streamOpenAttempts = 5
     private static let microphoneDenied = "Microphone access is off. Turn it on in Settings › Voice."
-
     private(set) var machine = VoiceMachine()
     private let transcriber: any VoiceTranscribing
     private let microphone: Microphone
     private let modelReady: () -> Bool
     private let now: () -> Date
-    private let sleep: @MainActor (Duration) async throws -> Void
     private var tasks: [Work: Task<Void, Never>] = [:]
     private var stopGeneration = 0
     private var teardownTask: Task<Void, Never>?
-    private var queue: VoiceAudioQueue?
+    private var take: Take?
     private let partials = LatestValuePump<String>()
     private var pending: [VoiceEvent] = []
     private var isDraining = false
@@ -30,15 +33,13 @@ final class VoiceNoteService {
         levelMeter: VoiceLevelMeter = VoiceLevelMeter(),
         microphone: Microphone? = nil,
         modelReady: @escaping () -> Bool = { LocalVoiceModelFiles.exist() },
-        now: @escaping () -> Date = { Date() },
-        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        now: @escaping () -> Date = { Date() }
     ) {
         self.transcriber = transcriber
         self.levelMeter = levelMeter
         self.microphone = microphone ?? .live(meter: levelMeter)
         self.modelReady = modelReady
         self.now = now
-        self.sleep = sleep
     }
 
     func warmUp() { send(.warmUp) }
@@ -46,10 +47,7 @@ final class VoiceNoteService {
     func stop(_ take: UUID) { send(.stop(take, now: now())) }
     func discard() { send(.discard) }
     func teardown() { send(.teardown) }
-
-    func waitForTeardown() async {
-        await teardownTask?.value
-    }
+    func waitForTeardown() async { await teardownTask?.value }
 
     private func send(_ event: VoiceEvent) {
         pending.append(event)
@@ -66,8 +64,8 @@ final class VoiceNoteService {
         case .prepare: prepare()
         case let .startMic(take): startMicrophone(take)
         case .stopMic: stopMicrophone()
-        case let .finish(take): finish(take)
-        case .abandon: abandon()
+        case .finish: settle(.finish)
+        case .abandon: settle(.abandon)
         case .tearDown: tearDown()
         case let .emit(output): onOutput?(output)
         }
@@ -94,127 +92,115 @@ final class VoiceNoteService {
         }
     }
 
-    private func startMicrophone(_ take: UUID) {
+    private func startMicrophone(_ id: UUID) {
         tasks[.start]?.cancel()
-        let warming = tasks.removeValue(forKey: .micWarmUp)
+        let warming = tasks[.micWarmUp]
         let stopped = tasks[.stop]
+        let owner = Take(id)
+        take = owner
         tasks[.start] = Task { [weak self, microphone] in
             await stopped?.value
             await warming?.value
             guard !Task.isCancelled else { return }
             let allowed = await microphone.requestAccess()
-            guard !Task.isCancelled, let self, self.machine.phase == .starting(take) else { return }
+            guard !Task.isCancelled, let self, self.take === owner,
+                  self.machine.phase == .starting(id) else { return }
             guard allowed else {
                 self.tasks[.start] = nil
-                self.send(.micFailed(take, Self.microphoneDenied))
+                self.send(.micFailed(id, Self.microphoneDenied))
                 return
             }
             let order = self.microphones
             do {
-                let queue = try await microphone.start(order)
-                guard !Task.isCancelled, self.machine.phase == .starting(take) else { return }
-                if self.restartIfMicrophoneOrderChanged(order, take: take) { return }
+                try await microphone.start(order, owner.audio)
+                guard !Task.isCancelled, self.take === owner,
+                      self.machine.phase == .starting(id) else { return }
+                if self.restartIfMicrophoneOrderChanged(order, take: id) { return }
                 self.tasks[.start] = nil
-                self.queue = queue
-                self.stream(queue, take: take)
-                self.send(.micStarted(take, self.now()))
+                self.transcribe(owner)
+                self.send(.micStarted(id, self.now()))
             } catch {
-                guard !Task.isCancelled, self.machine.phase == .starting(take) else { return }
-                if self.restartIfMicrophoneOrderChanged(order, take: take) { return }
+                guard !Task.isCancelled, self.take === owner,
+                      self.machine.phase == .starting(id) else { return }
+                if self.restartIfMicrophoneOrderChanged(order, take: id) { return }
                 self.tasks[.start] = nil
-                self.send(.micFailed(take, error.localizedDescription))
+                self.send(.micFailed(id, error.localizedDescription))
             }
         }
     }
 
     private func restartIfMicrophoneOrderChanged(_ order: MicrophoneOrder, take: UUID) -> Bool {
-        if microphones != order {
-            stopMicrophone()
-            startMicrophone(take)
-            return true
-        }
-        return false
+        guard microphones != order else { return false }
+        stopMicrophone()
+        startMicrophone(take)
+        return true
     }
 
     private func stopMicrophone() {
         let starting = tasks.removeValue(forKey: .start)
         starting?.cancel()
         let previousStop = tasks.removeValue(forKey: .stop)
+        let owner = take
         stopGeneration += 1
         let current = stopGeneration
         tasks[.stop] = Task { [weak self, microphone] in
             await starting?.value
             await previousStop?.value
             await microphone.stop()
+            owner?.audio.close()
             guard let self, self.stopGeneration == current else { return }
+            if self.take === owner, owner?.transcription == nil { self.take = nil }
             self.tasks[.stop] = nil
         }
     }
 
-    private func stream(_ queue: VoiceAudioQueue, take: UUID) {
+    private func transcribe(_ owner: Take) {
         let partial = partials.start { [weak self] text in
-            guard let self, self.machine.take == take else { return }
-            self.onOutput?(.partial(take, text))
+            guard let self, self.take === owner, self.machine.take == owner.audio.id else { return }
+            self.onOutput?(.partial(owner.audio.id, text))
         }
-        tasks[.stream]?.cancel()
-        tasks[.stream] = Task { [transcriber, sleep] in
-            var isOpen = false
-            for _ in 0..<Self.streamOpenAttempts where !Task.isCancelled && !isOpen {
-                isOpen = await transcriber.begin(take, onPartial: { partial.yield($0) })
-                guard !Task.isCancelled else { return }
-                if !isOpen {
-                    do { try await sleep(.milliseconds(50)) } catch { return }
-                }
-            }
-            guard isOpen else { return }
-            while !Task.isCancelled {
-                let frames = queue.drain()
-                if frames.isEmpty {
-                    do { try await sleep(.milliseconds(5)) } catch { return }
-                    continue
-                }
-                await transcriber.feed(frames, take: take)
-            }
-        }
-    }
-
-    private func finish(_ take: UUID) {
-        let pump = tasks.removeValue(forKey: .stream)
-        pump?.cancel()
-        let stopped = tasks[.stop]
-        let queue = queue
-        self.queue = nil
-        tasks[.finish] = Task { [weak self, transcriber] in
-            await stopped?.value
-            await pump?.value
-            guard !Task.isCancelled else { return }
+        owner.transcription = Task { [weak self, transcriber, audio = owner.audio] in
             do {
-                let transcript = try await transcriber.finish(take, leftover: queue?.drain() ?? [])
-                guard !Task.isCancelled, let self else { return }
-                self.tasks[.finish] = nil
-                self.partials.stop()
-                self.send(.transcribed(take, transcript.nonblank ?? ""))
+                try Task.checkCancellation()
+                return try await transcriber.transcribe(audio, onPartial: { partial.yield($0) })
             } catch {
-                guard !Task.isCancelled, let self else { return }
-                self.tasks[.finish] = nil
-                self.partials.stop()
-                self.send(.transcriptionFailed(take, error.localizedDescription))
+                if !Task.isCancelled, let self, self.take === owner, self.machine.take == audio.id {
+                    self.send(.transcriptionFailed(audio.id, error.localizedDescription))
+                }
+                throw error
             }
         }
     }
 
-    private func abandon() {
-        let pump = tasks.removeValue(forKey: .stream)
-        pump?.cancel()
-        tasks.removeValue(forKey: .finish)?.cancel()
-        queue = nil
-        partials.stop()
-        tasks[.settle] = Task { [weak self, transcriber] in
-            await pump?.value
-            await transcriber.abandon()
-            guard !Task.isCancelled, let self else { return }
+    private func settle(_ settlement: Settlement) {
+        guard let owner = take else {
+            if settlement == .abandon { send(.settled) }
+            return
+        }
+        let previous = tasks[.settle]
+        previous?.cancel()
+        if settlement == .abandon {
+            owner.transcription?.cancel()
+            partials.stop()
+        }
+        let stopped = tasks[.stop]
+        tasks[.settle] = Task { [weak self] in
+            await stopped?.value
+            await previous?.value
+            let outcome = await owner.transcription?.result
+            guard !Task.isCancelled, let self, self.take === owner else { return }
+            self.take = nil
             self.tasks[.settle] = nil
-            self.send(.settled)
+            self.partials.stop()
+            if settlement == .abandon {
+                self.send(.settled)
+            } else if self.machine.phase == .transcribing(owner.audio.id) {
+                switch outcome {
+                case let .success(text): self.send(.transcribed(owner.audio.id, text.nonblank ?? ""))
+                case let .failure(error): self.send(.transcriptionFailed(owner.audio.id, error.localizedDescription))
+                case nil: self.send(.transcriptionFailed(owner.audio.id, "Transcription did not start."))
+                }
+            }
         }
     }
 
@@ -222,11 +208,15 @@ final class VoiceNoteService {
         let running = Array(tasks.values)
         running.forEach { $0.cancel() }
         tasks.removeAll()
-        queue = nil
+        let transcription = take?.transcription
+        transcription?.cancel()
+        take?.audio.close()
+        take = nil
         partials.stop()
         onOutput = nil
         teardownTask = Task { [transcriber, microphone] in
             await transcriber.teardown()
+            _ = await transcription?.result
             for task in running { await task.value }
             await microphone.teardown()
         }

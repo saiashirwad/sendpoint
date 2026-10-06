@@ -26,7 +26,7 @@ final class VoiceMachineTests: XCTestCase {
         XCTAssertEqual(machine.phase, .starting(take))
         XCTAssertEqual(machine.update(.micStarted(take, began)), [.emit(.started(take))])
         XCTAssertEqual(machine.update(.stop(take, now: began.addingTimeInterval(2))),
-            [.stopMic, .finish(take), .prepare])
+            [.stopMic, .finish, .prepare])
         XCTAssertEqual(machine.phase, .transcribing(take))
         XCTAssertEqual(machine.update(.transcribed(take, "hello")), [.emit(.transcript(take, "hello"))])
         XCTAssertEqual(machine.phase, .idle)
@@ -127,6 +127,17 @@ final class VoiceMachineTests: XCTestCase {
         var idle = VoiceMachine()
         XCTAssertEqual(idle.update(.stop(take, now: began)), [])
         XCTAssertEqual(idle.phase, .idle)
+    }
+
+    func testTranscriptionFailureWhileRecordingStopsAndSettlesTheCurrentTake() {
+        var machine = recording()
+        XCTAssertEqual(machine.update(.transcriptionFailed(other, "stale")), [])
+        XCTAssertEqual(machine.update(.transcriptionFailed(take, "broken")),
+                       [.stopMic, .abandon, .emit(.failed(take, "broken"))])
+        XCTAssertEqual(machine.phase, .settling(next: nil))
+        XCTAssertEqual(machine.update(.transcriptionFailed(take, "again")), [])
+        _ = machine.update(.settled)
+        XCTAssertEqual(machine.phase, .idle)
     }
 
     func testTeardownIsTerminalAndIdempotent() {

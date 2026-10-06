@@ -7,9 +7,9 @@ struct SettingsCapturePane: View {
     let hotKeyRegistrar: HotKeyRegistrar
     let captureController: CaptureController
     let onSettingsChanged: () -> Void
+    let preview: InputLevelMonitor
 
     @State private var inputDevices = AudioInputDeviceList()
-    @State private var preview = InputLevelMonitor()
     @State private var windowIsVisible = false
 
     var body: some View {

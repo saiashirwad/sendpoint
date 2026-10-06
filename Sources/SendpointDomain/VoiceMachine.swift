@@ -24,7 +24,7 @@ public nonisolated enum VoiceEffect: Equatable, Sendable {
     case prepare
     case startMic(UUID)
     case stopMic
-    case finish(UUID)
+    case finish
     case abandon
     case tearDown
     case emit(VoiceOutput)
@@ -101,7 +101,7 @@ public nonisolated struct VoiceMachine: Equatable, Sendable {
                 return [.stopMic, .abandon, .prepare, .emit(.transcript(take, ""))]
             }
             phase = .transcribing(take)
-            return [.stopMic, .finish(take), .prepare]
+            return [.stopMic, .finish, .prepare]
 
         case .discard:
             return discard()
@@ -112,9 +112,14 @@ public nonisolated struct VoiceMachine: Equatable, Sendable {
             return [.emit(.transcript(take, text))]
 
         case let .transcriptionFailed(take, message):
-            guard phase == .transcribing(take) else { return [] }
+            let stop: [VoiceEffect]
+            switch phase {
+            case .recording(take, _): stop = [.stopMic]
+            case .transcribing(take): stop = []
+            default: return []
+            }
             phase = .settling(next: nil)
-            return [.abandon, .emit(.failed(take, message))]
+            return stop + [.abandon, .emit(.failed(take, message))]
 
         case .settled:
             guard case let .settling(next) = phase else { return [] }

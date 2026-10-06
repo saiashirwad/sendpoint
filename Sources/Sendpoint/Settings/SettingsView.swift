@@ -48,6 +48,7 @@ struct SettingsView: View {
     let onSettingsChanged: () -> Void
     let onCheckForUpdates: () -> Void
     let onShowStack: () -> Void
+    let microphonePreview: InputLevelMonitor
 
     @State private var tab: SettingsTab = .capture
 
@@ -67,7 +68,8 @@ struct SettingsView: View {
         onSettingsChanged: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
         onShowStack: @escaping () -> Void,
-        tab: SettingsTab = .capture
+        tab: SettingsTab = .capture,
+        microphonePreview: InputLevelMonitor = InputLevelMonitor()
     ) {
         _tab = State(initialValue: tab)
         _settings = Bindable(wrappedValue: settings)
@@ -82,6 +84,7 @@ struct SettingsView: View {
         self.onSettingsChanged = onSettingsChanged
         self.onCheckForUpdates = onCheckForUpdates
         self.onShowStack = onShowStack
+        self.microphonePreview = microphonePreview
     }
 
     var body: some View {
@@ -115,7 +118,8 @@ struct SettingsView: View {
                 voiceSettings: voiceSettings,
                 hotKeyRegistrar: hotKeyRegistrar,
                 captureController: captureController,
-                onSettingsChanged: onSettingsChanged
+                onSettingsChanged: onSettingsChanged,
+                preview: microphonePreview
             )
         case .preview:
             SettingsPreviewPane(

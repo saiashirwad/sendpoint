@@ -4,11 +4,11 @@ import Foundation
 struct Microphone {
     var requestAccess: () async -> Bool
     var prepare: (MicrophoneOrder) async -> Void
-    var start: (MicrophoneOrder) async throws -> VoiceAudioQueue
+    var start: (MicrophoneOrder, VoiceAudioTake?) async throws -> Void
     var stop: () async -> Void
     var teardown: () async -> Void = {}
 
-    static func live(meter: VoiceLevelMeter, collectFrames: Bool = true) -> Microphone {
+    static func live(meter: VoiceLevelMeter) -> Microphone {
         let hardware = MicrophoneHardware()
         let levels = LatestValuePump<Float>()
         return Microphone(
@@ -17,10 +17,10 @@ struct Microphone {
                 guard PermissionCheck.isMicrophoneAuthorized else { return }
                 await hardware.prepare(order)
             },
-            start: { order in
+            start: { order, take in
                 let level = levels.start { meter.push($0) }
                 do {
-                    return try await hardware.start(order, level: level, collectFrames: collectFrames)
+                    try await hardware.start(order, level: level, take: take)
                 } catch {
                     levels.stop()
                     meter.reset()
@@ -52,6 +52,7 @@ private actor MicrophoneHardware {
     private var activeDevice: AudioInputDevice?
     private var spareEngine: AVAudioEngine?
     private var spareDevice: AudioInputDevice?
+    private var take: VoiceAudioTake?
 
     func prepare(_ order: MicrophoneOrder) {
         guard engine == nil, spareEngine == nil else { return }
@@ -66,16 +67,15 @@ private actor MicrophoneHardware {
     }
 
     func start(_ order: MicrophoneOrder, level: AsyncStream<Float>.Continuation,
-               collectFrames: Bool) throws -> VoiceAudioQueue {
+               take: VoiceAudioTake?) throws {
         stop()
         guard let device = AudioInputDeviceQuery.preferred(order) else { throw MicrophoneError.noInputDevice }
         let (engine, format) = try boundEngine(for: device)
         let input = engine.inputNode
 
-        let queue = VoiceAudioQueue()
         try Self.installTap(on: input, format: format) { @Sendable buffer, _ in
-            if collectFrames, let frame = VoiceAudioFrame(buffer: buffer) {
-                queue.append(frame)
+            if let take, let frame = VoiceAudioFrame(buffer: buffer) {
+                take.append(frame)
             }
             level.yield(VoiceLevelMeter.level(of: buffer))
         }
@@ -83,11 +83,12 @@ private actor MicrophoneHardware {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
+            take?.close()
             throw error
         }
         self.engine = engine
         activeDevice = device
-        return queue
+        self.take = take
     }
 
     private func boundEngine(for device: AudioInputDevice) throws -> (AVAudioEngine, AVAudioFormat) {
@@ -123,6 +124,8 @@ private actor MicrophoneHardware {
         guard let engine else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        take?.close()
+        take = nil
         self.engine = nil
         spareEngine = engine
         spareDevice = activeDevice
