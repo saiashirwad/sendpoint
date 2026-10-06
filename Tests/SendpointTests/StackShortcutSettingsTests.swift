@@ -6,8 +6,8 @@ import XCTest
 
 @MainActor
 final class StackShortcutSettingsTests: XCTestCase {
-    func testEveryStackHasAShortcutOnTheHomeRowUnderOption() throws {
-        try withDefaults { defaults in
+    func testEveryStackHasAShortcutOnTheHomeRowUnderOption() {
+        withDefaults { defaults in
             let settings = ShortcutSettings(defaults: defaults)
             let keys = [kVK_ANSI_H, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_Semicolon]
 

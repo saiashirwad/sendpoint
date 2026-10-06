@@ -59,8 +59,8 @@ final class StatusMenuModelTests: XCTestCase {
         }
     }
 
-    func testEveryStackIsListedInlineWithItsCountShortcutAndSelectAction() throws {
-        try withSettings { settings in
+    func testEveryStackIsListedInlineWithItsCountShortcutAndSelectAction() {
+        withSettings { settings in
             let first = stack(id: firstStackID, noteCount: 1)
             let second = stack(id: secondStackID, noteCount: 2)
             let menu = items(
