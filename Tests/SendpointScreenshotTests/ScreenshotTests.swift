@@ -50,8 +50,8 @@ final class ScreenshotTests: XCTestCase {
         let stacks = [Stack(notes: [note(subject: .standalone, body: "One")])]
         let store = try await makeStore(stacks)
         let controller = makeCaptureController(store: store)
-        let context = NoteCaptureContext(stackID: stacks[0].id)
-        controller.send(.begin(.text, context))
+        let context = CaptureIdentity(sourceStack: stacks[0].id)
+        controller.send(.begin(.typed(context)))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
         let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
             rootView: CaptureView(model: controller)
@@ -342,14 +342,14 @@ final class ScreenshotTests: XCTestCase {
     // MARK: - Fixtures
 
     private func makeVoice(captions: Bool) async throws
-        -> (CaptureController, NSPanel, NoteCaptureContext, () -> Void) {
+        -> (CaptureController, NSPanel, CaptureIdentity, () -> Void) {
         let stacks = [Stack(notes: [note(subject: .standalone, body: "One"), note(subject: .standalone, body: "Two")]), Stack()]
         let store = try await makeStore(stacks)
         let defaults = makeDefaults()
         VoiceSettings(defaults: defaults).send(.transcriptionPreview(captions))
         let controller = makeCaptureController(store: store, defaults: defaults)
-        let context = NoteCaptureContext(stackID: stacks[0].id)
-        controller.send(.begin(.voice, context))
+        let context = CaptureIdentity(sourceStack: stacks[0].id)
+        controller.send(.begin(.voice(context)))
         controller.send(.recordingStarted(context))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
         let voice = CaptureWindows.makeVoicePanel(contentView: CaptureHostingView(

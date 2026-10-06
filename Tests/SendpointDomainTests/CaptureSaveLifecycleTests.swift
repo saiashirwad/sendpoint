@@ -3,220 +3,179 @@ import XCTest
 import SendpointDomain
 
 final class CaptureSaveLifecycleTests: XCTestCase {
-    private let context = NoteCaptureContext(
-        stackID: .one, createdAt: Date(timeIntervalSince1970: 123)
-    )
-    private let selection = CapturedSelection(
-        text: "Selection", screenRect: nil
-    )
+    private let identity = CaptureIdentity(sourceStack: .one, createdAt: Date(timeIntervalSince1970: 123))
+    private let selection = CapturedSelection(text: "Selection")
 
-    func testTypedCaptureCommitsToTheExplicitDestinationWithoutChangingItsSourceOrDraft() throws {
-        let destination = StackSlot.two
-        var state = try editing(body: "Keep this draft")
-        let target = try XCTUnwrap(state.session?.target)
+    func testDestinationChangesKeepSourceSelectionAndDraftThenFreezeAtSave() throws {
+        var state = editing(body: "Keep this draft")
+        XCTAssertEqual(state.update(.chooseDestination(identity, .two)), [])
+        _ = state.update(.toggleDestinations(identity))
+        XCTAssertEqual(state.update(.chooseDestination(identity, .two)), [.switchStack(.two)])
+        XCTAssertEqual(state.destination, .choosing(.closed(.two)))
+        XCTAssertEqual(state.captured, selection)
+        XCTAssertEqual(state.editor, .editing("Keep this draft"))
+        XCTAssertEqual(state.identity?.sourceStack, .one)
 
-        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
-        XCTAssertEqual(state.update(.chooseDestination(context, destination)), [],
-            "a destination changes only after the picker is opened")
-        XCTAssertEqual(state.update(.toggleDestinations(context)), [])
-        XCTAssertEqual(state.session?.destinationPicker, .open)
-        XCTAssertEqual(state.update(.chooseDestination(context, destination)), [.switchStack(destination)])
-
-        XCTAssertEqual(state.session?.destinationStackID, destination)
-        XCTAssertEqual(state.session?.destinationPicker, .closed)
-        XCTAssertEqual(state.session?.target, target, "the source passage stays attached")
-        XCTAssertEqual(state.session?.phase, .editing("Keep this draft"), "the typed draft stays intact")
-
-        let effects = state.update(.save)
-        guard case let .commit(request)? = effects.first else {
-            return XCTFail("expected a commit, got \(effects)")
-        }
-        XCTAssertEqual(request.destinationStackID, destination)
-        XCTAssertEqual(request.target, target)
-        XCTAssertEqual(request.target.context.stackID, context.stackID)
+        let request = try commit(state.update(.save))
+        XCTAssertEqual(request.destinationStackID, .two)
+        XCTAssertEqual(request.identity, identity)
+        XCTAssertEqual(request.selection, selection)
+        XCTAssertEqual(request.note.id, identity.noteID)
+        XCTAssertEqual(request.note.createdAt, identity.createdAt)
         XCTAssertEqual(request.note.body, "Keep this draft")
+        _ = state.update(.stackSelected(.five))
+        _ = state.update(.changeNote("late"))
+        XCTAssertEqual(state.work, .saving(request))
+        XCTAssertEqual(state.destination, .frozen(.two))
     }
 
-    func testQueuedTypedSaveKeepsTheLastExplicitDestinationUntilThePassageArrives() throws {
-        let destination = StackSlot.two
+    func testSaveBeforeSelectionFreezesBodyAndDestinationUntilItCanCommit() throws {
         var state = CaptureState()
-        _ = state.update(.begin(.text, context))
-        _ = state.update(.selectionPending(context))
+        _ = state.update(.begin(.typed(identity)))
+        _ = state.update(.selectionPending(identity))
         _ = state.update(.changeNote("Quick thought"))
-        _ = state.update(.toggleDestinations(context))
-        _ = state.update(.chooseDestination(context, destination))
-
-        XCTAssertEqual(state.update(.toggleDestinations(context)), [])
+        _ = state.update(.stackSelected(.two))
+        _ = state.update(.toggleDestinations(identity))
         XCTAssertEqual(state.update(.save), [])
-        XCTAssertEqual(state.session?.destinationPicker, .closed)
-        XCTAssertEqual(state.session?.destinationStackID, destination)
-        XCTAssertEqual(state.session?.saveAwaitsSelection, true)
-
-        let effects = state.update(.selection(context, selection))
-        guard case let .commit(request)? = effects.first else {
-            return XCTFail("expected a commit, got \(effects)")
-        }
-        XCTAssertEqual(request.destinationStackID, destination)
-        XCTAssertEqual(request.target.context.stackID, context.stackID)
+        guard case .awaitingTextSelection = state.work else { return XCTFail("expected frozen wait") }
+        XCTAssertEqual(state.editor, .saving("Quick thought"))
+        XCTAssertEqual(state.destination, .frozen(.two))
+        _ = state.update(.stackSelected(.five))
+        _ = state.update(.changeNote("Edited late"))
+        _ = state.update(.chooseDestination(identity, .four))
+        let request = try commit(state.update(.selection(identity, selection)))
         XCTAssertEqual(request.note.body, "Quick thought")
+        XCTAssertEqual(request.destinationStackID, .two)
+        XCTAssertEqual(request.identity, identity)
+        XCTAssertEqual(request.selection, selection)
     }
 
-    func testSaveFreezesTheNoteAndRetryReusesTheExactRequest() throws {
-        var state = try editing(body: "Keep this draft")
-        let target = try XCTUnwrap(state.session?.target)
+    func testFailedSelectionAlsoReleasesAFrozenTypedSave() throws {
+        var state = CaptureState()
+        _ = state.update(.begin(.typed(identity)))
+        _ = state.update(.selectionPending(identity))
+        _ = state.update(.changeNote("Quick thought"))
+        _ = state.update(.save)
+        let request = try commit(state.update(.failed(identity, "no focused element")))
+        XCTAssertEqual(request.note.subject, .standalone)
+        XCTAssertEqual(request.note.body, "Quick thought")
+        XCTAssertEqual(request.note.id, identity.noteID)
+    }
 
-        let effects = state.update(.save)
-        let request = CaptureSaveRequest(
-            target: target, destinationStackID: context.stackID,
-            note: try XCTUnwrap(target.note(body: "Keep this draft"))
-        )
-        XCTAssertEqual(effects, [.commit(request)])
-        XCTAssertEqual(state.update(.changeNote("A late edit")), [])
-        XCTAssertEqual(state.update(.stackSelected(.five)), [])
-        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
-        XCTAssertEqual(state.session?.phase, .saving(request))
-
-        XCTAssertEqual(
-            state.update(.saved(request, .commitFailed("disk full"))),
-            [.show(.editor)]
-        )
-        XCTAssertEqual(state.session?.phase, .saveFailed(
-            request, message: "Couldn’t save the note: disk full", retryable: true
-        ))
-        XCTAssertEqual(state.update(.stackSelected(.three)), [])
-        XCTAssertEqual(state.session?.destinationStackID, context.stackID)
-
+    func testSaveRetryRetainsExactlyTheSameRequestAndNeverCommitsAgain() throws {
+        var state = editing(body: "Draft")
+        let request = try commit(state.update(.save))
+        XCTAssertEqual(state.update(.saved(request, .commitFailed("disk full"))), [.show(.editor)])
+        XCTAssertEqual(state.editor, .failed("Draft", .retryable("Couldn’t save the note: disk full")))
+        XCTAssertEqual(state.captured, selection)
+        _ = state.update(.stackSelected(.three))
+        _ = state.update(.changeNote("late"))
         XCTAssertEqual(state.update(.retry), [.retry])
-        XCTAssertEqual(state.session?.phase, .saving(request))
+        XCTAssertEqual(state.work, .saving(request))
+        XCTAssertEqual(state.update(.retry), [])
         XCTAssertEqual(state.update(.saved(request, .committed)), [.close])
         XCTAssertEqual(state.lifecycle, .idle)
     }
 
-    func testARejectedSaveCannotRetryAndDismissCloses() throws {
-        var (state, request) = try saving()
-        _ = state.update(.saved(request, .rejected("The note already exists.")))
-        XCTAssertEqual(state.session?.phase, .saveFailed(
-            request, message: "The note already exists.", retryable: false
-        ))
-        XCTAssertEqual(state.update(.retry), [])
-        XCTAssertEqual(state.update(.dismiss), [.close])
-    }
-
-    func testStaleOutcomesAreIgnored() throws {
-        var (state, request) = try saving()
-        let otherNote = Note(subject: .standalone, body: "Other")
-        for stale in [
-            CaptureSaveRequest(target: request.target, destinationStackID: .five, note: request.note),
-            CaptureSaveRequest(
-                target: request.target,
-                destinationStackID: request.destinationStackID,
-                note: otherNote
-            ),
+    func testTerminalOutcomesNeverRetryOrClaimSuccess() throws {
+        for (outcome, message) in [
+            (StackMutationOutcome.rejected("Already exists"), "Already exists"),
+            (.noOp, "The note wasn’t saved."),
+            (.cancelled, "The note wasn’t saved."),
         ] {
-            XCTAssertEqual(state.update(.saved(stale, .committed)), [])
-            XCTAssertEqual(state.session?.phase, .saving(request))
-        }
-    }
-
-    func testNoOpAndCancellationNeverClaimSuccess() throws {
-        for outcome in [StackMutationOutcome.noOp, .cancelled] {
-            var (state, request) = try saving()
-            XCTAssertEqual(state.update(.saved(request, outcome)), [.show(.editor)])
-            XCTAssertEqual(state.session?.phase, .saveFailed(
-                request, message: "The note wasn’t saved.", retryable: false
-            ))
+            var state = editing(body: "Draft")
+            let request = try commit(state.update(.save))
+            _ = state.update(.saved(request, outcome))
+            XCTAssertEqual(state.editor, .failed("Draft", .terminal(message)))
             XCTAssertEqual(state.update(.retry), [])
+            XCTAssertEqual(state.update(.dismiss), [.close])
         }
     }
 
-    func testDismissesUnsavedWorkAndLateOutcomesAreDropped() throws {
-        var editing = try editing(body: "")
-        XCTAssertNotNil(editing.session?.target)
-        XCTAssertEqual(editing.update(.save), [.beep], "a blank note cannot be saved")
-        XCTAssertEqual(editing.update(.begin(.text, context)), [.focusEditor])
-        XCTAssertEqual(editing.update(.dismiss), [.close])
-
-        var (queued, request) = try saving()
-        XCTAssertEqual(queued.update(.begin(.text, context)), [.beep])
-        XCTAssertEqual(queued.update(.dismiss), [.close])
-        XCTAssertEqual(queued.update(.saved(request, .committed)), [])
-        XCTAssertEqual(queued.lifecycle, .idle)
-
-        var (failed, failedRequest) = try saving()
-        _ = failed.update(.saved(failedRequest, .commitFailed("offline")))
-        XCTAssertEqual(failed.update(.dismiss), [.close])
+    func testStaleSaveOutcomesCannotCloseOrAlterTheCurrentCapture() throws {
+        var state = editing(body: "Draft")
+        let request = try commit(state.update(.save))
+        let stale = CaptureSaveRequest(identity: identity, selection: selection,
+            destinationStackID: .five, note: request.note, input: .typed)
+        XCTAssertEqual(state.update(.saved(stale, .committed)), [])
+        XCTAssertEqual(state.work, .saving(request))
+        _ = state.update(.dismiss)
+        _ = state.update(.begin(.typed(CaptureIdentity(sourceStack: .one))))
+        let current = state
+        XCTAssertEqual(state.update(.saved(request, .committed)), [])
+        XCTAssertEqual(state, current)
     }
 
-    func testEditorOpensAheadOfTheSelectionAndThePassageCatchesUp() {
-        var state = CaptureState()
-        XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
-        XCTAssertEqual(state.update(.selectionPending(context)), [.show(.editor)])
-        XCTAssertEqual(state.session?.phase, .editing(""))
-        XCTAssertNil(state.session?.target)
-        XCTAssertEqual(state.update(.selectionPending(context)), [], "a repeat is inert")
-        XCTAssertEqual(state.update(.changeNote("Typed already")), [])
-
-        let target = context.target(captured: selection)
-        XCTAssertEqual(state.update(.selection(context, selection)), [],
-            "the box is already up, so the passage only updates the target")
-        XCTAssertEqual(state.session?.target, target)
-        XCTAssertEqual(state.session?.phase, .editing("Typed already"), "typing is kept")
-
-        XCTAssertEqual(state.update(.selection(context, selection)), [], "a second passage is ignored")
-    }
-
-    func testSaveBeforeThePassageArrivesWaitsForItThenSaves() {
-        var state = CaptureState()
-        _ = state.update(.begin(.text, context))
-        _ = state.update(.selectionPending(context))
-        _ = state.update(.changeNote("Quick thought"))
-        XCTAssertEqual(state.update(.save), [], "nothing to save against yet, and no beep")
-        XCTAssertEqual(state.session?.saveAwaitsSelection, true)
-        XCTAssertEqual(state.update(.changeNote("Edited late")), [], "the note is frozen while waiting")
-        XCTAssertEqual(state.session?.phase, .editing("Quick thought"))
-
-        let target = context.target(captured: selection)
-        let effects = state.update(.selection(context, selection))
-        guard case let .commit(request)? = effects.last else { return XCTFail("expected a commit, got \(effects)") }
-        XCTAssertEqual(effects, [.commit(request)])
-        XCTAssertEqual(request.note.body, "Quick thought")
-        XCTAssertEqual(request.target, target)
-        XCTAssertEqual(state.session?.saveAwaitsSelection, false)
-
-        var blank = CaptureState()
-        _ = blank.update(.begin(.text, context))
-        _ = blank.update(.selectionPending(context))
-        XCTAssertEqual(blank.update(.save), [.beep], "a blank note still cannot be queued")
-    }
-
-    func testAFailedSelectionReadOpensTheEditorWithoutAPassage() {
-        var state = CaptureState()
-        _ = state.update(.begin(.text, context))
-        let emptyTarget = context.target(captured: CapturedSelection(text: ""))
-        XCTAssertEqual(state.update(.failed(context, "no focused element")), [.show(.editor)])
-        XCTAssertEqual(state.session?.phase, .editing(""))
+    func testBlankDraftCannotQueueAndBusyCaptureFocusesOnlyTheEditor() {
+        var state = editing(body: " ")
+        XCTAssertEqual(state.update(.save), [.beep])
+        XCTAssertEqual(state.update(.begin(.typed(identity))), [.focusEditor])
+        _ = state.update(.changeNote("Draft"))
+        _ = state.update(.save)
+        XCTAssertEqual(state.update(.begin(.typed(identity))), [.beep])
+        XCTAssertEqual(state.update(.dismiss), [.close])
 
         var early = CaptureState()
-        _ = early.update(.begin(.text, context))
-        _ = early.update(.selectionPending(context))
-        XCTAssertEqual(early.update(.failed(context, "timed out")), [])
-        XCTAssertEqual(early.session?.target, emptyTarget)
+        _ = early.update(.begin(.typed(identity)))
+        _ = early.update(.selectionPending(identity))
+        XCTAssertEqual(early.update(.save), [.beep])
+        XCTAssertEqual(early.editor, .editing(""))
     }
 
-    private func editing(body: String) throws -> CaptureState {
+    func testEditorOpensEarlyAndSelectionCatchesUpWithoutReplacingTyping() {
         var state = CaptureState()
-        XCTAssertEqual(state.update(.begin(.text, context)), [.readSelection(context, .text)])
-        XCTAssertEqual(state.update(.selection(context, selection)), [.show(.editor)])
-        XCTAssertEqual(state.update(.changeNote(body)), [])
+        _ = state.update(.begin(.typed(identity)))
+        XCTAssertNil(state.editor)
+        XCTAssertEqual(state.update(.selectionPending(identity)), [.show(.editor)])
+        XCTAssertNil(state.captured)
+        XCTAssertEqual(state.update(.selectionPending(identity)), [])
+        _ = state.update(.changeNote("Typed already"))
+        XCTAssertEqual(state.update(.selection(identity, selection)), [])
+        XCTAssertEqual(state.captured, selection)
+        XCTAssertEqual(state.editor, .editing("Typed already"))
+        _ = state.update(.selection(identity, CapturedSelection(text: "late different quote")))
+        XCTAssertEqual(state.captured, selection)
+    }
+
+    func testFailedSelectionOpensAnEmptyEditorOrKeepsTheEarlyDraft() {
+        var state = CaptureState()
+        _ = state.update(.begin(.typed(identity)))
+        XCTAssertEqual(state.update(.failed(identity, "no focused element")), [.show(.editor)])
+        XCTAssertEqual(state.editor, .editing(""))
+        XCTAssertEqual(state.captured, CapturedSelection(text: ""))
+
+        var early = CaptureState()
+        _ = early.update(.begin(.typed(identity)))
+        _ = early.update(.selectionPending(identity))
+        _ = early.update(.changeNote("Typed"))
+        _ = early.update(.failed(identity, "timed out"))
+        XCTAssertEqual(early.editor, .editing("Typed"))
+        XCTAssertEqual(early.captured, CapturedSelection(text: ""))
+    }
+
+    func testTeardownIsIdempotentAndRejectsLaterEvents() {
+        var state = editing(body: "Draft")
+        XCTAssertEqual(state.update(.teardown), [.close])
+        for event in [CaptureEvent.teardown, .save, .begin(.typed(identity)), .voicePressed,
+                      .selection(identity, selection), .voiceModeChanged(.tap)] {
+            XCTAssertEqual(state.update(event), [])
+        }
+        XCTAssertEqual(state.lifecycle, .tornDown)
+    }
+
+    private func editing(body: String) -> CaptureState {
+        var state = CaptureState()
+        _ = state.update(.begin(.typed(identity)))
+        _ = state.update(.selection(identity, selection))
+        _ = state.update(.changeNote(body))
         return state
     }
 
-    private func saving() throws -> (CaptureState, CaptureSaveRequest) {
-        var state = try editing(body: "Draft")
-        let effects = state.update(.save)
+    private func commit(_ effects: [CaptureEffect]) throws -> CaptureSaveRequest {
         guard case let .commit(request)? = effects.first else {
-            throw XCTSkip("Expected a commit effect, got \(effects)")
+            XCTFail("Expected a commit, got \(effects)")
+            throw NSError(domain: "test", code: 1)
         }
-        return (state, request)
+        return request
     }
 }

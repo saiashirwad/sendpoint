@@ -28,18 +28,18 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
         }
 
         for panel in [voice, editor] { panel.contentView?.layoutSubtreeIfNeeded() }
-        let textContext = NoteCaptureContext(stackID: stack.id)
-        controller.send(.begin(.text, textContext))
+        let textContext = CaptureIdentity(sourceStack: stack.id)
+        controller.send(.begin(.typed(textContext)))
         controller.send(.selection(textContext, CapturedSelection(text: "Selected text")))
         controller.send(.toggleDestinations(textContext))
         try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(controller.state.session?.destinationPicker, .open)
+        XCTAssertEqual(controller.state.destination?.isPickerOpen, true)
         XCTAssertTrue(voice.childWindows?.isEmpty ?? true,
                       "A text capture must not open a picker on the retained voice window")
 
         controller.send(.dismiss)
-        let voiceContext = NoteCaptureContext(stackID: stack.id)
-        controller.send(.begin(.voice, voiceContext))
+        let voiceContext = CaptureIdentity(sourceStack: stack.id)
+        controller.send(.begin(.voice(voiceContext)))
         controller.send(.recordingStarted(voiceContext))
         controller.send(.selection(voiceContext, CapturedSelection(text: "Selected text")))
         try await Task.sleep(for: .milliseconds(150))
@@ -69,7 +69,7 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
             editor.close()
         }
         editor.contentView?.layoutSubtreeIfNeeded()
-        controller.send(.begin(.text, NoteCaptureContext(stackID: stack.id)))
+        controller.send(.begin(.typed(CaptureIdentity(sourceStack: stack.id))))
         try await Task.sleep(for: .milliseconds(150))
 
         let note = try XCTUnwrap(editor.firstResponder as? NoteTextView)
@@ -98,8 +98,8 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
             load: { document }, commit: { _ in }
         ))
         let controller = makeController(store: store, captions: false)
-        let context = NoteCaptureContext(stackID: stacks[0].id)
-        controller.send(.begin(.voice, context))
+        let context = CaptureIdentity(sourceStack: stacks[0].id)
+        controller.send(.begin(.voice(context)))
         controller.send(.recordingStarted(context))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
         controller.send(.toggleDestinations(context))
@@ -151,8 +151,8 @@ final class CaptureDestinationPanelLayoutTests: XCTestCase {
             voice.contentView = nil
             voice.close()
         }
-        let context = NoteCaptureContext(stackID: stack.id)
-        controller.send(.begin(.voice, context))
+        let context = CaptureIdentity(sourceStack: stack.id)
+        controller.send(.begin(.voice(context)))
         controller.send(.recordingStarted(context))
         voice.orderFrontRegardless()
         try await Task.sleep(for: .milliseconds(300))

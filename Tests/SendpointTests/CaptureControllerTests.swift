@@ -133,7 +133,7 @@ final class CaptureControllerTests: XCTestCase {
         let journal = DiagnosticJournal(file: file)
         let f = try await makeFixture(diagnostics: journal.record)
         f.controller.beginCapture()
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        let context = try XCTUnwrap(f.controller.state.identity)
         await f.selectionGate.open(selection)
         await waitForObservation { f.controller.captured == self.selection }
         f.controller.note = "PRIVATE body"
@@ -143,17 +143,17 @@ final class CaptureControllerTests: XCTestCase {
         template.clearStackAfterExport = true
         let exporter = ExportController(services: ExportServices(write: { _ in 1 }, paste: { _, _ in false }),
                                         diagnostics: journal.record)
-        exporter.copy(store: f.store, stackID: context.stackID, template: template) { _ in }
+        exporter.copy(store: f.store, stackID: context.sourceStack, template: template) { _ in }
         await f.store.waitForIdle()
         let bytes = try Data(contentsOf: file)
         let records = try bytes.split(separator: 0x0A).map { try JSONDecoder().decode(DiagnosticRecord.self, from: Data($0)) }
         XCTAssertTrue(records.contains(DiagnosticRecord(.capture, .accepted, operationID: context.noteID,
-                                                        stackID: context.stackID, noteID: context.noteID)))
+                                                        stackID: context.sourceStack, noteID: context.noteID)))
         XCTAssertTrue(records.contains(DiagnosticRecord(.save, .succeeded, operationID: context.noteID,
-                                                        stackID: context.stackID, noteID: context.noteID)))
+                                                        stackID: context.sourceStack, noteID: context.noteID)))
         let exported = try XCTUnwrap(records.first { $0.stage == .export && $0.noteID == context.noteID })
         XCTAssertTrue(records.contains(DiagnosticRecord(.cleanup, .succeeded, operationID: exported.operationID,
-                                                        stackID: context.stackID, noteID: context.noteID)))
+                                                        stackID: context.sourceStack, noteID: context.noteID)))
         let text = String(decoding: bytes, as: UTF8.self)
         XCTAssertFalse(text.contains("PRIVATE body"))
         XCTAssertFalse(text.contains("A passage"))
@@ -189,7 +189,7 @@ final class CaptureControllerTests: XCTestCase {
         await waitForObservation { f.surfaces.events == ["show editor"] }
         await f.selectionGate.open(selection)
         await waitForObservation { f.controller.captured == self.selection }
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        let context = try XCTUnwrap(f.controller.state.identity)
         f.controller.note = "Filed elsewhere"
         f.controller.send(.toggleDestinations(context))
         f.controller.chooseDestination(destination.id, context: context)
@@ -209,28 +209,28 @@ final class CaptureControllerTests: XCTestCase {
     }
 
     func testDestinationChoiceFromEitherModeBecomesCurrentForBothSubsequentModes() async throws {
-        for mode in [CaptureMode.text, .voice] {
+        for surface in [CaptureSurface.editor, .voice] {
             let f = try await makeFixture()
             let destination = f.store.stacks[1]
             await f.selectionGate.open(selection)
             await f.recorder.started.open(true)
 
-            if mode == .text { f.controller.beginCapture() }
+            if surface == .editor { f.controller.beginCapture() }
             else { f.controller.send(.voiceToggled) }
-            await waitForObservation { f.controller.state.session?.canChooseDestination == true }
-            let context = try XCTUnwrap(f.controller.state.session?.context)
+            await waitForObservation { f.controller.state.destination?.canChoose == true }
+            let context = try XCTUnwrap(f.controller.state.identity)
             f.controller.send(.toggleDestinations(context))
             f.controller.chooseDestination(destination.id, context: context)
             await f.store.waitForIdle()
             XCTAssertEqual(f.store.currentStackID, destination.id)
             XCTAssertEqual(StackUIFacts(store: f.store).currentStackID, destination.id)
 
-            f.controller.send(mode == .text ? .dismiss : .cancelVoice)
+            f.controller.send(surface == .editor ? .dismiss : .cancelVoice)
             f.controller.beginCapture()
-            XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
+            XCTAssertEqual(f.controller.state.destination?.slot, destination.id)
             f.controller.send(.dismiss)
             f.controller.send(.voiceToggled)
-            XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
+            XCTAssertEqual(f.controller.state.destination?.slot, destination.id)
             f.controller.teardown()
         }
     }
@@ -242,16 +242,16 @@ final class CaptureControllerTests: XCTestCase {
         await f.selectionGate.open(selection)
 
         f.controller.send(.stackSelected(destination.id))
-        XCTAssertNil(f.controller.state.session, "no capture, nothing to follow")
+        XCTAssertNil(f.controller.state.identity, "no capture, nothing to follow")
 
         f.controller.beginCapture()
         await waitForObservation { f.controller.captured == self.selection }
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        let context = try XCTUnwrap(f.controller.state.identity)
         f.controller.send(.toggleDestinations(context))
         f.controller.send(.stackSelected(destination.id))
 
-        XCTAssertEqual(f.controller.state.session?.destinationStackID, destination.id)
-        XCTAssertEqual(f.controller.state.session?.destinationPicker, .closed)
+        XCTAssertEqual(f.controller.state.destination?.slot, destination.id)
+        XCTAssertEqual(f.controller.state.destination?.isPickerOpen, false)
         XCTAssertEqual(f.store.currentStackID, sourceID, "the shortcut's owner does the switch, not the capture")
 
         f.controller.note = "Lands in the third stack"
@@ -270,10 +270,10 @@ final class CaptureControllerTests: XCTestCase {
         let destination = f.store.stacks[1]
         await f.selectionGate.open(selection)
         f.controller.beginCapture()
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        let context = try XCTUnwrap(f.controller.state.identity)
         f.controller.chooseDestination(destination.id, context: context)
         f.controller.send(.toggleDestinations(context))
-        f.controller.chooseDestination(destination.id, context: NoteCaptureContext(stackID: sourceID))
+        f.controller.chooseDestination(destination.id, context: CaptureIdentity(sourceStack: sourceID))
         f.controller.send(.dismiss)
         f.controller.chooseDestination(destination.id, context: context)
         await f.store.waitForIdle()
@@ -288,7 +288,7 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(f.recorder.starts, 1)
         await f.recorder.started.open(true)
         await f.selectionGate.open(selection)
-        await waitForObservation { f.controller.state.session?.phase == .recording }
+        await waitForObservation { f.controller.state.speech?.stage == .listening }
 
         f.controller.send(.voiceReleased)
         await f.store.waitForIdle()
@@ -296,17 +296,17 @@ final class CaptureControllerTests: XCTestCase {
 
         XCTAssertEqual(f.store.currentNotes.map(\.body), ["hello there"])
         XCTAssertEqual(f.recorder.discards, 1, "closing releases the microphone once")
-        XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+        XCTAssertEqual(f.controller.state.speechLatch, .up)
     }
 
     func testDictationHoldPastesTheTranscriptIntoTheFrontAppAndSavesNothing() async throws {
         let f = try await makeFixture()
         f.controller.send(.dictatePressed)
         XCTAssertEqual(f.surfaces.events, ["show voice"])
-        XCTAssertEqual(f.controller.state.session?.dictationTarget, frontApp)
+        XCTAssertEqual(f.controller.state.speech?.origin, .dictation(frontApp))
         XCTAssertEqual(f.recorder.starts, 1)
         await f.recorder.started.open(true)
-        await waitForObservation { f.controller.state.session?.phase == .recording }
+        await waitForObservation { f.controller.state.speech?.stage == .listening }
 
         f.controller.send(.dictateReleased)
         await waitForObservation { !f.controller.isOpen }
@@ -315,7 +315,7 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(f.pasteboard.inserted.map(\.1), [7])
         XCTAssertTrue(f.store.currentNotes.isEmpty, "dictation never touches the stack")
         XCTAssertEqual(f.recorder.discards, 1)
-        XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+        XCTAssertEqual(f.controller.state.speechLatch, .up)
     }
 
     func testDictationWithNoFrontAppIsRefusedUntilTheKeyComesUp() async throws {
@@ -323,11 +323,11 @@ final class CaptureControllerTests: XCTestCase {
         f.controller.send(.dictatePressed)
         XCTAssertFalse(f.controller.isOpen)
         XCTAssertEqual(f.surfaces.events, [])
-        XCTAssertEqual(f.controller.state.voice, VoiceGesture(releasePending: true, key: .dictate))
+        XCTAssertEqual(f.controller.state.speechLatch, .consumeRelease(.dictate))
         f.controller.send(.dictatePressed)
         XCTAssertFalse(f.controller.isOpen, "still down")
         f.controller.send(.dictateReleased)
-        XCTAssertEqual(f.controller.state.voice, VoiceGesture())
+        XCTAssertEqual(f.controller.state.speechLatch, .up)
     }
 
     func testAFailedPasteShowsAMessageAndCloses() async throws {
@@ -336,9 +336,9 @@ final class CaptureControllerTests: XCTestCase {
         f.controller.send(.dictatePressed)
         XCTAssertEqual(f.recorder.starts, 1)
         await f.recorder.started.open(true)
-        await waitForObservation { f.controller.state.session?.phase == .recording }
+        await waitForObservation { f.controller.state.speech?.stage == .listening }
         f.controller.send(.dictateReleased)
-        await waitForObservation { f.controller.state.session?.phase == .failed("Couldn’t paste.") }
+        await waitForObservation { f.controller.state.speech?.stage == .failed("Couldn’t paste.") }
         XCTAssertEqual(f.pasteboard.inserted.count, 1)
         XCTAssertTrue(f.store.currentNotes.isEmpty)
         f.controller.send(.voiceEscape)
@@ -368,7 +368,7 @@ final class CaptureControllerTests: XCTestCase {
         f.controller.send(.voicePressed)
         XCTAssertEqual(f.recorder.starts, 1)
         await f.recorder.started.open(true)
-        await waitForObservation { f.controller.state.session?.phase != .selectingVoice(recording: false, finishRequested: false) }
+        await waitForObservation { f.controller.state.speech?.stage == .listening }
 
         f.controller.send(.voiceEscape)
         XCTAssertFalse(f.controller.isOpen)
@@ -383,7 +383,7 @@ final class CaptureControllerTests: XCTestCase {
         let failing = try await makeFixture()
         failing.recorder.startFails = true
         failing.controller.send(.voicePressed)
-        await waitForObservation { failing.controller.state.session?.phase == .failed("mic busy") }
+        await waitForObservation { failing.controller.state.speech?.stage == .failed("mic busy") }
         XCTAssertEqual(failing.recorder.discards, 1)
         failing.controller.send(.voiceEscape)
         XCTAssertFalse(failing.controller.isOpen)
@@ -395,7 +395,7 @@ final class CaptureControllerTests: XCTestCase {
         XCTAssertEqual(silent.recorder.starts, 1)
         await silent.recorder.started.open(true)
         await silent.selectionGate.open(selection)
-        await waitForObservation { silent.controller.state.session?.phase == .recording }
+        await waitForObservation { silent.controller.state.speech?.stage == .listening }
         silent.controller.send(.voiceReleased)
         await waitForObservation { !silent.controller.isOpen }
         XCTAssertEqual(silent.surfaces.events.last, "close")
@@ -440,7 +440,7 @@ final class CaptureControllerTests: XCTestCase {
         f.recorder.startFails = true
         f.controller.send(.voicePressed)
         await f.timing.started.wait()
-        XCTAssertEqual(f.controller.state.session?.phase, .failed("mic busy"))
+        XCTAssertEqual(f.controller.state.speech?.stage, .failed("mic busy"))
         XCTAssertEqual(f.timing.durations, [.seconds(2.5)])
         f.timing.advance(.seconds(2.5))
         await waitForObservation { !f.controller.isOpen }
@@ -510,7 +510,7 @@ final class CaptureControllerTests: XCTestCase {
         f.controller.send(.voiceModeChanged(.tap))
         XCTAssertFalse(f.controller.isOpen)
         XCTAssertEqual(f.recorder.discards, 1)
-        XCTAssertEqual(f.controller.state.voice, VoiceGesture(mode: .tap))
+        XCTAssertEqual(f.controller.state.voiceMode, .tap)
         await f.recorder.started.open(true)
         await f.selectionGate.open(selection)
     }

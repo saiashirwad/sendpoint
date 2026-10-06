@@ -83,7 +83,7 @@ final class VoiceStreamingTests: XCTestCase {
         await waitUntil { f.recorder.starts == starts }
         await f.recorder.started.open(true)
         await f.selectionGate.open(selection)
-        await waitUntil { f.controller.state.session?.phase == .recording }
+        await waitUntil { f.controller.state.speech?.stage == .listening }
     }
 
     private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
@@ -99,18 +99,18 @@ final class VoiceStreamingTests: XCTestCase {
         await startRecording(f)
 
         f.recorder.partialHandler?("how is the")
-        await waitUntil { f.controller.state.session?.liveTranscript == "how is the" }
+        await waitUntil { f.controller.state.speech?.preview == "how is the" }
         f.recorder.partialHandler?("how is the weather")
-        await waitUntil { f.controller.state.session?.liveTranscript == "how is the weather" }
+        await waitUntil { f.controller.state.speech?.preview == "how is the weather" }
 
-        XCTAssertEqual(f.controller.state.session?.phase, .recording)
+        XCTAssertEqual(f.controller.state.speech?.stage, .listening)
         XCTAssertFalse(f.surfaces.events.contains("close"))
     }
 
     func testStalePartialForAnOldContextIsIgnored() async throws {
         let f = try await makeFixture()
         await startRecording(f)
-        let oldContext = try XCTUnwrap(f.controller.state.session?.context)
+        let oldContext = try XCTUnwrap(f.controller.state.identity)
 
         f.controller.send(.cancelVoice)
         await waitUntil { !f.controller.isOpen }
@@ -133,10 +133,10 @@ final class VoiceStreamingTests: XCTestCase {
 
         firstHandler("late first recording")
         await Task.yield()
-        XCTAssertNil(f.controller.state.session?.liveTranscript)
+        XCTAssertNil(f.controller.state.speech?.preview)
 
         f.recorder.partialHandlers[1]("current recording")
-        await waitUntil { f.controller.state.session?.liveTranscript == "current recording" }
+        await waitUntil { f.controller.state.speech?.preview == "current recording" }
     }
 
     func testPartialOutsideRecordingPhasesIsIgnored() async throws {
@@ -144,29 +144,29 @@ final class VoiceStreamingTests: XCTestCase {
         f.controller.beginCapture()
         await waitUntil { f.surfaces.events == ["show editor"] }
         await f.selectionGate.open(selection)
-        await waitUntil { f.controller.state.session?.target != nil }
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        await waitUntil { f.controller.state.captured != nil }
+        let context = try XCTUnwrap(f.controller.state.identity)
 
         f.controller.send(.voicePartial(context, "should not land"))
         await Task.yield()
-        XCTAssertNil(f.controller.state.session?.liveTranscript)
+        XCTAssertNil(f.controller.state.speech?.preview)
         f.controller.teardown()
     }
 
     func testBlankPartialClearsThePreviewAndFailureClearsItToo() async throws {
         let f = try await makeFixture()
         await startRecording(f)
-        let context = try XCTUnwrap(f.controller.state.session?.context)
+        let context = try XCTUnwrap(f.controller.state.identity)
 
         f.controller.send(.voicePartial(context, "something"))
-        await waitUntil { f.controller.state.session?.liveTranscript == "something" }
+        await waitUntil { f.controller.state.speech?.preview == "something" }
         f.controller.send(.voicePartial(context, "   "))
-        await waitUntil { f.controller.state.session?.liveTranscript == nil }
+        await waitUntil { f.controller.state.speech?.preview == nil }
 
         f.controller.send(.voicePartial(context, "again"))
-        await waitUntil { f.controller.state.session?.liveTranscript == "again" }
+        await waitUntil { f.controller.state.speech?.preview == "again" }
         f.controller.send(.failed(context, "boom"))
-        XCTAssertNil(f.controller.state.session?.liveTranscript)
+        XCTAssertNil(f.controller.state.speech?.preview)
     }
 
     func testVoiceModelFilesAreUnifiedStreamingNotLegacyTDT() {

@@ -53,8 +53,7 @@ struct VoiceCaptureView: View {
     @State private var windowIsVisible = false
 
     private var appeared: Bool {
-        guard let mode = model.state.session?.mode else { return false }
-        return mode != .text
+        model.state.speech != nil
     }
     private var animates: Bool { windowIsVisible && appeared }
 
@@ -158,7 +157,7 @@ struct VoiceCaptureView: View {
     private var transcript: Transcript {
         LiveTranscriptPreview.window(
             LiveTranscriptPreview.lines(
-                for: model.state.session?.liveTranscript ?? "",
+                for: model.state.speech?.preview ?? "",
                 width: VoiceCaptureLayout.transcriptWidth,
                 font: .ui(fontSize)
             ),
@@ -170,7 +169,7 @@ struct VoiceCaptureView: View {
 
     @ViewBuilder
     private func leading(rowHeight: CGFloat, anchorHeight: CGFloat) -> some View {
-        if let target = model.state.session?.dictationTarget {
+        if case let .dictation(target) = model.state.speech?.origin {
             Text(target.appName ?? "Front app")
                 .font(.ui(11.5, weight: .medium))
                 .foregroundStyle(palette.ink.opacity(0.9))
@@ -179,7 +178,7 @@ struct VoiceCaptureView: View {
                 .fixedSize(horizontal: true, vertical: false)
         } else {
             CaptureStackLabel(
-                model: model, mode: .voice, ink: palette.ink,
+                model: model, surface: .voice, ink: palette.ink,
                 rowHeight: rowHeight, anchorHeight: anchorHeight
             )
         }
@@ -206,9 +205,7 @@ struct VoiceCaptureView: View {
 
     private var facts: VoiceOverlayFacts {
         VoiceOverlayFacts(
-            phase: model.state.session?.phase,
-            capturedText: model.captured?.text,
-            dictationTarget: model.state.session?.dictationTarget,
+            speech: model.state.speech,
             stackName: model.targetStack?.name,
             stackCount: model.targetStack?.countLabel
         )
@@ -321,43 +318,43 @@ nonisolated struct VoiceOverlayFacts: Equatable {
     let failureText: String?
     let tether: String?
 
-    private let phase: CapturePhase?
-    private let dictationTarget: DictationTarget?
+    private let speech: CaptureSpeech?
     private let stackName: String?
     private let stackCount: String?
 
     init(
-        phase: CapturePhase?,
-        capturedText: String?,
-        dictationTarget: DictationTarget?,
+        speech: CaptureSpeech?,
         stackName: String?,
         stackCount: String?
     ) {
-        self.phase = phase
-        self.dictationTarget = dictationTarget
+        self.speech = speech
         self.stackName = stackName
         self.stackCount = stackCount
-        switch phase {
-        case .recording, .selectingVoice(recording: true, finishRequested: _):
+        switch speech?.stage {
+        case .listening:
             orbMode = .live
         case .transcribing, .saving, .inserting:
             orbMode = .thinking
-        case .failed, .saveFailed:
+        case .failed:
             orbMode = .flat
         default:
             orbMode = .idle
         }
-        if case let .failed(message) = phase {
+        if case let .failed(message) = speech?.stage {
             failureText = message
         } else {
             failureText = nil
         }
-        tether = capturedText.flatMap(VoiceOverlayCopy.tether(for:))
+        if case let .note(selection, _) = speech?.origin {
+            tether = (selection.captured?.text).flatMap(VoiceOverlayCopy.tether(for:))
+        } else {
+            tether = nil
+        }
     }
 
     func accessibilityLabel(transcript lines: [String]) -> String {
         let destination: String
-        if let dictationTarget {
+        if case let .dictation(dictationTarget) = speech?.origin {
             destination = " Pasting into \(dictationTarget.appName ?? "the front app")."
         } else if let stackName, let stackCount {
             destination = " Saving to \(stackName), \(stackCount)."
@@ -365,8 +362,8 @@ nonisolated struct VoiceOverlayFacts: Equatable {
             destination = ""
         }
         let transcript = lines.isEmpty ? "" : " Live transcript: \(lines.joined(separator: " "))"
-        switch phase {
-        case .selectingVoice, .startingVoice, .recording: return "Voice body: listening.\(destination)\(transcript)"
+        switch speech?.stage {
+        case .starting, .listening: return "Voice body: listening.\(destination)\(transcript)"
         case .transcribing: return "Voice body: transcribing.\(destination)\(transcript)"
         case let .failed(message): return "Voice body: \(message)"
         case .saving: return "Voice body: saving.\(destination)"

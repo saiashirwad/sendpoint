@@ -16,7 +16,7 @@ struct CaptureView: View {
         VStack(alignment: .leading, spacing: VoiceCaptureLayout.cardFooterGap) {
             noteEditor
             HStack(spacing: Spacing.md) {
-                CaptureStackLabel(model: model, mode: .text, ink: palette.ink)
+                CaptureStackLabel(model: model, surface: .editor, ink: palette.ink)
                 CaptureTether(text: tether, ink: palette.ink)
                 Spacer(minLength: 8)
                 saveStatus
@@ -34,12 +34,12 @@ struct CaptureView: View {
         .ignoresSafeArea()
         .animation(Motion.springy, value: tether)
         .onAppear { focusRequest += 1 }
-        .onChange(of: model.state.session?.context) { _, context in
+        .onChange(of: model.state.identity) { _, context in
             guard context != nil else { return }
             focusRequest += 1
         }
-        .onChange(of: model.state.session?.destinationPicker) { previous, current in
-            if previous == .open, current == .closed, !model.isNoteFrozen {
+        .onChange(of: model.state.destination?.isPickerOpen) { previous, current in
+            if previous == true, current == false, !model.isNoteFrozen {
                 focusRequest += 1
             }
         }
@@ -66,18 +66,18 @@ struct CaptureView: View {
 
     @ViewBuilder
     private var saveStatus: some View {
-        switch model.state.session?.phase {
-        case .editing where model.state.session?.saveAwaitsSelection == true, .saving:
+        switch model.state.editor {
+        case .saving:
             ProgressView()
                 .controlSize(.small)
                 .accessibilityLabel("Saving")
-        case let .saveFailed(_, message, retryable):
-            Text(message)
+        case let .failed(_, failure):
+            Text(failure.message)
                 .font(.ui(11.5, weight: .medium))
                 .foregroundStyle(palette.amber)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            if retryable {
+            if failure.canRetry {
                 QuietButton("Retry") { model.send(.retry) }
             } else {
                 QuietButton("Discard") { model.send(.dismiss) }

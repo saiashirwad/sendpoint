@@ -146,7 +146,7 @@ final class CaptureWindows {
     }
 
     private func presentEditor() {
-        let captured = model.state.session?.target?.captured
+        let captured = model.captured
         if editorPanel == nil { editorPanel = makeEditorPanel() }
         guard let panel = editorPanel else { return }
         panel.onClose = { [weak self] in self?.model.send(.dismiss) }

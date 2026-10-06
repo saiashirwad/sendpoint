@@ -12,9 +12,7 @@ public nonisolated struct CapturedSelection: Equatable, Sendable {
 }
 
 public nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
-    case hold
-    case tap
-
+    case hold, tap
     public var title: String { self == .hold ? "Hold" : "Tap" }
     public var detail: String {
         switch self {
@@ -24,474 +22,546 @@ public nonisolated enum VoiceRecordingMode: String, CaseIterable, Sendable {
     }
 }
 
-public nonisolated enum SpeechKey: Equatable, Sendable {
-    case note, dictate
-
-    var mode: CaptureMode { self == .note ? .voice : .dictation }
-}
+public nonisolated enum SpeechKey: Equatable, Sendable { case note, dictate }
 
 public nonisolated struct DictationTarget: Equatable, Sendable {
     public let processIdentifier: pid_t
     public let appName: String?
-
     public init(processIdentifier: pid_t, appName: String?) {
         self.processIdentifier = processIdentifier
         self.appName = appName
     }
 }
 
-public nonisolated struct CaptureSaveRequest: Equatable {
-    public let target: NoteCaptureTarget
-    public let destinationStackID: StackSlot
-    public let note: Note
-
-    public init(target: NoteCaptureTarget, destinationStackID: StackSlot, note: Note) {
-        self.target = target
-        self.destinationStackID = destinationStackID
-        self.note = note
+public nonisolated struct CaptureIdentity: Equatable {
+    public let sourceStack: StackSlot
+    public let noteID: UUID
+    public let createdAt: Date
+    public init(sourceStack: StackSlot, noteID: UUID = UUID(), createdAt: Date = Date()) {
+        self.sourceStack = sourceStack
+        self.noteID = noteID
+        self.createdAt = createdAt
     }
 }
 
-public nonisolated enum CaptureMode: Equatable, Sendable { case text, voice, dictation }
+public nonisolated enum CaptureStart: Equatable {
+    case typed(CaptureIdentity)
+    case voice(CaptureIdentity)
+    case dictation(CaptureIdentity, DictationTarget)
 
-public nonisolated enum CapturePhase: Equatable {
-    case selectingText
-    case selectingVoice(recording: Bool, finishRequested: Bool)
-    case startingVoice
-    case recording
-    case transcribing
-    case inserting
-    case editing(String)
-    case saving(CaptureSaveRequest)
-    case saveFailed(CaptureSaveRequest, message: String, retryable: Bool)
-    case failed(String)
-}
-
-public nonisolated enum CaptureDestinationPicker: Equatable { case closed, open }
-
-public nonisolated struct CaptureSession: Equatable {
-    public let context: NoteCaptureContext
-    public let mode: CaptureMode
-    public var target: NoteCaptureTarget?
-    public var phase: CapturePhase
-    public var liveTranscript: String? = nil
-    public var destinationStackID: StackSlot
-    public var destinationPicker: CaptureDestinationPicker = .closed
-    public var saveAwaitsSelection = false
-    public var dictationTarget: DictationTarget? = nil
-
-    public var canChooseDestination: Bool {
-        guard !saveAwaitsSelection, mode != .dictation else { return false }
-        switch phase {
-        case .selectingText, .startingVoice, .recording, .editing,
-             .selectingVoice(_, finishRequested: false): return true
-        default: return false
+    public var identity: CaptureIdentity {
+        switch self {
+        case let .typed(id), let .voice(id), let .dictation(id, _): id
         }
     }
 }
 
-public nonisolated struct VoiceGesture: Equatable {
-    public var mode: VoiceRecordingMode = .hold
-    public var keyHeld = false
-    public var releasePending = false
-    public var key: SpeechKey? = nil
-
-    public init(
-        mode: VoiceRecordingMode = .hold,
-        keyHeld: Bool = false,
-        releasePending: Bool = false,
-        key: SpeechKey? = nil
-    ) {
-        self.mode = mode
-        self.keyHeld = keyHeld
-        self.releasePending = releasePending
-        self.key = key
+public nonisolated enum SelectionProgress: Equatable {
+    case pending
+    case resolved(CapturedSelection)
+    public var captured: CapturedSelection? {
+        if case let .resolved(value) = self { return value }
+        return nil
     }
 }
 
+public nonisolated enum DestinationChoice: Equatable {
+    case closed(StackSlot)
+    case picking(StackSlot)
+    public var slot: StackSlot {
+        switch self { case let .closed(slot), let .picking(slot): slot }
+    }
+    public var isPickerOpen: Bool {
+        if case .picking = self { return true }
+        return false
+    }
+}
+
+public nonisolated struct EditableDraft: Equatable {
+    public var body: String
+    public var destination: DestinationChoice
+}
+
+public nonisolated struct FrozenTypedDraft: Equatable {
+    public let body: String
+    public let destination: StackSlot
+}
+
+public nonisolated enum SpeechDestination: Equatable {
+    case note(SelectionProgress, DestinationChoice)
+    case dictation(DictationTarget)
+}
+
+public nonisolated enum ResolvedSpeechDestination: Equatable {
+    case note(CapturedSelection, StackSlot)
+    case dictation(DictationTarget)
+}
+
+public nonisolated enum RecordingProgress: Equatable {
+    case starting
+    case live(String?)
+}
+
+public nonisolated enum NoteInput: Equatable { case typed, voice }
+
+public nonisolated struct CaptureSaveRequest: Equatable {
+    public let identity: CaptureIdentity
+    public let selection: CapturedSelection
+    public let destinationStackID: StackSlot
+    public let note: Note
+    public let input: NoteInput
+
+    public init(identity: CaptureIdentity, selection: CapturedSelection,
+                destinationStackID: StackSlot, note: Note, input: NoteInput) {
+        self.identity = identity
+        self.selection = selection
+        self.destinationStackID = destinationStackID
+        self.note = note
+        self.input = input
+    }
+}
+
+public nonisolated enum SaveFailure: Equatable {
+    case retryable(String)
+    case terminal(String)
+    public var message: String {
+        switch self { case let .retryable(message), let .terminal(message): message }
+    }
+    public var canRetry: Bool {
+        if case .retryable = self { return true }
+        return false
+    }
+}
+
+public nonisolated enum SpeechOrigin: Equatable {
+    case note(SelectionProgress, StackSlot)
+    case dictation(DictationTarget)
+    var key: SpeechKey {
+        switch self { case .note: .note; case .dictation: .dictate }
+    }
+}
+
+public nonisolated enum CaptureWork: Equatable {
+    case readingText(DestinationChoice)
+    case editing(SelectionProgress, EditableDraft)
+    case awaitingTextSelection(FrozenTypedDraft)
+    case listening(SpeechDestination, RecordingProgress)
+    case joiningVoice(StackSlot, String?)
+    case transcribing(ResolvedSpeechDestination, String?)
+    case saving(CaptureSaveRequest)
+    case saveFailed(CaptureSaveRequest, SaveFailure)
+    case inserting(DictationTarget, String)
+    case speechFailed(SpeechOrigin, String)
+}
+
+public nonisolated enum CaptureEditor: Equatable {
+    case editing(String)
+    case saving(String)
+    case failed(String, SaveFailure)
+    public var body: String {
+        switch self { case let .editing(body), let .saving(body), let .failed(body, _): body }
+    }
+    public var isEditable: Bool {
+        if case .editing = self { return true }
+        return false
+    }
+}
+
+public nonisolated struct CaptureSpeech: Equatable {
+    public enum Stage: Equatable { case starting, listening, transcribing, saving, inserting, failed(String) }
+    public let origin: SpeechOrigin
+    public let stage: Stage
+    public let preview: String?
+}
+
+public nonisolated enum CaptureDestination: Equatable {
+    case choosing(DestinationChoice)
+    case frozen(StackSlot)
+    public var slot: StackSlot {
+        switch self { case let .choosing(choice): choice.slot; case let .frozen(slot): slot }
+    }
+    public var isPickerOpen: Bool {
+        if case let .choosing(choice) = self { return choice.isPickerOpen }
+        return false
+    }
+    public var canChoose: Bool {
+        if case .choosing = self { return true }
+        return false
+    }
+}
+
+public nonisolated enum SpeechLatch: Equatable {
+    case up
+    case down(SpeechKey)
+    case consumeRelease(SpeechKey)
+}
+
 public nonisolated enum CaptureEvent {
-    case begin(CaptureMode, NoteCaptureContext, DictationTarget? = nil)
-    case voiceRefused
-    case voicePressed
-    case voiceReleased
-    case voiceToggled
-    case dictatePressed
-    case dictateReleased
-    case dictateToggled
-    case voiceEscape
+    case begin(CaptureStart)
+    case voiceRefused, voicePressed, voiceReleased, voiceToggled
+    case dictatePressed, dictateReleased, dictateToggled, voiceEscape
     case voiceModeChanged(VoiceRecordingMode)
-    case selectionPending(NoteCaptureContext)
-    case selection(NoteCaptureContext, CapturedSelection)
-    case recordingStarted(NoteCaptureContext)
-    case failed(NoteCaptureContext, String)
-    case transcript(NoteCaptureContext, String)
-    case voicePartial(NoteCaptureContext, String)
+    case selectionPending(CaptureIdentity)
+    case selection(CaptureIdentity, CapturedSelection)
+    case recordingStarted(CaptureIdentity)
+    case failed(CaptureIdentity, String)
+    case transcript(CaptureIdentity, String)
+    case voicePartial(CaptureIdentity, String)
     case changeNote(String)
-    case toggleDestinations(NoteCaptureContext)
-    case dismissDestinations(NoteCaptureContext)
-    case chooseDestination(NoteCaptureContext, StackSlot)
+    case toggleDestinations(CaptureIdentity)
+    case dismissDestinations(CaptureIdentity)
+    case chooseDestination(CaptureIdentity, StackSlot)
     case stackSelected(StackSlot)
-    case save
-    case finishVoice
-    case cancelVoice
-    case dismiss
-    case retry
+    case save, finishVoice, cancelVoice, dismiss, retry
     case saved(CaptureSaveRequest, StackMutationOutcome)
-    case inserted(NoteCaptureContext, Bool)
-    case failureTimeout(NoteCaptureContext)
+    case inserted(CaptureIdentity, Bool)
+    case failureTimeout(CaptureIdentity)
     case teardown
 }
 
 public nonisolated enum CaptureSurface { case editor, voice }
 
 public nonisolated enum CaptureEffect: Equatable {
-    case beginVoice
-    case beginDictation
-    case readSelection(NoteCaptureContext, CaptureMode)
-    case selectionDeadline(NoteCaptureContext)
-    case startRecording(NoteCaptureContext)
-    case transcribe(NoteCaptureContext)
-    case insert(NoteCaptureContext, String, DictationTarget)
+    case beginVoice, beginDictation
+    case readSelection(CaptureIdentity, CaptureSurface)
+    case selectionDeadline(CaptureIdentity)
+    case startRecording(CaptureIdentity)
+    case transcribe(CaptureIdentity)
+    case insert(CaptureIdentity, String, DictationTarget)
     case commit(CaptureSaveRequest)
     case switchStack(StackSlot)
     case retry
     case show(CaptureSurface)
     case focusEditor
-    case failureTimer(NoteCaptureContext)
-    case close
-    case beep
+    case failureTimer(CaptureIdentity)
+    case close, beep
 }
 
 public nonisolated struct CaptureState: Equatable {
     public enum Lifecycle: Equatable {
         case idle
-        case active(CaptureSession)
+        case active(CaptureIdentity, CaptureWork)
         case tornDown
     }
-
-    public var lifecycle: Lifecycle = .idle
-    public var voice = VoiceGesture()
-
+    public private(set) var lifecycle: Lifecycle = .idle
+    public private(set) var voiceMode: VoiceRecordingMode = .hold
+    public private(set) var speechLatch: SpeechLatch = .up
     public init() {}
 
-    public var session: CaptureSession? {
-        if case let .active(session) = lifecycle { return session }
+    public var identity: CaptureIdentity? {
+        if case let .active(id, _) = lifecycle { return id }
         return nil
     }
-
+    public var work: CaptureWork? {
+        if case let .active(_, work) = lifecycle { return work }
+        return nil
+    }
     public var isTornDown: Bool { lifecycle == .tornDown }
 
+    public var editor: CaptureEditor? {
+        switch work {
+        case let .editing(_, draft): .editing(draft.body)
+        case let .awaitingTextSelection(draft): .saving(draft.body)
+        case let .saving(request): .saving(request.note.body)
+        case let .saveFailed(request, failure): .failed(request.note.body, failure)
+        default: nil
+        }
+    }
+
+    public var speech: CaptureSpeech? {
+        switch work {
+        case let .listening(destination, recording):
+            let origin: SpeechOrigin = switch destination {
+            case let .note(selection, choice): .note(selection, choice.slot)
+            case let .dictation(target): .dictation(target)
+            }
+            switch recording {
+            case .starting: return CaptureSpeech(origin: origin, stage: .starting, preview: nil)
+            case let .live(preview): return CaptureSpeech(origin: origin, stage: .listening, preview: preview)
+            }
+        case let .joiningVoice(slot, preview):
+            return CaptureSpeech(origin: .note(.pending, slot), stage: .listening, preview: preview)
+        case let .transcribing(destination, preview):
+            return CaptureSpeech(origin: destination.origin, stage: .transcribing, preview: preview)
+        case let .saving(request) where request.input == .voice:
+            return CaptureSpeech(origin: .note(.resolved(request.selection), request.destinationStackID),
+                                 stage: .saving, preview: nil)
+        case let .inserting(target, _):
+            return CaptureSpeech(origin: .dictation(target), stage: .inserting, preview: nil)
+        case let .speechFailed(origin, message):
+            return CaptureSpeech(origin: origin, stage: .failed(message), preview: nil)
+        default: return nil
+        }
+    }
+
+    public var captured: CapturedSelection? {
+        switch work {
+        case let .editing(selection, _): selection.captured
+        case let .listening(.note(selection, _), _): selection.captured
+        case let .transcribing(.note(selection, _), _): selection
+        case let .saving(request), let .saveFailed(request, _): request.selection
+        case let .speechFailed(.note(selection, _), _): selection.captured
+        default: nil
+        }
+    }
+
+    public var destination: CaptureDestination? {
+        switch work {
+        case let .readingText(choice): .choosing(choice)
+        case let .editing(_, draft): .choosing(draft.destination)
+        case let .listening(.note(_, choice), _): .choosing(choice)
+        case let .awaitingTextSelection(draft): .frozen(draft.destination)
+        case let .joiningVoice(slot, _), let .transcribing(.note(_, slot), _),
+             let .speechFailed(.note(_, slot), _): .frozen(slot)
+        case let .saving(request), let .saveFailed(request, _): .frozen(request.destinationStackID)
+        default: nil
+        }
+    }
+
     public mutating func update(_ event: CaptureEvent) -> [CaptureEffect] {
-        guard lifecycle != .tornDown else { return [] }
+        guard !isTornDown else { return [] }
         switch event {
         case .teardown:
             lifecycle = .tornDown
             return [.close]
-        case let .begin(mode, context, target):
-            return begin(mode, context, target: target)
+        case let .begin(start):
+            guard identity == nil else { return busy() }
+            let id = start.identity
+            switch start {
+            case .typed:
+                lifecycle = .active(id, .readingText(.closed(id.sourceStack)))
+                return [.readSelection(id, .editor)]
+            case .voice:
+                lifecycle = .active(id, .listening(.note(.pending, .closed(id.sourceStack)), .starting))
+                return [.show(.voice), .startRecording(id), .readSelection(id, .voice)]
+            case let .dictation(_, target):
+                lifecycle = .active(id, .listening(.dictation(target), .starting))
+                return [.show(.voice), .startRecording(id)]
+            }
         case .voicePressed: return pressed(.note)
         case .dictatePressed: return pressed(.dictate)
-        case .voiceRefused:
-            guard voice.keyHeld else { return [] }
-            voice.keyHeld = false
-            voice.releasePending = true
-            return []
         case .voiceReleased: return released(.note)
         case .dictateReleased: return released(.dictate)
         case .voiceToggled: return toggled(.note)
         case .dictateToggled: return toggled(.dictate)
+        case .voiceRefused:
+            consumeHeldRelease()
+            return []
         case .voiceEscape:
-            guard let session, session.mode != .text else { return [] }
-            if voice.keyHeld {
-                voice.keyHeld = false
-                voice.releasePending = true
-            }
+            guard speech != nil else { return [] }
+            consumeHeldRelease()
             return update(.cancelVoice)
         case let .voiceModeChanged(mode):
-            voice = VoiceGesture(mode: mode)
-            return session.map { $0.mode != .text } == true ? update(.cancelVoice) : []
-        default:
-            break
+            voiceMode = mode
+            speechLatch = .up
+            return speech != nil ? update(.cancelVoice) : []
+        default: break
         }
-
-        guard var session else { return [] }
+        guard let id = identity, var work else { return [] }
         var effects: [CaptureEffect] = []
         switch event {
         case let .selectionPending(context):
-            guard context == session.context, session.phase == .selectingText else { return [] }
-            session.phase = .editing("")
+            guard context == id, case let .readingText(choice) = work else { return [] }
+            work = .editing(.pending, EditableDraft(body: "", destination: choice))
             effects = [.show(.editor)]
         case let .selection(context, selection):
-            guard context == session.context else { return [] }
-            let target = context.target(captured: selection)
-            switch session.phase {
-            case .selectingText:
-                session.phase = .editing("")
+            guard context == id else { return [] }
+            switch work {
+            case let .readingText(choice):
+                work = .editing(.resolved(selection), EditableDraft(body: "", destination: choice))
                 effects = [.show(.editor)]
-            case let .editing(note) where session.target == nil:
-                if session.saveAwaitsSelection {
-                    session.saveAwaitsSelection = false
-                    if let note = target.note(body: note) {
-                        let request = CaptureSaveRequest(target: target,
-                            destinationStackID: session.destinationStackID, note: note)
-                        session.phase = .saving(request)
-                        effects.append(.commit(request))
-                    } else {
-                        effects = [.beep]
-                    }
-                }
-            case let .selectingVoice(recording, finishRequested):
-                session.phase = recording ? (finishRequested ? .transcribing : .recording) : .startingVoice
-                effects = finishRequested && recording ? [.transcribe(context)] : []
+            case let .editing(.pending, draft): work = .editing(.resolved(selection), draft)
+            case let .awaitingTextSelection(draft):
+                return save(id, selection: selection, body: draft.body, slot: draft.destination, input: .typed)
+            case let .listening(.note(.pending, choice), recording):
+                work = .listening(.note(.resolved(selection), choice), recording)
+            case let .joiningVoice(slot, preview):
+                work = .transcribing(.note(selection, slot), preview)
+                effects = [.transcribe(id)]
             default: return []
             }
-            session.target = target
         case let .recordingStarted(context):
-            guard context == session.context else { return [] }
-            switch session.phase {
-            case let .selectingVoice(_, finish):
-                session.phase = .selectingVoice(recording: true, finishRequested: finish)
-            case .startingVoice: session.phase = .recording
-            default: return []
-            }
+            guard context == id, case let .listening(destination, .starting) = work else { return [] }
+            work = .listening(destination, .live(nil))
         case .finishVoice:
-            switch session.phase {
-            case .selectingVoice(recording: true, finishRequested: false):
-                session.phase = .selectingVoice(recording: true, finishRequested: true)
-                effects = [.selectionDeadline(session.context)]
-            case .selectingVoice(recording: true, finishRequested: true): return []
-            case .selectingVoice, .startingVoice: return finish(session)
-            case .recording:
-                session.phase = .transcribing
-                effects = [.transcribe(session.context)]
+            switch work {
+            case .listening(_, .starting): return close()
+            case let .listening(.note(.pending, choice), .live(preview)):
+                work = .joiningVoice(choice.slot, preview)
+                effects = [.selectionDeadline(id)]
+            case let .listening(.note(.resolved(selection), choice), .live(preview)):
+                work = .transcribing(.note(selection, choice.slot), preview)
+                effects = [.transcribe(id)]
+            case let .listening(.dictation(target), .live(preview)):
+                work = .transcribing(.dictation(target), preview)
+                effects = [.transcribe(id)]
             default: return []
             }
         case .cancelVoice:
-            switch session.phase {
-            case .selectingVoice, .startingVoice, .recording, .transcribing, .failed: return finish(session)
+            switch work {
+            case .listening, .joiningVoice, .transcribing, .speechFailed: return close()
             default: return []
             }
-        case let .changeNote(note):
-            guard case .editing = session.phase, !session.saveAwaitsSelection else { return [] }
-            session.phase = .editing(note)
+        case let .changeNote(body):
+            guard case let .editing(selection, draft) = work else { return [] }
+            work = .editing(selection, EditableDraft(body: body, destination: draft.destination))
         case let .toggleDestinations(context):
-            guard context == session.context, session.canChooseDestination else { return [] }
-            session.destinationPicker = session.destinationPicker == .open ? .closed : .open
+            guard context == id, case let .choosing(choice) = destination else { return [] }
+            work = choosing(choice.isPickerOpen ? .closed(choice.slot) : .picking(choice.slot), in: work)
         case let .dismissDestinations(context):
-            guard context == session.context else { return [] }
-            session.destinationPicker = .closed
-        case let .chooseDestination(context, destination):
-            guard context == session.context, session.canChooseDestination,
-                  session.destinationPicker == .open else { return [] }
-            session.destinationStackID = destination
-            session.destinationPicker = .closed
-            effects = [.switchStack(destination)]
-        case let .stackSelected(destination):
-            guard session.canChooseDestination, session.destinationStackID != destination else { return [] }
-            session.destinationStackID = destination
-            session.destinationPicker = .closed
-        case .save, .transcript:
-            let note: String
-            switch event {
-            case let .transcript(context, text):
-                guard context == session.context, session.phase == .transcribing else { return [] }
-                note = text
-            default:
-                guard case let .editing(text) = session.phase else { return [] }
-                note = text
+            guard context == id, case let .choosing(choice) = destination else { return [] }
+            work = choosing(.closed(choice.slot), in: work)
+        case let .chooseDestination(context, slot):
+            guard context == id, case .choosing(.picking) = destination else { return [] }
+            work = choosing(.closed(slot), in: work)
+            effects = [.switchStack(slot)]
+        case let .stackSelected(slot):
+            guard case let .choosing(choice) = destination, choice.slot != slot else { return [] }
+            work = choosing(.closed(slot), in: work)
+        case .save:
+            guard case let .editing(selection, draft) = work else { return [] }
+            guard draft.body.nonblank != nil else { return [.beep] }
+            switch selection {
+            case .pending:
+                work = .awaitingTextSelection(FrozenTypedDraft(body: draft.body, destination: draft.destination.slot))
+            case let .resolved(selection):
+                return save(id, selection: selection, body: draft.body, slot: draft.destination.slot, input: .typed)
             }
-            if session.mode == .dictation {
-                guard let text = note.nonblank else { return finish(session) }
-                guard let target = session.dictationTarget else {
-                    session.phase = .failed("Couldn’t paste.")
-                    lifecycle = .active(session)
-                    return [.failureTimer(session.context)]
-                }
-                session.phase = .inserting
-                lifecycle = .active(session)
-                return [.insert(session.context, text, target)]
+        case let .transcript(context, body):
+            guard context == id, case let .transcribing(destination, _) = work else { return [] }
+            switch destination {
+            case let .note(selection, slot): return save(id, selection: selection, body: body, slot: slot, input: .voice)
+            case let .dictation(target):
+                guard let text = body.nonblank else { return close() }
+                work = .inserting(target, text)
+                effects = [.insert(id, text, target)]
             }
-            guard let target = session.target,
-                  let note = target.note(body: note)
-            else {
-                if session.phase == .transcribing { return finish(session) }
-                if session.target == nil, note.nonblank != nil {
-                    session.saveAwaitsSelection = true
-                    session.destinationPicker = .closed
-                    lifecycle = .active(session)
-                    return []
-                }
-                return [.beep]
-            }
-            let request = CaptureSaveRequest(target: target,
-                destinationStackID: session.destinationStackID, note: note)
-            session.phase = .saving(request)
-            effects = [.commit(request)]
         case let .voicePartial(context, text):
-            guard context == session.context else { return [] }
-            switch session.phase {
-            case .recording, .selectingVoice(recording: true, _), .transcribing:
-                session.liveTranscript = text.nonblank
+            guard context == id else { return [] }
+            switch work {
+            case let .listening(destination, .live): work = .listening(destination, .live(text.nonblank))
+            case let .joiningVoice(slot, _): work = .joiningVoice(slot, text.nonblank)
+            case let .transcribing(destination, _): work = .transcribing(destination, text.nonblank)
             default: return []
             }
         case let .failed(context, message):
-            guard context == session.context else { return [] }
-            session.liveTranscript = nil
-            switch session.phase {
-            case .selectingVoice, .startingVoice, .recording, .transcribing, .inserting:
-                session.phase = .failed(message)
-                effects = [.failureTimer(context)]
-            case .selectingText:
-                return update(.selection(context, CapturedSelection(text: "")))
-            case .editing where session.target == nil:
-                return update(.selection(context, CapturedSelection(text: "")))
+            guard context == id else { return [] }
+            switch work {
+            case .readingText, .editing(.pending, _), .awaitingTextSelection:
+                return update(.selection(id, CapturedSelection(text: "")))
+            case .listening, .joiningVoice, .transcribing, .inserting:
+                guard let origin = speech?.origin else { return [] }
+                work = .speechFailed(origin, message)
+                effects = [.failureTimer(id)]
             default: return []
             }
         case let .saved(request, outcome):
             let current: CaptureSaveRequest
-            switch session.phase {
-            case let .saving(value), let .saveFailed(value, _, _): current = value
+            switch work {
+            case let .saving(value), let .saveFailed(value, _): current = value
             default: return []
             }
-            guard current == request, request.target.context == session.context else { return [] }
+            guard request == current, request.identity == id else { return [] }
+            let failure: SaveFailure
             switch outcome {
-            case .committed: return finish(session)
-            case let .commitFailed(message):
-                session.phase = .saveFailed(request, message: "Couldn’t save the note: \(message)",
-                    retryable: true)
-            case let .rejected(message):
-                session.phase = .saveFailed(request, message: message, retryable: false)
-            case .cancelled, .noOp:
-                session.phase = .saveFailed(request, message: "The note wasn’t saved.", retryable: false)
+            case .committed: return close()
+            case let .commitFailed(message): failure = .retryable("Couldn’t save the note: \(message)")
+            case let .rejected(message): failure = .terminal(message)
+            case .cancelled, .noOp: failure = .terminal("The note wasn’t saved.")
             }
+            work = .saveFailed(request, failure)
             effects = [.show(.editor)]
         case .retry:
-            guard case let .saveFailed(request, _, true) = session.phase else { return [] }
-            session.phase = .saving(request)
+            guard case let .saveFailed(request, .retryable) = work else { return [] }
+            work = .saving(request)
             effects = [.retry]
         case let .inserted(context, pasted):
-            guard context == session.context, session.phase == .inserting else { return [] }
-            if pasted { return finish(session) }
-            session.phase = .failed("Couldn’t paste.")
-            effects = [.failureTimer(context)]
-        case .dismiss:
-            return finish(session)
+            guard context == id, case let .inserting(target, _) = work else { return [] }
+            if pasted { return close() }
+            work = .speechFailed(.dictation(target), "Couldn’t paste.")
+            effects = [.failureTimer(id)]
+        case .dismiss: return close()
         case let .failureTimeout(context):
-            guard context == session.context, case .failed = session.phase else { return [] }
-            return finish(session)
+            guard context == id, case .speechFailed = work else { return [] }
+            return close()
         case .begin, .teardown, .voiceRefused, .voicePressed, .voiceReleased, .voiceToggled,
-             .dictatePressed, .dictateReleased, .dictateToggled, .voiceEscape, .voiceModeChanged:
-            return []
+             .dictatePressed, .dictateReleased, .dictateToggled, .voiceEscape, .voiceModeChanged: return []
         }
-        if !session.canChooseDestination { session.destinationPicker = .closed }
-        lifecycle = .active(session)
+        lifecycle = .active(id, work)
         return effects
     }
 
-    private mutating func begin(
-        _ mode: CaptureMode, _ context: NoteCaptureContext, target: DictationTarget?
-    ) -> [CaptureEffect] {
-        guard let session else {
-            let phase: CapturePhase = switch mode {
-            case .text: .selectingText
-            case .voice: .selectingVoice(recording: false, finishRequested: false)
-            case .dictation: .startingVoice
-            }
-            lifecycle = .active(CaptureSession(context: context, mode: mode, phase: phase,
-                destinationStackID: context.stackID, dictationTarget: mode == .dictation ? target : nil))
-            switch mode {
-            case .text: return [.readSelection(context, mode)]
-            case .voice: return [.show(.voice), .startRecording(context), .readSelection(context, mode)]
-            case .dictation: return [.show(.voice), .startRecording(context)]
-            }
+    private func choosing(_ choice: DestinationChoice, in work: CaptureWork) -> CaptureWork {
+        switch work {
+        case .readingText: return .readingText(choice)
+        case let .editing(selection, draft): return .editing(selection, EditableDraft(body: draft.body, destination: choice))
+        case let .listening(.note(selection, _), recording): return .listening(.note(selection, choice), recording)
+        default: return work
         }
-        return busy(session)
+    }
+
+    private mutating func save(_ id: CaptureIdentity, selection: CapturedSelection, body: String,
+                               slot: StackSlot, input: NoteInput) -> [CaptureEffect] {
+        guard let note = Note.capturing(selection: selection.text, body: body, id: id.noteID, createdAt: id.createdAt)
+        else { return input == .voice ? close() : [.beep] }
+        let request = CaptureSaveRequest(identity: id, selection: selection, destinationStackID: slot, note: note, input: input)
+        lifecycle = .active(id, .saving(request))
+        return [.commit(request)]
     }
 
     private mutating func pressed(_ key: SpeechKey) -> [CaptureEffect] {
-        guard !voice.keyHeld, !voice.releasePending else { return [] }
-        voice.keyHeld = true
-        voice.key = key
-        guard let session else { return [key == .note ? .beginVoice : .beginDictation] }
-        voice.releasePending = true
-        return session.mode == key.mode ? finishOrBeep(session) : busy(session)
+        guard speechLatch == .up else { return [] }
+        speechLatch = .down(key)
+        guard identity != nil else { return [key == .note ? .beginVoice : .beginDictation] }
+        speechLatch = .consumeRelease(key)
+        return speech?.origin.key == key ? finishOrBeep() : busy()
     }
 
     private mutating func released(_ key: SpeechKey) -> [CaptureEffect] {
-        guard voice.key == key else { return [] }
-        let wasHeld = voice.keyHeld
-        voice.keyHeld = false
-        voice.key = nil
-        if voice.releasePending {
-            voice.releasePending = false
-            return []
+        switch speechLatch {
+        case .consumeRelease(key): speechLatch = .up; return []
+        case .down(key): speechLatch = .up
+        default: return []
         }
-        guard wasHeld, voice.mode == .hold, session?.mode == key.mode else { return [] }
+        guard voiceMode == .hold, speech?.origin.key == key else { return [] }
         return update(.finishVoice)
     }
 
     private mutating func toggled(_ key: SpeechKey) -> [CaptureEffect] {
-        guard !voice.keyHeld, !voice.releasePending else { return [] }
-        guard let session else { return [key == .note ? .beginVoice : .beginDictation] }
-        return session.mode == key.mode ? finishOrBeep(session) : busy(session)
+        guard speechLatch == .up else { return [] }
+        guard identity != nil else { return [key == .note ? .beginVoice : .beginDictation] }
+        return speech?.origin.key == key ? finishOrBeep() : busy()
     }
 
-    private func busy(_ session: CaptureSession) -> [CaptureEffect] {
-        if case .editing = session.phase { return [.focusEditor] }
+    private func busy() -> [CaptureEffect] {
+        if case .editing = work { return [.focusEditor] }
+        if case .awaitingTextSelection = work { return [.focusEditor] }
         return [.beep]
     }
 
-    private mutating func finishOrBeep(_ session: CaptureSession) -> [CaptureEffect] {
-        switch session.phase {
-        case .selectingVoice, .startingVoice, .recording: return update(.finishVoice)
+    private mutating func finishOrBeep() -> [CaptureEffect] {
+        switch work {
+        case .listening, .joiningVoice: return update(.finishVoice)
         default: return [.beep]
         }
     }
 
-    private mutating func finish(_ session: CaptureSession) -> [CaptureEffect] {
+    private mutating func consumeHeldRelease() {
+        if case let .down(key) = speechLatch { speechLatch = .consumeRelease(key) }
+    }
+
+    private mutating func close() -> [CaptureEffect] {
+        if speech != nil { consumeHeldRelease() }
         lifecycle = .idle
-        if session.mode != .text, voice.keyHeld {
-            voice.keyHeld = false
-            voice.releasePending = true
-        }
         return [.close]
     }
 }
 
-public nonisolated struct NoteCaptureContext: Equatable {
-    public let stackID: StackSlot
-    public let noteID: UUID
-    public let createdAt: Date
-
-    public init(stackID: StackSlot, noteID: UUID = UUID(), createdAt: Date = Date()) {
-        self.stackID = stackID
-        self.noteID = noteID
-        self.createdAt = createdAt
-    }
-
-    public func target(captured: CapturedSelection) -> NoteCaptureTarget {
-        NoteCaptureTarget(context: self, captured: captured)
-    }
-}
-
-public nonisolated struct NoteCaptureTarget: Equatable {
-    public let context: NoteCaptureContext
-    public let captured: CapturedSelection
-
-    public init(context: NoteCaptureContext, captured: CapturedSelection) {
-        self.context = context
-        self.captured = captured
-    }
-
-    var noteID: UUID { context.noteID }
-    var createdAt: Date { context.createdAt }
-
-    public func note(body: String) -> Note? {
-        Note.capturing(
-            selection: captured.text,
-            body: body,
-            id: noteID,
-            createdAt: createdAt
-        )
+private extension ResolvedSpeechDestination {
+    var origin: SpeechOrigin {
+        switch self {
+        case let .note(selection, slot): .note(.resolved(selection), slot)
+        case let .dictation(target): .dictation(target)
+        }
     }
 }

@@ -3,14 +3,14 @@ import SwiftUI
 
 struct CaptureStackLabel: View {
     @Bindable var model: CaptureController
-    let mode: CaptureMode
+    let surface: CaptureSurface
     let ink: Color
     var rowHeight: CGFloat = VoiceCaptureLayout.cardFooterHeight
     var anchorHeight: CGFloat = VoiceCaptureLayout.cardFooterHeight
 
     var body: some View {
         CaptureDestinationButton(
-            model: model, mode: mode, fontSize: 11.5,
+            model: model, surface: surface, fontSize: 11.5,
             rowHeight: rowHeight, anchorHeight: anchorHeight
         )
         .foregroundStyle(ink.opacity(0.9))

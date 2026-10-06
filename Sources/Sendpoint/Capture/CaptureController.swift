@@ -69,7 +69,7 @@ final class CaptureController {
     var levelMeter: VoiceLevelMeter { recorder.levelMeter }
     var targetStack: StackItemFacts? {
         guard let store else { return nil }
-        let id = state.session?.destinationStackID ?? store.currentStackID
+        let id = state.destination?.slot ?? store.currentStackID
         return StackUIFacts(store: store).stack(id: id)
     }
     var destinationStacks: [StackItemFacts] {
@@ -77,27 +77,22 @@ final class CaptureController {
         return StackUIFacts(store: store).stacks
     }
 
-    func chooseDestination(_ id: StackSlot, context: NoteCaptureContext) {
-        guard state.session?.context == context,
+    func chooseDestination(_ id: StackSlot, context: CaptureIdentity) {
+        guard state.identity == context,
               destinationStacks.contains(where: { $0.id == id }) else { return }
         send(.chooseDestination(context, id))
     }
 
-    var isOpen: Bool { state.session != nil }
-    var captured: CapturedSelection? { state.session?.target?.captured }
+    var isOpen: Bool { state.identity != nil }
+    var captured: CapturedSelection? { state.captured }
     var note: String {
         get {
-            switch state.session?.phase {
-            case let .editing(note): return note
-            case let .saving(request), let .saveFailed(request, _, _): return request.note.body
-            default: return ""
-            }
+            state.editor?.body ?? ""
         }
         set { send(.changeNote(newValue)) }
     }
     var isNoteFrozen: Bool {
-        guard let session = state.session, case .editing = session.phase else { return true }
-        return session.saveAwaitsSelection
+        state.editor?.isEditable != true
     }
 
     init(settings: AppSettings, voiceSettings: VoiceSettings, permissionState: PermissionController,
@@ -119,7 +114,7 @@ final class CaptureController {
     }
 
     private func receive(_ output: VoiceOutput) {
-        guard let context = state.session?.context else { return }
+        guard let context = state.identity else { return }
         switch output {
         case .started(context.noteID): send(.recordingStarted(context))
         case .partial(context.noteID, let text): send(.voicePartial(context, text))
@@ -164,10 +159,10 @@ final class CaptureController {
     }
 
     func beginCapture() {
-        if let context = beginContext() { send(.begin(.text, context)) }
+        if let context = beginContext() { send(.begin(.typed(context))) }
     }
 
-    private func beginContext() -> NoteCaptureContext? {
+    private func beginContext() -> CaptureIdentity? {
         guard !state.isTornDown else { return nil }
         guard let store, store.state != .tornDown else {
             NSSound.beep()
@@ -178,7 +173,7 @@ final class CaptureController {
             return nil
         }
         if !isOpen { previousApp = NSWorkspace.shared.frontmostApplication }
-        return NoteCaptureContext(stackID: store.currentStackID)
+        return CaptureIdentity(sourceStack: store.currentStackID)
     }
 
     func send(_ event: CaptureEvent) {
@@ -189,10 +184,11 @@ final class CaptureController {
             let next = pending.removeFirst()
             let previous = state
             let effects = state.update(next)
-            if case let .begin(_, context, _) = next, previous.session == nil,
-               state.session?.context == context {
+            if case let .begin(start) = next, previous.identity == nil,
+               state.identity == start.identity {
+                let context = start.identity
                 diagnostics(DiagnosticRecord(.capture, .accepted, operationID: context.noteID,
-                                             stackID: context.stackID, noteID: context.noteID))
+                                             stackID: context.sourceStack, noteID: context.noteID))
             }
             if case let .saved(request, outcome) = next, previous != state {
                 diagnostics(DiagnosticRecord(.capture, outcome == .noOp ? .failed : outcome.diagnosticOutcome,
@@ -201,18 +197,17 @@ final class CaptureController {
             }
             if case let .failed(context, _) = next, previous != state {
                 diagnostics(DiagnosticRecord(.capture, .failed, operationID: context.noteID,
-                                             stackID: context.stackID, noteID: context.noteID))
+                                             stackID: context.sourceStack, noteID: context.noteID))
             }
             if case let .inserted(context, dispatched) = next, previous != state {
                 diagnostics(DiagnosticRecord(.capture, dispatched ? .succeeded : .failed,
-                                             operationID: context.noteID, stackID: context.stackID, noteID: context.noteID))
+                                             operationID: context.noteID, stackID: context.sourceStack, noteID: context.noteID))
             }
-            if let previousSession = previous.session, state.session == nil {
+            if let context = previous.identity, state.identity == nil {
                 switch next {
                 case .dismiss, .cancelVoice, .voiceEscape, .teardown:
-                    let context = previousSession.context
                     diagnostics(DiagnosticRecord(.capture, .cancelled, operationID: context.noteID,
-                                                 stackID: context.stackID, noteID: context.noteID))
+                                                 stackID: context.sourceStack, noteID: context.noteID))
                 default: break
                 }
             }
@@ -224,17 +219,17 @@ final class CaptureController {
     private func run(_ effect: CaptureEffect) {
         switch effect {
         case .beginVoice:
-            if let context = beginContext() { send(.begin(.voice, context)) } else { send(.voiceRefused) }
+            if let context = beginContext() { send(.begin(.voice(context))) } else { send(.voiceRefused) }
         case .beginDictation:
             guard let target = frontApp() else {
                 NSSound.beep()
                 send(.voiceRefused)
                 return
             }
-            if let context = beginContext() { send(.begin(.dictation, context, target)) } else { send(.voiceRefused) }
-        case let .readSelection(context, mode):
+            if let context = beginContext() { send(.begin(.dictation(context, target))) } else { send(.voiceRefused) }
+        case let .readSelection(context, surface):
             launch(.selection, context: context) { [selection, weak self] in
-                .selection(context, try await selection.read(mode == .text ? .patient : .brief) {
+                .selection(context, try await selection.read(surface == .editor ? .patient : .brief) {
                     self?.send(.selectionPending(context))
                 })
             }
@@ -281,21 +276,21 @@ final class CaptureController {
         }
     }
 
-    private func launch(_ work: Work, context: NoteCaptureContext,
+    private func launch(_ work: Work, context: CaptureIdentity,
                         operation: @escaping @MainActor () async throws -> CaptureEvent) {
-        guard state.session?.context == context else { return }
+        guard state.identity == context else { return }
         tasks[work]?.cancel()
         tasks[work] = Task { [weak self] in
             do {
                 try Task.checkCancellation()
                 let action = try await operation()
                 try Task.checkCancellation()
-                guard let self, self.state.session?.context == context else { return }
+                guard let self, self.state.identity == context else { return }
                 self.tasks[work] = nil
                 self.send(action)
             } catch is CancellationError {
             } catch {
-                guard !Task.isCancelled, let self, self.state.session?.context == context else { return }
+                guard !Task.isCancelled, let self, self.state.identity == context else { return }
                 self.tasks[work] = nil
                 self.send(.failed(context, error.localizedDescription))
             }

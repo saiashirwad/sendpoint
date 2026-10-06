@@ -4,7 +4,7 @@ import SwiftUI
 
 struct CaptureDestinationButton: View {
     @Bindable var model: CaptureController
-    let mode: CaptureMode
+    let surface: CaptureSurface
     var fontSize: CGFloat = 12
     var arrowEdge: Edge = .bottom
     var rowHeight: CGFloat = VoiceCaptureLayout.pillHeight
@@ -12,36 +12,36 @@ struct CaptureDestinationButton: View {
 
     @ViewBuilder
     var body: some View {
-        if let session = model.state.session, session.mode == mode {
-            let context = session.context
+        if let context = model.state.identity, let destination = model.state.destination,
+           surface == .voice ? model.state.speech != nil : model.state.editor != nil {
             let name = model.targetStack?.name ?? "Choose stack"
             let isPresented = Binding(
                 get: {
-                    model.state.session?.context == context
-                        && model.state.session?.destinationPicker == .open
+                    model.state.identity == context
+                        && model.state.destination?.isPickerOpen == true
                 },
                 set: { if !$0 { model.send(.dismissDestinations(context)) } }
             )
 
-            if mode == .voice {
-                destinationButton(name: name, context: context, enabled: session.canChooseDestination)
+            if surface == .voice {
+                destinationButton(name: name, context: context, enabled: destination.canChoose)
                     .frame(height: rowHeight)
                     .background(alignment: .bottom) {
                         CaptureDestinationPanelAnchor(
                             isPresented: isPresented,
                             rows: model.destinationStacks,
-                            selectedID: session.destinationStackID,
+                            selectedID: destination.slot,
                             onSelect: { model.chooseDestination($0, context: context) }
                         )
                         .frame(height: anchorHeight)
                     }
             } else {
-                destinationButton(name: name, context: context, enabled: session.canChooseDestination)
+                destinationButton(name: name, context: context, enabled: destination.canChoose)
                     .popover(isPresented: isPresented, arrowEdge: arrowEdge) {
-                        if let current = model.state.session, current.context == context {
+                        if model.state.identity == context, let current = model.state.destination {
                             CaptureDestinationList(
                                 rows: model.destinationStacks,
-                                selectedID: current.destinationStackID,
+                                selectedID: current.slot,
                                 onSelect: { model.chooseDestination($0, context: context) }
                             )
                         }
@@ -51,7 +51,7 @@ struct CaptureDestinationButton: View {
     }
 
     private func destinationButton(
-        name: String, context: NoteCaptureContext, enabled: Bool
+        name: String, context: CaptureIdentity, enabled: Bool
     ) -> some View {
         Button {
             model.send(.toggleDestinations(context))
@@ -72,7 +72,7 @@ struct CaptureDestinationButton: View {
         .help("Choose the destination for this note")
         .accessibilityLabel("Destination stack, \(name)")
         .accessibilityValue(
-            model.state.session?.destinationPicker == .open ? "Expanded" : "Collapsed"
+            model.state.destination?.isPickerOpen == true ? "Expanded" : "Collapsed"
         )
     }
 }
