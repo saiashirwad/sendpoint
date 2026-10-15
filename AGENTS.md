@@ -7,9 +7,9 @@
 - Check cancellation around external calls. Apply a result only when its full context still matches the current state.
 - Inject small system boundaries for deterministic tests. Test behavior, including cancellation, stale results, invalid transitions, and teardown.
 - Make clean cutovers. Delete obsolete callers, state, settings, imports, and files.
-- Verify with `./check.sh` (builds and tests; prints one summary line plus any errors; full log in `.build/check.log`).
-- See UI with `./shots.sh`: renders every screen, light and dark, into `.build/shots/` (`--diff` keeps the last set and fails on each changed screen, diffs in `.build/shots-diff/`). A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
-- Finish every requested change with `./ship.sh` (build, assemble, install, launch; full log in `.build/ship.log`) before reporting it done.
+- GitHub Actions `Verify` is the authoritative automated acceptance gate: require `behavior`, `screenshots`, and `packaging` for the reviewed revision. Review logs, JSON results, and light/dark PNG artifacts; see `docs/verification.md`. Do not claim remote success before the run completes.
+- CI reuses `./check.sh` for builds/tests and `./shots.sh` for fresh rendering without baseline comparison. A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`. Snapshots are not full-app end-to-end coverage.
+- Local builds, tests, screenshots, installation, and launch are optional, explicitly requested developer diagnostics or manual acceptance—not mandatory completion steps. Do not run `./install.sh` or `./ship.sh` on the developer host without explicit approval. Real microphone, Accessibility/selection, pasted export, downloaded-model transcription, and updater acceptance remain manual; CI ad-hoc packaging is not notarization.
 - Publish only with `./release.sh X.Y.Z --ad-hoc --publish`.
 - Before adding a setting, a shortcut, or a state machine, read its guide first: `.claude/skills/add-setting/SKILL.md`, `.claude/skills/add-shortcut/SKILL.md`, or `.claude/skills/add-state-machine/SKILL.md`.
 

@@ -1,0 +1,198 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  behavior:
+    name: behavior
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify toolchain
+        run: |
+          mkdir -p .build
+          exec > >(tee .build/toolchain.log) 2>&1
+          test "$(uname -m)" = arm64
+          sw_vers | tee .build/os-version.log
+          IFS=. read -r major minor patch <<< "$(sw_vers -productVersion)"
+          test "$major" -ge 26
+          test "$major" -gt 26 || test "${minor:-0}" -ge 4
+          xcodebuild -version | tee .build/xcode-version.log
+          grep -q '^Xcode 26\.2$' .build/xcode-version.log
+          swift --version | tee .build/swift-version.log
+          grep -q 'Swift version 6\.2' .build/swift-version.log
+      - name: Build and test behavior
+        run: ./check.sh
+      - name: Collect test crash reports
+        if: always()
+        run: |
+          mkdir -p .build/crash-reports
+          reports="$HOME/Library/Logs/DiagnosticReports"
+          if [ -d "$reports" ]; then
+            find "$reports" -type f \( -name '*Sendpoint*' -o -name '*xctest*' \) -exec cp {} .build/crash-reports/ \;
+          fi
+      - name: Upload behavior evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: behavior-evidence-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .build/*.log
+            .build/*.json
+            .build/shots/*.png
+            .build/shots-diff/*.png
+            .build/crash-reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  screenshots:
+    name: screenshots
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify toolchain
+        run: |
+          mkdir -p .build
+          exec > >(tee .build/toolchain.log) 2>&1
+          test "$(uname -m)" = arm64
+          sw_vers | tee .build/os-version.log
+          IFS=. read -r major minor patch <<< "$(sw_vers -productVersion)"
+          test "$major" -ge 26
+          test "$major" -gt 26 || test "${minor:-0}" -ge 4
+          xcodebuild -version | tee .build/xcode-version.log
+          grep -q '^Xcode 26\.2$' .build/xcode-version.log
+          swift --version | tee .build/swift-version.log
+          grep -q 'Swift version 6\.2' .build/swift-version.log
+      - name: Render fresh light and dark screenshots (no baseline comparison)
+        run: ./shots.sh
+      - name: Collect test crash reports
+        if: always()
+        run: |
+          mkdir -p .build/crash-reports
+          reports="$HOME/Library/Logs/DiagnosticReports"
+          if [ -d "$reports" ]; then
+            find "$reports" -type f \( -name '*Sendpoint*' -o -name '*xctest*' \) -exec cp {} .build/crash-reports/ \;
+          fi
+      - name: Upload screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: screenshots-evidence-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .build/*.log
+            .build/*.json
+            .build/shots/*.png
+            .build/shots-diff/*.png
+            .build/crash-reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  packaging:
+    name: packaging
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify toolchain and prepare Metal
+        run: |
+          mkdir -p .build
+          exec > >(tee .build/toolchain.log) 2>&1
+          test "$(uname -m)" = arm64
+          sw_vers | tee .build/os-version.log
+          IFS=. read -r major minor patch <<< "$(sw_vers -productVersion)"
+          test "$major" -ge 26
+          test "$major" -gt 26 || test "${minor:-0}" -ge 4
+          xcodebuild -version | tee .build/xcode-version.log
+          grep -q '^Xcode 26\.2$' .build/xcode-version.log
+          swift --version | tee .build/swift-version.log
+          grep -q 'Swift version 6\.2' .build/swift-version.log
+          if ! xcrun -sdk macosx metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun -sdk macosx metal --version
+      - name: Assemble ad-hoc release bundle
+        env:
+          CODESIGN_IDENTITY: '-'
+        run: ./build.sh release 2>&1 | tee .build/packaging-build.log
+      - name: Validate bundle and archive
+        run: |
+          exec > >(tee .build/packaging-validation.log) 2>&1
+          app=dist/Sendpoint.app
+          plist="$app/Contents/Info.plist"
+          plutil -lint "$plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = app.sendpoint
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = Sendpoint
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$plist")" = APPL
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          test -x "$app/Contents/MacOS/Sendpoint"
+          lipo "$app/Contents/MacOS/Sendpoint" -verify_arch arm64
+          test -s "$app/Contents/Resources/default.metallib"
+          cmp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+          for font in Resources/Fonts/*; do
+            cmp "$font" "$app/Contents/Resources/Fonts/$(basename "$font")"
+          done
+          framework="$app/Contents/Frameworks/Sparkle.framework"
+          test -L "$framework/Versions/Current"
+          test -L "$framework/Sparkle"
+          test -x "$framework/Sparkle"
+          otool -L "$app/Contents/MacOS/Sendpoint" | tee .build/linked-libraries.log
+          grep -q '@rpath/Sparkle.framework/Versions/B/Sparkle' .build/linked-libraries.log
+          codesign --verify --deep --strict --verbose=4 "$app"
+          codesign -d --verbose=4 "$app" 2>&1 | tee .build/signature.log
+          grep -q '^Signature=adhoc$' .build/signature.log
+          grep -Eq '^CodeDirectory .*flags=.*\(.*runtime.*\)' .build/signature.log
+          codesign -d --entitlements - --xml "$app" > .build/signed-entitlements.plist
+          plutil -lint .build/signed-entitlements.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.device.audio-input' .build/signed-entitlements.plist)" = true
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.disable-library-validation' .build/signed-entitlements.plist)" = true
+          ditto -c -k --sequesterRsrc --keepParent "$app" dist/Sendpoint-ci.zip
+          mkdir -p "$RUNNER_TEMP/archive-validation"
+          ditto -x -k dist/Sendpoint-ci.zip "$RUNNER_TEMP/archive-validation"
+          restored="$RUNNER_TEMP/archive-validation/Sendpoint.app"
+          test -L "$restored/Contents/Frameworks/Sparkle.framework/Versions/Current"
+          test -L "$restored/Contents/Frameworks/Sparkle.framework/Sparkle"
+          codesign --verify --deep --strict --verbose=4 "$restored"
+      - name: Upload packaging evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: packaging-evidence-${{ github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .build/*.log
+            .build/*.json
+            .build/shots/*.png
+            .build/shots-diff/*.png
+            .build/crash-reports/
+            .build/signed-entitlements.plist
+            dist/Sendpoint-ci.zip
+          if-no-files-found: warn
+          retention-days: 14

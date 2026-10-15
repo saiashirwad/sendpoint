@@ -11,6 +11,11 @@ final class ScreenshotTests: XCTestCase {
     private var appearance = "light"
     private var record = SnapshotTestingConfiguration.Record.all
     private var suites: [String] = []
+    private static let application: NSApplication = {
+        let application = NSApplication.shared
+        application.finishLaunching()
+        return application
+    }()
 
     override func setUp() async throws {
         let environment = ProcessInfo.processInfo.environment
@@ -20,7 +25,7 @@ final class ScreenshotTests: XCTestCase {
         self.directory = directory
         appearance = environment["SENDPOINT_SHOTS_APPEARANCE"] ?? "light"
         record = environment["SENDPOINT_SHOTS_RECORD"] == "missing" ? .missing : .all
-        NSApplication.shared.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        Self.application.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         Self.registerAppFonts()
     }
 
@@ -38,9 +43,10 @@ final class ScreenshotTests: XCTestCase {
         let context = NoteCaptureContext(stackID: stacks[0].id)
         controller.send(.begin(.text, context))
         controller.send(.selection(context, CapturedSelection(text: "A short selected passage")))
-        let editor = CaptureWindows.makeEditorPanel(contentView: CaptureHostingView(
-            rootView: CaptureView(model: controller)
-        ))
+        let hosting = CaptureHostingView(rootView: CaptureView(model: controller))
+        hosting.sizingOptions = []
+        hosting.safeAreaRegions = []
+        let editor = CaptureWindows.makeEditorPanel(contentView: hosting)
         editor.setContentSize(VoiceCaptureLayout.cardSize(
             lines: controller.transcriptionPreviewLines,
             fontSize: CGFloat(controller.transcriptionPreviewFontSize)
@@ -52,12 +58,19 @@ final class ScreenshotTests: XCTestCase {
             store.teardown()
         }
         try await show([editor])
+        editor.presentActivated()
+        try await settle()
         try shoot([editor], "text-capture-empty")
 
         let typed = try XCTUnwrap(Self.textView(in: try XCTUnwrap(editor.contentView)))
         editor.makeFirstResponder(typed)
-        typed.insertText("Follow up on this before the review.", replacementRange: typed.selectedRange())
+        let note = "Follow up on this before the review."
+        typed.insertText(note, replacementRange: typed.selectedRange())
         try await settle()
+        XCTAssertEqual(typed.string, note)
+        XCTAssertEqual(controller.note, note)
+        XCTAssertGreaterThan(typed.visibleRect.width, 0)
+        XCTAssertGreaterThan(typed.visibleRect.height, 0)
         try shoot([editor], "text-capture-typed")
 
         controller.send(.toggleDestinations(context))
@@ -222,12 +235,17 @@ final class ScreenshotTests: XCTestCase {
 
         let text = try XCTUnwrap(Self.textView(in: try XCTUnwrap(panel.contentView)))
         text.insertText(" And the copy.", replacementRange: NSRange(location: text.string.utf16.count, length: 0))
-        NSApp.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
-            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
-            windowNumber: panel.windowNumber, context: nil, characters: "\r",
-            charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36
-        )))
+        XCTAssertEqual(model.text, "Ship the export fix on Friday. And the copy.")
+        model.send(.save)
         await store.waitForIdle()
+        guard case let .failed(draft, message, pending) = model.state else {
+            return XCTFail("Expected the real persistence failure to remain visible")
+        }
+        XCTAssertEqual(draft.text, "Ship the export fix on Friday. And the copy.")
+        XCTAssertTrue(message.contains("The disk is full."))
+        XCTAssertTrue(pending)
+        XCTAssertEqual(store.currentNotes.first?.body, "Ship the export fix on Friday.")
+        XCTAssertTrue(panel.isVisible)
         try await settle()
         try shoot([panel], "latest-note-save-failed")
     }
@@ -400,8 +418,8 @@ final class ScreenshotTests: XCTestCase {
 
     private func show(_ windows: [NSWindow]) async throws {
         for window in windows {
-            window.appearance = NSApp.appearance
-            window.alphaValue = 0
+            if window.appearance == nil { window.appearance = NSApp.appearance }
+            window.alphaValue = 1
             window.setFrameOrigin(NSPoint(x: 240, y: 240))
             window.orderFrontRegardless()
         }
@@ -410,7 +428,6 @@ final class ScreenshotTests: XCTestCase {
 
     private func settle() async throws {
         try await Task.sleep(for: .milliseconds(350))
-        for window in NSApp.windows { window.alphaValue = 0 }
     }
 
     private func shoot(_ windows: [NSWindow], _ name: String, file: StaticString = #filePath, line: UInt = #line) throws {
@@ -430,24 +447,38 @@ final class ScreenshotTests: XCTestCase {
 
     private static func composite(_ windows: [NSWindow]) throws -> NSImage {
         let visible = windows.filter(\.isVisible)
-        let bounds = visible.dropFirst().map(\.frame).reduce(visible[0].frame) { $0.union($1) }
+        let first = try XCTUnwrap(visible.first)
+        let bounds = visible.dropFirst().map(\.frame).reduce(first.frame) { $0.union($1) }
+        let layers = try visible.map { window in (window.frame, try capture(window)) }
         let image = NSImage(size: bounds.size)
         image.lockFocus()
         (NSApp.appearance?.bestMatch(from: [.darkAqua]) == nil ? NSColor.white : NSColor.black).setFill()
         NSRect(origin: .zero, size: bounds.size).fill()
-        for window in visible {
-            let view = try XCTUnwrap(window.contentView)
-            view.layoutSubtreeIfNeeded()
-            let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            let layer = NSImage(size: view.bounds.size)
-            layer.addRepresentation(bitmap)
+        for (frame, layer) in layers {
             layer.draw(in: NSRect(
-                x: window.frame.minX - bounds.minX, y: window.frame.minY - bounds.minY,
-                width: view.bounds.width, height: view.bounds.height
+                x: frame.minX - bounds.minX, y: frame.minY - bounds.minY,
+                width: frame.width, height: frame.height
             ), from: .zero, operation: .sourceOver, fraction: 1)
         }
         image.unlockFocus()
+        return image
+    }
+
+    private static func capture(_ window: NSWindow) throws -> NSImage {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-a", "-l", String(window.windowNumber), url.path]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "ScreenshotCapture", code: Int(process.terminationStatus), userInfo: [
+                NSLocalizedDescriptionKey: "Window capture failed for \(window.windowNumber).",
+            ])
+        }
+        let image = try XCTUnwrap(NSImage(contentsOf: url))
+        XCTAssertEqual(image.size.width / image.size.height, window.frame.width / window.frame.height, accuracy: 0.01)
         return image
     }
 

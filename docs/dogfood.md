@@ -1,7 +1,13 @@
 # Dogfood checklist
 
-Run on one build after every phase. Each line is a behavior the automated
-tests cannot see: a TCC prompt, a foreign app, a key held down by a person.
+Use this checklist for explicitly approved manual acceptance on a Mac with the
+required permissions and voice model. These checks are not mandatory local
+completion steps. GitHub Actions provides the automated acceptance gate described
+in [verification.md](verification.md).
+
+Each line covers behavior the automated tests cannot see: a TCC prompt, a foreign
+app, or a key held down by a person. Record which build you tried and which items
+you completed. Do not treat passing CI as evidence for unchecked items.
 
 ## Capture
 

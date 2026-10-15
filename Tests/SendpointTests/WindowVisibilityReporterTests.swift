@@ -4,6 +4,10 @@ import XCTest
 
 @MainActor
 final class WindowVisibilityReporterTests: XCTestCase {
+    override func setUp() async throws {
+        initializeAppKitTestApplication()
+    }
+
     private final class Window: NSWindow {
         var shown = false
         var exposed = false

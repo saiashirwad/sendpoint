@@ -6,6 +6,10 @@ import XCTest
 
 @MainActor
 final class AppCompositionTests: XCTestCase {
+    override func setUp() async throws {
+        initializeAppKitTestApplication()
+    }
+
     func testBootstrapTransitionsRejectWrongRequestsAndAreTerminalAfterTeardown() async throws {
         let request = UUID()
         let stale = UUID()

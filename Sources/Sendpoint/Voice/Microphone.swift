@@ -73,7 +73,8 @@ private actor MicrophoneHardware {
         let input = engine.inputNode
 
         let queue = VoiceAudioQueue()
-        try Self.installTap(on: input, format: format) { @Sendable buffer, _ in
+        // The macOS 27 throwing tap API is absent from the supported Xcode 26.2 SDK.
+        input.installTap(onBus: 0, bufferSize: 2_048, format: format) { @Sendable buffer, _ in
             if collectFrames, let frame = VoiceAudioFrame(buffer: buffer) {
                 queue.append(frame)
             }
@@ -108,15 +109,6 @@ private actor MicrophoneHardware {
 
     private static func tapFormat(of input: AVAudioInputNode) -> AVAudioFormat? {
         MicrophoneTapFormat.valid(output: input.outputFormat(forBus: 0), hardware: input.inputFormat(forBus: 0))
-    }
-
-    private static func installTap(on input: AVAudioInputNode, format: AVAudioFormat,
-                                   block: @escaping AVAudioNodeTapBlock) throws {
-        if #available(macOS 27, *) {
-            try input.__installTap(onBus: 0, bufferSize: 2_048, format: format, error: (), block: block)
-        } else {
-            input.installTap(onBus: 0, bufferSize: 2_048, format: format, block: block)
-        }
     }
 
     func stop() {
