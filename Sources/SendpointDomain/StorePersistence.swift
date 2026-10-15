@@ -120,20 +120,37 @@ private actor AtomicJSONStore {
             try quarantine(using: fileManager)
             return nil
         }
-        guard version == StackDocument.currentVersion else {
+        guard version == StackDocument.currentVersion || version == StackDocumentMigration.legacyVersion else {
             diagnostics(DiagnosticRecord(.load, .unsupported))
             throw StorePersistenceError.unsupportedVersion(version)
         }
 
+        let document: StackDocument
         do {
-            let document = try decoder.decode(StackDocument.self, from: data)
+            document = version == StackDocumentMigration.legacyVersion
+                ? try StackDocumentMigration.migrate(legacy: data, decoder: decoder)
+                : try decoder.decode(StackDocument.self, from: data)
             try StackDocumentMutations.validate(document)
-            diagnostics(DiagnosticRecord(.load, .succeeded))
-            return document
         } catch {
             try quarantine(using: fileManager)
             return nil
         }
+
+        if version == StackDocumentMigration.legacyVersion {
+            let backup = directory.appendingPathComponent("store.v\(version).json")
+            do {
+                if !fileManager.fileExists(atPath: backup.path) {
+                    try fileManager.copyItem(at: fileURL, to: backup)
+                }
+                try commit(document)
+            } catch {
+                diagnostics(DiagnosticRecord(.load, .failed))
+                throw StorePersistenceError.unavailable
+            }
+        }
+
+        diagnostics(DiagnosticRecord(.load, .succeeded))
+        return document
     }
 
     func commit(_ document: StackDocument) throws {

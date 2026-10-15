@@ -44,7 +44,7 @@ final class StorePersistenceTests: XCTestCase {
     }
 
     func testUnsupportedVersionsAreRejectedWithoutQuarantine() async throws {
-        for version in [StackDocument.currentVersion - 1, StackDocument.currentVersion + 1] {
+        for version in [StackDocumentMigration.legacyVersion - 1, StackDocument.currentVersion + 1] {
             let directory = temporaryDirectory()
             defer { try? FileManager.default.removeItem(at: directory) }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
