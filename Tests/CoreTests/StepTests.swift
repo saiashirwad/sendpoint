@@ -28,30 +28,57 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
     #expect(fx.isEmpty)
 }
 
-@Test func holdToTalkAppendsFinalText() {
+private func tapMode() -> World {
+    var w = World()
+    w.config.voice = .tap
+    return w
+}
+
+@Test func holdTalksWhileDownAndSavesOnRelease() {
+    let (w, fx) = run([
+        .speakDown(selection: "sel"),
+        .partial(take: 1, "hel"),
+        .speakDown(selection: ""),          // a repeat press while holding does nothing
+        .speakUp,
+        .final(take: 1, "hello there"),
+    ])
+    #expect(w.mode == .idle)
+    #expect(w.stacks[0] == [Note(quote: "sel", body: "hello there")])
+    #expect(fx == [.micStart(take: 1), .micStop(take: 1), .save])
+}
+
+@Test func tapStartsAndTheNextTapStopsAndSaves() {
+    let (w, fx) = run([.speakDown(selection: "sel"), .speakUp], from: tapMode())
+    #expect(fx == [.micStart(take: 1)])
+    #expect(w.mode == .listening(Draft(quote: "sel"), partial: "", save: true))
+
+    let (done, more) = run([.speakDown(selection: ""), .speakUp, .final(take: 1, "said")], from: w)
+    #expect(more == [.micStop(take: 1), .save])
+    #expect(done.mode == .idle)
+    #expect(done.stacks[0] == [Note(quote: "sel", body: "said")])
+}
+
+@Test func speakingIntoAnOpenCardAppendsAndKeepsItOpen() {
     let (w, fx) = run([
         .capture(selection: "q"), .edit("typed"),
-        .speakDown(selection: "ignored"),
-        .partial(take: 1, "hel"),
-        .speakUp(tap: false),
+        .speakDown(selection: "ignored"), .speakUp,
         .final(take: 1, "hello there"),
     ])
     #expect(w.mode == .drafting(Draft(quote: "q", body: "typed hello there")))
+    #expect(w.stacks[0].isEmpty)
     #expect(fx == [.micStart(take: 1), .micStop(take: 1)])
 }
 
-@Test func speakingFromIdleCapturesTheSelection() {
-    let (w, fx) = run([.speakDown(selection: "sel"), .partial(take: 1, "hi")])
-    #expect(w.mode == .listening(Draft(quote: "sel"), partial: "hi"))
-    #expect(fx == [.micStart(take: 1)])
+@Test func hearingNothingLeavesTheCardOpenInsteadOfSaving() {
+    let (w, fx) = run([.speakDown(selection: "sel"), .speakUp, .final(take: 1, " ")])
+    #expect(w.mode == .drafting(Draft(quote: "sel")))
+    #expect(w.stacks[0].isEmpty)
+    #expect(fx == [.micStart(take: 1), .micStop(take: 1)])
 }
 
-@Test func tapLatchesUntilNextPress() {
-    let (w, fx) = run([.speakDown(selection: ""), .speakUp(tap: true)])
-    #expect(fx == [.micStart(take: 1)])
-    guard case .listening = w.mode else { Issue.record("should still listen"); return }
-    let (_, more) = run([.speakDown(selection: "")], from: w)
-    #expect(more == [.micStop(take: 1)])
+@Test func voiceModeComesFromConfig() {
+    #expect(parseConfig("[voice]\nmode = \"tap\"").voice == .tap)
+    #expect(parseConfig("[voice]\nmode = \"toggle\"").problems.count == 1)
 }
 
 @Test func staleSpeechResultsAreIgnored() {
@@ -61,8 +88,8 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
         .partial(take: 1, "old"), .final(take: 1, "old"),
         .final(take: 2, "new"),
     ])
-    #expect(w.mode == .drafting(Draft(quote: "", body: "new")))
-    #expect(fx == [.micStart(take: 1), .micCancel, .micStart(take: 2)])
+    #expect(w.stacks[0] == [Note(quote: "", body: "new")])
+    #expect(fx == [.micStart(take: 1), .micCancel, .micStart(take: 2), .save])
 }
 
 @Test func resultsAfterCancelDoNothing() {
@@ -73,7 +100,7 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
 
 @Test func invalidTransitionsAreNoOps() {
     let start = World()
-    for e: Event in [.commit, .cancel, .edit("x"), .speakUp(tap: false), .final(take: 0, "x"), .select(9), .select(-1), .paste] {
+    for e: Event in [.commit, .cancel, .edit("x"), .speakUp, .final(take: 0, "x"), .select(9), .select(-1), .paste] {
         let (w, fx) = run([e], from: start)
         #expect(w == start, "\(e)")
         #expect(fx.isEmpty, "\(e)")
@@ -82,7 +109,7 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
 
 @Test func editsAreIgnoredWhileListening() {
     let (w, _) = run([.speakDown(selection: ""), .edit("x"), .commit])
-    #expect(w.mode == .listening(Draft(quote: ""), partial: ""))
+    #expect(w.mode == .listening(Draft(quote: ""), partial: "", save: true))
 }
 
 @Test func pasteComposesAndClearsOnlyTheActiveStack() {
@@ -116,4 +143,81 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
     let short = Data(#"{"stacks":[[]],"active":7}"#.utf8)
     #expect(Saved.decode(short)?.stacks.count == stackCount)
     #expect(Saved.decode(short)?.active == 0)
+}
+
+// MARK: Config
+
+@Test func defaultConfigFileParsesToTheBuiltInDefaults() {
+    #expect(parseConfig(defaultConfigText) == Config())
+}
+
+@Test func configReadsKeysNamesAndCard() {
+    let c = parseConfig("""
+    [keys]
+    note = "ctrl+shift+n"   # comment
+    paste = ""
+    [stacks]
+    2 = "Papers # to read"
+    [card]
+    lines = 99
+    opacity = 0.5
+    """)
+    #expect(c.keys[Action.note.rawValue] == Shortcut(code: 45, mods: modCtrl | modShift))
+    #expect(c.keys[Action.paste.rawValue] == nil)
+    #expect(c.names[1] == "Papers # to read")
+    #expect(c.lines == 12)
+    #expect(c.opacity == 0.5)
+    #expect(c.problems.isEmpty)
+}
+
+@Test func configReportsMistakesAndKeepsDefaults() {
+    let c = parseConfig("""
+    stray = 1
+    [keys]
+    note = "g"
+    speak = "cmd+banana"
+    nope = "cmd+x"
+    [stacks]
+    5 = "too many"
+    [card]
+    lines = lots
+    """)
+    #expect(c.keys == Config().keys)
+    #expect(c.problems.count == 6)
+}
+
+@Test func duplicateShortcutTurnsTheLaterActionOff() {
+    let c = parseConfig("[keys]\nopen = \"cmd+g\"")
+    #expect(c.keys[Action.note.rawValue] == Shortcut(code: 5, mods: modCmd))
+    #expect(c.keys[Action.open.rawValue] == nil)
+    #expect(c.problems.count == 1)
+}
+
+@Test func shortcutLabels() {
+    #expect(shortcutLabel(parseShortcut("cmd+ctrl+v")!) == "⌃⌘V")
+    #expect(shortcutLabel(parseShortcut("opt+space")!) == "⌥Space")
+    #expect(parseShortcut("shift+a") == nil)
+}
+
+@Test func configureRebindsOnlyWhenKeysChange() {
+    var names = Config()
+    names.names[0] = "Inbox"
+    let (w, fx) = run([.configure(names)])
+    #expect(w.config.names[0] == "Inbox")
+    #expect(fx.isEmpty)
+
+    var keys = Config()
+    keys.keys[0] = nil
+    let (_, more) = run([.configure(keys)])
+    #expect(more == [.bindKeys])
+}
+
+@Test func openShowsTheActiveStackWhenIdle() {
+    #expect(run([.select(2), .open]).1 == [.save, .open(2)])
+    #expect(run([.capture(selection: ""), .open]).1.isEmpty)
+}
+
+@Test func stackDocumentHasNameAndPasteBody() {
+    #expect(stackDocument(name: "Ideas", notes: []) == "# Ideas\n\n_No notes yet._\n")
+    #expect(stackDocument(name: "Ideas", notes: [Note(quote: "q", body: "b")]) == "# Ideas\n\n> q\n\nb\n")
 }

@@ -1,11 +1,13 @@
 import AVFoundation
 import Core
 import Speech
+import Synchronization
 
 /// Microphone + on-device transcription. Reports back only through `send`,
 /// tagged with the take number, so a late result for an old take is inert.
 final class Speech {
     private(set) var status = "Preparing speech…"
+    let meter = Meter()
     private let engine = AVAudioEngine()
     private var locale = Locale.current
     private var format: AVAudioFormat?
@@ -38,7 +40,7 @@ final class Speech {
         let (stream, input) = AsyncStream.makeStream(of: AnalyzerInput.self)
         let mic = engine.inputNode.outputFormat(forBus: 0)
         guard let converter = AVAudioConverter(from: mic, to: format) else { return send(.final(take: take, "")) }
-        let tap = Tap(converter: converter, output: format, input: input)
+        let tap = Tap(converter: converter, output: format, input: input, meter: meter)
         engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: mic) { @Sendable buffer, _ in tap.feed(buffer) }
         do { try engine.start() } catch {
             engine.inputNode.removeTap(onBus: 0)
@@ -90,6 +92,7 @@ final class Speech {
     private func stopMic() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        meter.set(0)
     }
 
     private func prepareSpare() async {
@@ -120,19 +123,34 @@ final class Speech {
     }
 }
 
+/// Mic loudness, 0...1. Written by the audio thread, read by the card each frame.
+nonisolated final class Meter: Sendable {
+    private let bits = Atomic<UInt32>(0)
+    var level: Float { Float(bitPattern: bits.load(ordering: .relaxed)) }
+    func set(_ level: Float) { bits.store(level.bitPattern, ordering: .relaxed) }
+}
+
 /// Runs on the audio thread: converts mic buffers to the analyzer's format.
 nonisolated final class Tap: @unchecked Sendable {
     private let converter: AVAudioConverter
     private let output: AVAudioFormat
     private let input: AsyncStream<AnalyzerInput>.Continuation
+    private let meter: Meter
 
-    init(converter: AVAudioConverter, output: AVAudioFormat, input: AsyncStream<AnalyzerInput>.Continuation) {
+    init(converter: AVAudioConverter, output: AVAudioFormat, input: AsyncStream<AnalyzerInput>.Continuation, meter: Meter) {
         self.converter = converter
         self.output = output
         self.input = input
+        self.meter = meter
     }
 
     func feed(_ buffer: AVAudioPCMBuffer) {
+        if let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 {
+            var sum: Float = 0
+            for i in 0..<Int(buffer.frameLength) { sum += samples[i] * samples[i] }
+            let db = 10 * log10(max(sum / Float(buffer.frameLength), 1e-10))   // power → dB
+            meter.set(min(max((db + 55) / 45, 0), 1))
+        }
         let ratio = output.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
         guard let converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity) else { return }

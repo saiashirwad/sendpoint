@@ -18,7 +18,8 @@ public struct Note: Codable, Equatable, Sendable {
 public enum Mode: Equatable, Sendable {
     case idle
     case drafting(Draft)
-    case listening(Draft, partial: String)
+    /// `save`: commit the note when the speech ends. True when speaking started with no card open.
+    case listening(Draft, partial: String, save: Bool)
 }
 
 public struct Draft: Equatable, Sendable {
@@ -37,6 +38,8 @@ public struct World: Equatable, Sendable {
     public var mode: Mode = .idle
     /// Incremented per recording. Speech results carry it; a mismatch is stale.
     public var take = 0
+    /// From ~/.config/sendpoint/config.toml. Not saved with the notes.
+    public var config = Config()
 
     public init(stacks: [[Note]] = Array(repeating: [], count: stackCount), active: Int = 0) {
         self.stacks = stacks
@@ -47,8 +50,7 @@ public struct World: Equatable, Sendable {
 public enum Event: Equatable, Sendable {
     case capture(selection: String)
     case speakDown(selection: String)
-    /// `tap` means the key was released quickly: keep listening until the next press.
-    case speakUp(tap: Bool)
+    case speakUp
     case partial(take: Int, String)
     case final(take: Int, String)
     case edit(String)
@@ -56,6 +58,8 @@ public enum Event: Equatable, Sendable {
     case cancel
     case select(Int)
     case paste
+    case open
+    case configure(Config)
 }
 
 public enum Effect: Equatable, Sendable {
@@ -64,6 +68,10 @@ public enum Effect: Equatable, Sendable {
     case micCancel
     case paste(String)
     case save
+    /// Write stack N's Markdown file and open it in the user's editor.
+    case open(Int)
+    /// Re-register the global shortcuts from `world.config.keys`.
+    case bindKeys
 }
 
 public func step(_ w: inout World, _ event: Event) -> [Effect] {
@@ -72,22 +80,25 @@ public func step(_ w: inout World, _ event: Event) -> [Effect] {
         w.mode = .drafting(Draft(quote: selection))
         return []
 
+    // Hold: press starts, release stops. Tap: press starts, the next press stops.
     case (.idle, .speakDown(let selection)):
-        return listen(&w, Draft(quote: selection))
+        return listen(&w, Draft(quote: selection), save: true)
     case (.drafting(let draft), .speakDown):
-        return listen(&w, draft)
-    case (.listening, .speakDown):
+        return listen(&w, draft, save: false)
+    case (.listening, .speakDown) where w.config.voice == .tap:
         return [.micStop(take: w.take)]
-    case (.listening, .speakUp(tap: false)):
+    case (.listening, .speakUp) where w.config.voice == .hold:
         return [.micStop(take: w.take)]
 
-    case (.listening(let draft, _), .partial(let take, let text)) where take == w.take:
-        w.mode = .listening(draft, partial: text)
+    case (.listening(let draft, _, let save), .partial(let take, let text)) where take == w.take:
+        w.mode = .listening(draft, partial: text, save: save)
         return []
-    case (.listening(var draft, _), .final(let take, let text)) where take == w.take:
+    case (.listening(var draft, _, let save), .final(let take, let text)) where take == w.take:
         draft.body = joined(draft.body, text)
         w.mode = .drafting(draft)
-        return []
+        // Nothing heard: leave the card open to type into rather than saving a bare quote.
+        guard save, !trimmed(text).isEmpty else { return [] }
+        return step(&w, .commit)
 
     case (.drafting(var draft), .edit(let text)):
         draft.body = text
@@ -117,14 +128,22 @@ public func step(_ w: inout World, _ event: Event) -> [Effect] {
         w.stacks[w.active] = []
         return [.paste(markdown), .save]
 
+    case (.idle, .open):
+        return [.open(w.active)]
+
+    case (_, .configure(let config)):
+        let rebind = config.keys != w.config.keys
+        w.config = config
+        return rebind ? [.bindKeys] : []
+
     default:
         return []
     }
 }
 
-private func listen(_ w: inout World, _ draft: Draft) -> [Effect] {
+private func listen(_ w: inout World, _ draft: Draft, save: Bool) -> [Effect] {
     w.take += 1
-    w.mode = .listening(draft, partial: "")
+    w.mode = .listening(draft, partial: "", save: save)
     return [.micStart(take: w.take)]
 }
 
