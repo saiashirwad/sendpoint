@@ -292,3 +292,13 @@ private let accent = NSColor(red: 0.98, green: 0.36, blue: 0.60, alpha: 1)
 private let amber = NSColor(red: 0.98, green: 0.72, blue: 0.36, alpha: 1)
 private func ink(_ alpha: CGFloat) -> NSColor { NSColor(white: 1, alpha: alpha) }
 private func white(_ alpha: CGFloat) -> CGColor { CGColor(gray: 1, alpha: alpha) }
+
+/// Geist and Martian Mono ship in the app bundle; a bare `swift run` falls back to system fonts.
+private func sans(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
+    NSFont(name: weight == .medium ? "Geist-Medium" : "Geist-Regular", size: size)
+        ?? .systemFont(ofSize: size, weight: weight)
+}
+
+private func mono(_ size: CGFloat) -> NSFont {
+    NSFont(name: "MartianMono-NrRg", size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+}

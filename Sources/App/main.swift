@@ -18,7 +18,6 @@ func send(_ event: Event) {
 func render() {
     panel.render(world)
     menu.render(world)
-    settings.render(world)
 }
 
 func perform(_ effect: Effect) {
@@ -36,12 +35,8 @@ func perform(_ effect: Effect) {
             DispatchQueue.main.async { openFile(url) }
         }
     case .bindKeys:
-        Keys.bind(world.recording == nil ? world.config.keys : [])
+        Keys.bind(world.config.keys)
         render()
-    case .writeConfig(let setting):
-        // Synchronous so the next poll reads this value, not the one before it. The file is tiny.
-        let text = (try? String(contentsOf: configURL, encoding: .utf8)) ?? defaultConfigText
-        write(Data(editConfig(text, setting).utf8), to: configURL)
     }
 }
 
@@ -107,10 +102,8 @@ func onKey(_ action: Action, down: Bool) {
         send(.speakUp)
     case (.paste, true): send(.paste)
     case (.open, true): send(.open)
-    case (.stack1, true): send(.select(0))
-    case (.stack2, true): send(.select(1))
-    case (.stack3, true): send(.select(2))
-    case (.stack4, true): send(.select(3))
+    case (_, true) where action.rawValue >= Action.stack1.rawValue:
+        send(.select(action.rawValue - Action.stack1.rawValue))
     default: break
     }
 }
@@ -122,7 +115,6 @@ app.setActivationPolicy(.accessory)
 let panel = Panel()
 let menu = StatusMenu()
 let speech = Speech()
-let settings = Settings()
 Keys.install(onKey)
 Keys.bind(world.config.keys)   // defaults; the first poll swaps in the file's keys if they differ
 pollConfig()
@@ -130,7 +122,7 @@ pollConfig()   // picks up the defaults file the first call may have just writte
 RunLoop.main.add(Timer(timeInterval: 1, repeats: true) { _ in
     MainActor.assumeIsolated {
         pollConfig()
-        settings.render(world)   // picks up permission changes made in System Settings
+        menu.render(world)   // picks up an Accessibility grant made in System Settings
     }
 }, forMode: .common)
 _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)

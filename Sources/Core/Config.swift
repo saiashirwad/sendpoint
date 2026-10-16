@@ -3,11 +3,12 @@ import Foundation
 // ~/.config/sendpoint/config.toml, parsed into flat data. A tiny TOML subset:
 // [section] headers, `key = value` lines, # comments.
 
+/// The case names are the config file's [keys] names.
 public enum Action: Int, CaseIterable, Sendable {
     case note, speak, paste, open, stack1, stack2, stack3, stack4
-}
 
-public let actionNames = ["note", "speak", "paste", "open", "stack1", "stack2", "stack3", "stack4"]
+    public var name: String { "\(self)" }
+}
 
 // Carbon modifier bits, so the App passes them straight to RegisterEventHotKey.
 public let modCmd = 0x100, modShift = 0x200, modOpt = 0x800, modCtrl = 0x1000
@@ -112,7 +113,7 @@ public func parseConfig(_ text: String) -> Config {
 
         switch section {
         case "keys":
-            guard let a = actionNames.firstIndex(of: key) else {
+            guard let a = Action.allCases.firstIndex(where: { $0.name == key }) else {
                 c.problems.append("line \(lineNumber): unknown shortcut '\(key)'")
                 continue
             }
@@ -145,10 +146,10 @@ public func parseConfig(_ text: String) -> Config {
                 continue
             }
             switch key {
-            case "lines": c.lines = clampLines(Int(number))
-            case "font_size": c.fontSize = clampFontSize(number)
-            case "opacity": c.opacity = clampOpacity(number)
-            case "width": c.width = clampWidth(number)
+            case "lines": c.lines = Int(clamp(number, 1...12))
+            case "font_size": c.fontSize = clamp(number, 9...32)
+            case "opacity": c.opacity = clamp(number, 0.3...1)
+            case "width": c.width = clamp(number, 280...1200)
             default: c.problems.append("line \(lineNumber): unknown card setting '\(key)'")
             }
         default:
@@ -160,7 +161,8 @@ public func parseConfig(_ text: String) -> Config {
     for a in 0..<c.keys.count {
         guard let s = c.keys[a] else { continue }
         for b in 0..<a where c.keys[b] == s {
-            c.problems.append("\(actionNames[a]) and \(actionNames[b]) both use \(shortcutLabel(s)); \(actionNames[a]) is off")
+            let (later, earlier) = (Action.allCases[a].name, Action.allCases[b].name)
+            c.problems.append("\(later) and \(earlier) both use \(shortcutLabel(s)); \(later) is off")
             c.keys[a] = nil
             break
         }
@@ -196,30 +198,18 @@ public func shortcutLabel(_ s: Shortcut) -> String {
     return out + keyLabels[k]
 }
 
-// The card's limits, shared by the file and the settings window.
-public let linesRange = 1...12
-public let fontSizeRange = 9.0...32.0
-public let opacityRange = 0.3...1.0
-public let widthRange = 280.0...1200.0
-
-func clampLines(_ n: Int) -> Int { min(max(n, linesRange.lowerBound), linesRange.upperBound) }
-func clampFontSize(_ x: Double) -> Double { min(max(x, fontSizeRange.lowerBound), fontSizeRange.upperBound) }
-/// Whole percents, so stepping by 0.05 doesn't write 0.9100000000000001.
-func clampOpacity(_ x: Double) -> Double { min(max((x * 100).rounded() / 100, opacityRange.lowerBound), opacityRange.upperBound) }
-func clampWidth(_ x: Double) -> Double { min(max(x.rounded(), widthRange.lowerBound), widthRange.upperBound) }
-
-func stripComment(_ line: Substring) -> String {
-    String(line[..<(commentIndex(line) ?? line.endIndex)])
+func clamp(_ x: Double, _ range: ClosedRange<Double>) -> Double {
+    min(max(x, range.lowerBound), range.upperBound)
 }
 
-/// Where an unquoted # starts, if anywhere.
-func commentIndex(_ line: Substring) -> String.Index? {
+/// The line up to its first unquoted #.
+func stripComment(_ line: Substring) -> String {
     var quoted = false
     for i in line.indices {
         if line[i] == "\"" { quoted.toggle() }
-        if line[i] == "#" && !quoted { return i }
+        if line[i] == "#" && !quoted { return String(line[..<i]) }
     }
-    return nil
+    return String(line)
 }
 
 // ANSI virtual key codes (Carbon kVK_*), as parallel arrays.

@@ -30,16 +30,16 @@ enum Keys {
         for ref in refs { UnregisterEventHotKey(ref) }
         refs = []
         problems = []
-        for (i, shortcut) in keys.enumerated() {
-            guard let shortcut else { continue }
+        for action in Action.allCases {
+            guard let shortcut = keys[action.rawValue] else { continue }
             var ref: EventHotKeyRef?
-            let id = EventHotKeyID(signature: OSType(0x5344_5054), id: UInt32(i + 1))   // 'SDPT'
+            let id = EventHotKeyID(signature: OSType(0x5344_5054), id: UInt32(action.rawValue + 1))   // 'SDPT'
             let status = RegisterEventHotKey(UInt32(shortcut.code), UInt32(shortcut.mods), id,
                                              GetApplicationEventTarget(), 0, &ref)
             if status == noErr, let ref {
                 refs.append(ref)
             } else {
-                problems.append("\(shortcutLabel(shortcut)) (\(actionNames[i])) is taken by another app")
+                problems.append("\(shortcutLabel(shortcut)) (\(action.name)) is taken by another app")
             }
         }
     }
