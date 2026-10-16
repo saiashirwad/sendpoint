@@ -18,10 +18,6 @@ enum MenuBarIcon {
     }
 
     private static func draw(in context: CGContext) {
-        context.setFillColor(Ink.templateInk(alpha: 0.18))
-        context.addPath(CGPath(roundedRect: tile, cornerWidth: 186, cornerHeight: 186, transform: nil))
-        context.fillPath()
-
         context.setFillColor(Ink.templateInk(alpha: 0.46))
         context.addPath(pill(x: 292, y: 278, width: 340, height: 48))
         context.addPath(pill(x: 292, y: 368, width: 394, height: 48))
