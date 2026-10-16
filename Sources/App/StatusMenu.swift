@@ -6,10 +6,10 @@ final class StatusMenu: NSObject {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var shown = ""
 
-    func render(_ w: World, speechStatus: String) {
+    func render(_ w: World) {
         let count = w.stacks[w.active].count
         // Typing re-renders on every keystroke; rebuild only when what's shown changes.
-        let key = "\(w.stacks.map(\.count)) \(w.active) \(w.mode == .idle) \(AXIsProcessTrusted()) \(speechStatus) \(w.config) \(Keys.problems)"
+        let key = "\(w.stacks.map(\.count)) \(w.active) \(w.mode == .idle) \(AXIsProcessTrusted()) \(w.voice) \(w.config) \(Keys.problems)"
         guard key != shown else { return }
         shown = key
         item.button?.title = "✎ \(w.active + 1)" + (count > 0 ? "·\(count)" : "")
@@ -41,7 +41,7 @@ final class StatusMenu: NSObject {
         if !AXIsProcessTrusted() {
             menu.addItem(action("Grant Accessibility…", #selector(openAccessibility), nil))
         }
-        if !speechStatus.isEmpty { menu.addItem(note(speechStatus)) }
+        if !w.voice.label.isEmpty { menu.addItem(note(w.voice.label)) }
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Sendpoint", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu

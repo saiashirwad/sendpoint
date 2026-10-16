@@ -32,6 +32,24 @@ public struct Draft: Equatable, Sendable {
     }
 }
 
+/// Whether speaking can start. The model downloads at launch; until it's in, voice opens the card for typing.
+public enum Voice: Equatable, Sendable {
+    case preparing
+    case downloading(Int)        // whole percent, 0...100
+    case ready
+    case unavailable(String)
+
+    /// What the card, menu and settings show; empty once ready.
+    public var label: String {
+        switch self {
+        case .preparing: "Preparing voice…"
+        case .downloading(let percent): "Downloading voice model \(percent)%"
+        case .ready: ""
+        case .unavailable(let reason): reason
+        }
+    }
+}
+
 public struct World: Equatable, Sendable {
     public var stacks: [[Note]]
     public var active: Int
@@ -45,6 +63,7 @@ public struct World: Equatable, Sendable {
     /// The shortcut being recorded. Global shortcuts are unbound meanwhile so the chord reaches the window.
     public var recording: Action?
     public var notice: Notice?
+    public var voice = Voice.preparing
 
     public init(stacks: [[Note]] = Array(repeating: [], count: stackCount), active: Int = 0) {
         self.stacks = stacks
@@ -68,6 +87,7 @@ public enum Event: Equatable, Sendable {
     case show(Pane)
     case record(Action?)
     case set(Setting)
+    case voice(Voice)
 }
 
 public enum Effect: Equatable, Sendable {
@@ -91,8 +111,13 @@ public func step(_ w: inout World, _ event: Event) -> [Effect] {
         return []
 
     // Hold: press starts, release stops. Tap: press starts, the next press stops.
+    case (.idle, .speakDown(let selection)) where w.voice != .ready:
+        w.mode = .drafting(Draft(quote: selection))
+        return []
     case (.idle, .speakDown(let selection)):
         return listen(&w, Draft(quote: selection), save: true)
+    case (.drafting, .speakDown) where w.voice != .ready:
+        return []
     case (.drafting(let draft), .speakDown):
         return listen(&w, draft, save: false)
     case (.listening, .speakDown) where w.config.voice == .tap:
@@ -156,6 +181,9 @@ public func step(_ w: inout World, _ event: Event) -> [Effect] {
         return [.bindKeys]
     case (_, .set(let setting)):
         return applySetting(&w, setting)
+    case (_, .voice(let voice)):
+        w.voice = voice
+        return []
 
     default:
         return []

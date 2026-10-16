@@ -6,7 +6,6 @@ import Synchronization
 /// Microphone + on-device transcription. Reports back only through `send`,
 /// tagged with the take number, so a late result for an old take is inert.
 final class Speech {
-    private(set) var status = "Preparing speech…"
     let meter = Meter()
     private let engine = AVAudioEngine()
     private var locale = Locale.current
@@ -17,19 +16,27 @@ final class Speech {
 
     func prewarm() {
         Task {
-            guard await AVCaptureDevice.requestAccess(for: .audio) else { return report("Microphone access denied") }
-            guard SpeechTranscriber.isAvailable else { return report("Speech unavailable on this Mac") }
+            guard await AVCaptureDevice.requestAccess(for: .audio) else { return send(.voice(.unavailable("Microphone access denied"))) }
+            guard SpeechTranscriber.isAvailable else { return send(.voice(.unavailable("Voice unavailable on this Mac"))) }
             locale = await SpeechTranscriber.supportedLocale(equivalentTo: .current) ?? Locale(identifier: "en-US")
             let probe = makeTranscriber()
             do {
                 if let install = try await AssetInventory.assetInstallationRequest(supporting: [probe]) {
-                    report("Downloading speech model…")
+                    send(.voice(.downloading(0)))
+                    let watch = install.progress.observe(\.fractionCompleted) { progress, _ in
+                        let percent = Int(progress.fractionCompleted * 100)
+                        Task { @MainActor in
+                            // Only whole-percent changes reach step: at most ~100 events for the download.
+                            if case .downloading(let shown) = world.voice, shown < percent { send(.voice(.downloading(percent))) }
+                        }
+                    }
+                    defer { watch.invalidate() }
                     try await install.downloadAndInstall()
                 }
-            } catch { return report("Speech model unavailable: \(error.localizedDescription)") }
+            } catch { return send(.voice(.unavailable("Voice model unavailable: \(error.localizedDescription)"))) }
             format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [probe])
             await prepareSpare()
-            report(format == nil ? "Speech unavailable" : "")
+            send(.voice(format == nil ? .unavailable("Voice unavailable") : .ready))
         }
     }
 
@@ -110,11 +117,6 @@ final class Speech {
 
     private func makeTranscriber() -> SpeechTranscriber {
         SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
-    }
-
-    private func report(_ message: String) {
-        status = message
-        render()
     }
 
     private static func append(_ text: String, _ piece: String) -> String {

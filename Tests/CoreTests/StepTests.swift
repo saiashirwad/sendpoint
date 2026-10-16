@@ -2,7 +2,14 @@ import Foundation
 import Testing
 @testable import Core
 
-private func run(_ events: [Event], from start: World = World()) -> (World, [Effect]) {
+/// A world whose voice model is in, as it is once launch finishes.
+private func ready() -> World {
+    var w = World()
+    w.voice = .ready
+    return w
+}
+
+private func run(_ events: [Event], from start: World = ready()) -> (World, [Effect]) {
     var w = start
     var effects: [Effect] = []
     for e in events { effects += step(&w, e) }
@@ -29,7 +36,7 @@ private func run(_ events: [Event], from start: World = World()) -> (World, [Eff
 }
 
 private func tapMode() -> World {
-    var w = World()
+    var w = ready()
     w.config.voice = .tap
     return w
 }
@@ -74,6 +81,18 @@ private func tapMode() -> World {
     #expect(w.mode == .drafting(Draft(quote: "sel")))
     #expect(w.stacks[0].isEmpty)
     #expect(fx == [.micStart(take: 1), .micStop(take: 1)])
+}
+
+@Test func speakingBeforeTheModelIsInOpensTheCardForTyping() {
+    let (w, fx) = run([.voice(.downloading(42)), .speakDown(selection: "sel"), .speakUp, .speakDown(selection: "")],
+                      from: World())
+    #expect(w.voice == .downloading(42))
+    #expect(w.mode == .drafting(Draft(quote: "sel")))
+    #expect(fx.isEmpty)
+
+    let (later, more) = run([.voice(.ready), .speakDown(selection: "")], from: w)
+    #expect(later.mode == .listening(Draft(quote: "sel"), partial: "", save: false))
+    #expect(more == [.micStart(take: 1)])
 }
 
 @Test func voiceModeComesFromConfig() {

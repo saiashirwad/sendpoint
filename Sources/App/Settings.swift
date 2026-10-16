@@ -113,7 +113,7 @@ final class Settings: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         var active: Int
         var trusted: Bool
         var microphone: AVAuthorizationStatus
-        var speech: String
+        var voice: Voice
         var keyProblems: [String]
     }
 
@@ -122,7 +122,7 @@ final class Settings: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         let now = Shown(config: w.config, pane: w.pane, recording: w.recording, notice: w.notice,
                         counts: w.stacks.map(\.count), active: w.active, trusted: AXIsProcessTrusted(),
                         microphone: AVCaptureDevice.authorizationStatus(for: .audio),
-                        speech: speech.status, keyProblems: Keys.problems)
+                        voice: w.voice, keyProblems: Keys.problems)
         guard now != shown else { return }
         shown = now
         let c = w.config
@@ -166,7 +166,7 @@ final class Settings: NSObject, NSWindowDelegate, NSTextFieldDelegate {
         accessibility.stringValue = now.trusted ? "Granted" : "Needed to read the selection and paste"
         grant.isHidden = now.trusted
         switch now.microphone {
-        case .authorized: microphone.stringValue = now.speech.isEmpty ? "Granted" : now.speech
+        case .authorized: microphone.stringValue = now.voice == .ready ? "Granted" : now.voice.label
         case .notDetermined: microphone.stringValue = "Asked for on first use"
         default: microphone.stringValue = "Off. Voice notes need it"
         }
@@ -181,7 +181,7 @@ final class Settings: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private func setupNeeded(_ s: Shown) -> StatusCard.Setup? {
         if !s.trusted { return .accessibility }
         if s.microphone == .denied || s.microphone == .restricted { return .microphone }
-        if !s.speech.isEmpty { return .speech(s.speech) }
+        if s.voice != .ready { return .speech(s.voice.label) }
         return nil
     }
 

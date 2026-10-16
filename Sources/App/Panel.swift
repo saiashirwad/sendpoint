@@ -89,7 +89,7 @@ final class Panel: NSPanel, NSTextViewDelegate {
 
     override var canBecomeKey: Bool { true }
 
-    func render(_ w: World, speechStatus: String) {
+    func render(_ w: World) {
         let draft: Draft
         let wasListening = listening
         switch w.mode {
@@ -126,10 +126,10 @@ final class Panel: NSPanel, NSTextViewDelegate {
         name.stringValue = w.config.names[w.active]
         count.stringValue = "\(notes)"
         tether.stringValue = words == 1 ? "1 word selected" : "\(words) words selected"
-        status.stringValue = speechStatus
+        status.stringValue = w.voice.label
         divider.isHidden = words == 0
         tether.isHidden = words == 0
-        status.isHidden = speechStatus.isEmpty
+        status.isHidden = w.voice.label.isEmpty
 
         let width = card.frame.width
         let mid = padBottom + footerHeight / 2

@@ -16,8 +16,8 @@ func send(_ event: Event) {
 }
 
 func render() {
-    panel.render(world, speechStatus: speech.status)
-    menu.render(world, speechStatus: speech.status)
+    panel.render(world)
+    menu.render(world)
     settings.render(world)
 }
 
