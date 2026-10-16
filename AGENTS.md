@@ -1,37 +1,27 @@
-# Engineering rules
+# Sendpoint
 
-- Use Swift Observation for app-owned state. Do not add `ObservableObject`, `@Published`, or TCA.
-- Model finite workflows with closed enums, one event transition function, and one idempotent teardown path.
-- Keep data transformations pure and outside views.
-- Give each lifecycle task one owner. Retain and cancel its handle; do not use `Task.detached` for lifecycle work.
-- Check cancellation around external calls. Apply a result only when its full context still matches the current state.
-- Inject small system boundaries for deterministic tests. Test behavior, including cancellation, stale results, invalid transitions, and teardown.
-- Make clean cutovers. Delete obsolete callers, state, settings, imports, and files.
-- Verify with `./check.sh` (builds and tests; prints one summary line plus any errors; full log in `.build/check.log`).
-- See UI with `./shots.sh`: renders every screen, light and dark, into `.build/shots/` (`--diff` keeps the last set and fails on each changed screen, diffs in `.build/shots-diff/`). A new screen or state gets a case in `Tests/SendpointScreenshotTests/ScreenshotTests.swift`.
-- Finish every requested change with `./ship.sh` (build, assemble, install, launch; full log in `.build/ship.log`) before reporting it done.
-- Publish only with `./release.sh X.Y.Z --ad-hoc --publish`.
-- Before adding a setting, a shortcut, or a state machine, read its guide first: `.claude/skills/add-setting/SKILL.md`, `.claude/skills/add-shortcut/SKILL.md`, or `.claude/skills/add-state-machine/SKILL.md`.
+Select text in any app, annotate it by typing or speaking, collect notes in one of four stacks, paste a stack as Markdown. Nothing else.
 
-# Folder map
+## How it works
 
-- `Sources/SendpointDomain`: pure types, Foundation only (no AppKit). Models (`Subject`, `Note`, `Stack`, `StackDocument`), `StackStore` (observable queue), `StorePersistence` (`store.json`), templates, `PromptComposer` (Markdown), and every pure machine.
-- `Sources/Sendpoint/<Area>`: controllers, windows, and SwiftUI. Areas: `App` (lifecycle, `AppDelegate+*`, `AppEnvironment`, menu bar), `Capture`, `Input` (shortcuts), `Palette`, `StackSwitcher` (app-wide switcher, not the palette's), `Platform` (export, permissions), `Settings` (settings, setup, templates), `SharedUI` (`Theme`, `Controls`), `Voice`.
-- `Tests/SendpointDomainTests`: pure transitions. `Tests/SendpointTests`: controllers.
+- All behavior lives in `step(&world, event) -> [Effect]` in `Sources/Core/World.swift`. It is pure (Foundation only) and the only place decisions are made.
+- `Sources/App/main.swift` is the loop: a key or callback sends an `Event`, `step` updates `world`, `render()` redraws from `world`, and `perform` carries out each `Effect`.
+- The App files only translate: `Keys` (Carbon hotkeys), `Selection` (Accessibility read, ⌘C fallback, ⌘V paste), `Speech` (mic + SpeechAnalyzer + level meter), `Panel` (the note card), `StatusMenu`.
+- Speech results carry their `take`. `step` drops any result whose take doesn't match, so old or cancelled recordings can't land.
+- Notes persist to `~/Library/Application Support/Sendpoint/notes.json` (`Saved`), written off the main thread. Every save also mirrors each stack to `stack-N.md` next to it; the `open` shortcut opens that file in the user's editor. There is no stack viewer.
+- Settings are `~/.config/sendpoint/config.toml` (or `$XDG_CONFIG_HOME`), a small TOML subset parsed by `parseConfig` in `Sources/Core/Config.swift` into `world.config`. `main.swift` polls its mtime once a second and sends `.configure`; a change to the keys yields `.bindKeys`. The file is written from `defaultConfigText` when missing. There is no settings window: the menu's "Edit Config…" opens the file, and mistakes in it show in the menu.
 
-Machine (SendpointDomain) → controller (app):
+## Rules
 
-| Machine | Controller |
-|---|---|
-| `CaptureState` | `CaptureController` (the shape to copy) |
-| `VoiceMachine` | `VoiceNoteService` |
-| `StackSelectMachine` | `StackSelector` |
-| `PaletteWorkflow` (`PaletteUpdate.update`) | `StackPaletteController` |
-| `PermissionState` | `PermissionController` |
-| `LatestNoteState` | `LatestNoteEditor` |
-| `TemplateEditorState` | `TemplateEditorController` |
-| `SurfaceState` | `SurfaceCoordinator` |
-| `AutomaticSelectionTracker` | `AutomaticSelectionMonitor` |
-| `ExportState` | `ExportController` (same file) |
+- New behavior is a new `Event` or `Effect` case, a `step` branch, and a test in `Tests/CoreTests/StepTests.swift`. Views never decide; they `send`.
+- Keep the hot path synchronous: hotkey → read selection → `send`. Build windows and load models at launch, never on a keypress.
+- No SwiftUI, no macros, no dependencies. Code that is slow to type-check gets a compiler warning (see `Package.swift`); fix it.
+- Main thread everywhere (`defaultIsolation(MainActor)`). Only `Tap` in `Speech.swift` runs on the audio thread.
+- Shortcuts and card look come from the config file only. A new setting is a `Config` field, a `parseConfig` case and a line in `defaultConfigText`; `defaultConfigFileParsesToTheBuiltInDefaults` keeps the last two in step.
+- Write the concrete code first and pull out a shared piece only once it is needed in a second place. No tables, protocols or helpers for a single use.
 
-Settings stores: `AppSettings` (general), `VoiceSettings` (voice and preview), `TemplateSettings` (templates). Views send events; they never assign properties or touch UserDefaults.
+## Commands
+
+- `./check.sh`: build and run Core tests.
+- `./build.sh`: assemble and sign `dist/Sendpoint.app`.
+- `./install.sh`: build, install to /Applications, relaunch. Run it only when asked.
