@@ -31,6 +31,9 @@ final class StatusMenu: NSObject {
         menu.addItem(paste)
 
         menu.addItem(.separator())
+        let prefs = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        prefs.target = self
+        menu.addItem(prefs)
         menu.addItem(action("Edit Config…", #selector(editConfig), nil))
         for problem in w.config.problems + Keys.problems {
             menu.addItem(note("⚠︎ " + problem))
@@ -69,6 +72,7 @@ final class StatusMenu: NSObject {
     @objc private func select(_ sender: NSMenuItem) { send(.select(sender.tag)) }
     @objc private func open() { send(.open) }
     @objc private func paste() { send(.paste) }
+    @objc private func showSettings() { settings.show() }
     @objc private func editConfig() { openFile(configURL) }
     @objc private func openAccessibility() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)

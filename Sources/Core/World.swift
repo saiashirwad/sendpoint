@@ -40,6 +40,11 @@ public struct World: Equatable, Sendable {
     public var take = 0
     /// From ~/.config/sendpoint/config.toml. Not saved with the notes.
     public var config = Config()
+    /// The settings window's page.
+    public var pane = Pane.capture
+    /// The shortcut being recorded. Global shortcuts are unbound meanwhile so the chord reaches the window.
+    public var recording: Action?
+    public var notice: Notice?
 
     public init(stacks: [[Note]] = Array(repeating: [], count: stackCount), active: Int = 0) {
         self.stacks = stacks
@@ -60,6 +65,9 @@ public enum Event: Equatable, Sendable {
     case paste
     case open
     case configure(Config)
+    case show(Pane)
+    case record(Action?)
+    case set(Setting)
 }
 
 public enum Effect: Equatable, Sendable {
@@ -70,8 +78,10 @@ public enum Effect: Equatable, Sendable {
     case save
     /// Write stack N's Markdown file and open it in the user's editor.
     case open(Int)
-    /// Re-register the global shortcuts from `world.config.keys`.
+    /// Re-register the global shortcuts from `world.config.keys`, or none while recording one.
     case bindKeys
+    /// Rewrite this setting's line in config.toml.
+    case writeConfig(Setting)
 }
 
 public func step(_ w: inout World, _ event: Event) -> [Effect] {
@@ -135,6 +145,17 @@ public func step(_ w: inout World, _ event: Event) -> [Effect] {
         let rebind = config.keys != w.config.keys
         w.config = config
         return rebind ? [.bindKeys] : []
+
+    case (_, .show(let pane)):
+        w.pane = pane
+        w.notice = nil
+        return []
+    case (_, .record(let action)) where action != w.recording:
+        w.recording = action
+        w.notice = nil
+        return [.bindKeys]
+    case (_, .set(let setting)):
+        return applySetting(&w, setting)
 
     default:
         return []

@@ -68,13 +68,13 @@ final class Panel: NSPanel, NSTextViewDelegate {
         scroll.verticalScrollElasticity = .none
 
         placeholder.textColor = ink(0.32)
-        name.font = sans(11.5, "Geist-Medium")
+        name.font = sans(11.5, .medium)
         name.textColor = ink(0.9)
         count.font = mono(11)
         count.textColor = ink(0.45)
         tether.font = mono(11)
         tether.textColor = ink(0.5)
-        status.font = sans(11.5, "Geist-Medium")
+        status.font = sans(11.5, .medium)
         status.textColor = amber
         status.lineBreakMode = .byTruncatingTail
         divider.wantsLayer = true
@@ -292,11 +292,3 @@ private let accent = NSColor(red: 0.98, green: 0.36, blue: 0.60, alpha: 1)
 private let amber = NSColor(red: 0.98, green: 0.72, blue: 0.36, alpha: 1)
 private func ink(_ alpha: CGFloat) -> NSColor { NSColor(white: 1, alpha: alpha) }
 private func white(_ alpha: CGFloat) -> CGColor { CGColor(gray: 1, alpha: alpha) }
-
-/// Geist and Martian Mono ship in the app bundle; a bare `swift run` falls back to system fonts.
-private func sans(_ size: CGFloat, _ face: String = "Geist-Regular") -> NSFont {
-    NSFont(name: face, size: size) ?? .systemFont(ofSize: size, weight: face == "Geist-Medium" ? .medium : .regular)
-}
-private func mono(_ size: CGFloat) -> NSFont {
-    NSFont(name: "MartianMono-NrRg", size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
-}

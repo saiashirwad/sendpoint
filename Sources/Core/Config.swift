@@ -145,10 +145,10 @@ public func parseConfig(_ text: String) -> Config {
                 continue
             }
             switch key {
-            case "lines": c.lines = min(max(Int(number), 1), 12)
-            case "font_size": c.fontSize = min(max(number, 9), 32)
-            case "opacity": c.opacity = min(max(number, 0.3), 1)
-            case "width": c.width = min(max(number, 280), 1200)
+            case "lines": c.lines = clampLines(Int(number))
+            case "font_size": c.fontSize = clampFontSize(number)
+            case "opacity": c.opacity = clampOpacity(number)
+            case "width": c.width = clampWidth(number)
             default: c.problems.append("line \(lineNumber): unknown card setting '\(key)'")
             }
         default:
@@ -196,13 +196,30 @@ public func shortcutLabel(_ s: Shortcut) -> String {
     return out + keyLabels[k]
 }
 
+// The card's limits, shared by the file and the settings window.
+public let linesRange = 1...12
+public let fontSizeRange = 9.0...32.0
+public let opacityRange = 0.3...1.0
+public let widthRange = 280.0...1200.0
+
+func clampLines(_ n: Int) -> Int { min(max(n, linesRange.lowerBound), linesRange.upperBound) }
+func clampFontSize(_ x: Double) -> Double { min(max(x, fontSizeRange.lowerBound), fontSizeRange.upperBound) }
+/// Whole percents, so stepping by 0.05 doesn't write 0.9100000000000001.
+func clampOpacity(_ x: Double) -> Double { min(max((x * 100).rounded() / 100, opacityRange.lowerBound), opacityRange.upperBound) }
+func clampWidth(_ x: Double) -> Double { min(max(x.rounded(), widthRange.lowerBound), widthRange.upperBound) }
+
 func stripComment(_ line: Substring) -> String {
+    String(line[..<(commentIndex(line) ?? line.endIndex)])
+}
+
+/// Where an unquoted # starts, if anywhere.
+func commentIndex(_ line: Substring) -> String.Index? {
     var quoted = false
     for i in line.indices {
         if line[i] == "\"" { quoted.toggle() }
-        if line[i] == "#" && !quoted { return String(line[..<i]) }
+        if line[i] == "#" && !quoted { return i }
     }
-    return String(line)
+    return nil
 }
 
 // ANSI virtual key codes (Carbon kVK_*), as parallel arrays.
