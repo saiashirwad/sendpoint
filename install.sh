@@ -7,7 +7,7 @@ APP_NAME="Sendpoint"
 SRC="dist/${APP_NAME}.app"
 DEST="/Applications/${APP_NAME}.app"
 
-[ -d "$SRC" ] || { echo "Build it first: ./build.sh"; exit 1; }
+./build.sh
 
 echo "==> Quitting any running copy"
 pkill -x "Sendpoint" 2>/dev/null || true

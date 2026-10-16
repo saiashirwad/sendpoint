@@ -1,83 +1,25 @@
 // swift-tools-version:6.2
 import PackageDescription
 
+// Flags any function or expression that is slow to type-check.
+let typeCheckBudget: [SwiftSetting] = [
+    .unsafeFlags([
+        "-Xfrontend", "-warn-long-function-bodies=100",
+        "-Xfrontend", "-warn-long-expression-type-checking=100",
+    ], .when(configuration: .debug)),
+]
+
 let package = Package(
     name: "Sendpoint",
-    platforms: [.macOS(.v14)],
-    products: [
-        .library(
-            name: "SendpointDomain",
-            targets: ["SendpointDomain"]
-        ),
-        .executable(
-            name: "Sendpoint",
-            targets: ["Sendpoint"]
-        ),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.15.5"),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.6"),
-        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
-    ],
+    platforms: [.macOS(.v26)],
     targets: [
-        .target(
-            name: "SendpointDomain",
-            path: "Sources/SendpointDomain",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .enableUpcomingFeature("MemberImportVisibility"),
-            ]
-        ),
+        .target(name: "Core", swiftSettings: typeCheckBudget),
         .executableTarget(
             name: "Sendpoint",
-            dependencies: [
-                "SendpointDomain",
-                "FluidAudio",
-                .product(name: "Sparkle", package: "Sparkle"),
-            ],
-            path: "Sources/Sendpoint",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .defaultIsolation(MainActor.self),
-                .enableUpcomingFeature("MemberImportVisibility"),
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-Xlinker", "-rpath",
-                    "-Xlinker", "@executable_path/../Frameworks",
-                ]),
-            ]
+            dependencies: ["Core"],
+            path: "Sources/App",
+            swiftSettings: typeCheckBudget + [.defaultIsolation(MainActor.self)]
         ),
-        .testTarget(
-            name: "SendpointDomainTests",
-            dependencies: ["SendpointDomain"],
-            path: "Tests/SendpointDomainTests",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .enableUpcomingFeature("MemberImportVisibility"),
-            ]
-        ),
-        .testTarget(
-            name: "SendpointTests",
-            dependencies: ["Sendpoint", "SendpointDomain"],
-            path: "Tests/SendpointTests",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .enableUpcomingFeature("MemberImportVisibility"),
-            ]
-        ),
-        .testTarget(
-            name: "SendpointScreenshotTests",
-            dependencies: [
-                "Sendpoint",
-                "SendpointDomain",
-                .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
-            ],
-            path: "Tests/SendpointScreenshotTests",
-            swiftSettings: [
-                .swiftLanguageMode(.v6),
-                .enableUpcomingFeature("MemberImportVisibility"),
-            ]
-        ),
+        .testTarget(name: "CoreTests", dependencies: ["Core"], swiftSettings: typeCheckBudget),
     ]
 )

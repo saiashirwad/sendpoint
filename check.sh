@@ -1,4 +1,6 @@
 #!/bin/bash
-set -uo pipefail
+# Build the app and run the Core tests.
+set -euo pipefail
 cd "$(dirname "$0")"
-exec python3 scripts/verification.py check "$@"
+swift build
+swift test --quiet

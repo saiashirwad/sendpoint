@@ -106,4 +106,4 @@ fi
 
 echo
 echo "First-run state. Install with: ./install.sh"
-echo "Setup will ask for Accessibility, Microphone, and the voice model."
+echo "Sendpoint will ask for Accessibility and Microphone on first launch."

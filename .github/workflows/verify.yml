@@ -1,0 +1,13 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./check.sh
+      - run: CODESIGN_IDENTITY=- ./build.sh

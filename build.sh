@@ -1,115 +1,23 @@
 #!/bin/bash
 set -euo pipefail
-
 cd "$(dirname "$0")"
 
-CONFIGURATION="${1:-debug}"
-if [ "$#" -gt 1 ] || { [ "$CONFIGURATION" != debug ] && [ "$CONFIGURATION" != release ]; }; then
-    echo "usage: ./build.sh [debug|release]" >&2
-    exit 1
-fi
+CONFIGURATION="${1:-release}"
+APP="dist/Sendpoint.app"
 
-APP_NAME="Sendpoint"
+swift build -c "$CONFIGURATION" --product Sendpoint
 BIN_DIR=$(swift build -c "$CONFIGURATION" --show-bin-path)
-DIST="dist/${APP_NAME}.app"
-PLIST="${DIST}/Contents/Info.plist"
-ENTITLEMENTS="Resources/Sendpoint.entitlements"
 
-# Version comes from Resources/Info.plist (release.sh bumps it). The build
-# number defaults to the commit count; release.sh can override it.
-APP_VERSION="${APP_VERSION:-$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)}"
-APP_BUILD="${APP_BUILD:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN_DIR/Sendpoint" "$APP/Contents/MacOS/Sendpoint"
+cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" "$APP/Contents/Info.plist"
 
-echo "==> Building ${APP_VERSION} (${APP_BUILD}) — ${CONFIGURATION}"
-swift build -c "$CONFIGURATION" --product "$APP_NAME"
-
-echo "==> Assembling ${DIST}"
-rm -rf "$DIST"
-mkdir -p "${DIST}/Contents/MacOS" "${DIST}/Contents/Resources" "${DIST}/Contents/Frameworks"
-cp "${BIN_DIR}/${APP_NAME}" "${DIST}/Contents/MacOS/${APP_NAME}"
-SPARKLE_FRAMEWORK=$(find .build/artifacts/sparkle -path '*/macos-arm64_x86_64/Sparkle.framework' -print -quit)
-if [ -z "$SPARKLE_FRAMEWORK" ]; then
-    echo "Sparkle.framework was not found after building." >&2
-    exit 1
-fi
-# ditto preserves the framework's symlinks and executable permissions.
-ditto "$SPARKLE_FRAMEWORK" "${DIST}/Contents/Frameworks/Sparkle.framework"
-cp "Resources/Info.plist" "${PLIST}"
-/usr/libexec/PlistBuddy \
-    -c "Set :CFBundleShortVersionString ${APP_VERSION}" \
-    -c "Set :CFBundleVersion ${APP_BUILD}" "${PLIST}"
-if [ -f "Resources/AppIcon.icns" ]; then
-    cp "Resources/AppIcon.icns" "${DIST}/Contents/Resources/AppIcon.icns"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${PLIST}" 2>/dev/null || true
-fi
-if [ -d "Resources/Fonts" ]; then
-    mkdir -p "${DIST}/Contents/Resources/Fonts"
-    cp Resources/Fonts/* "${DIST}/Contents/Resources/Fonts/"
-fi
-
-# SwiftUI loads shaders from default.metallib in the app bundle. SwiftPM
-# ignores .metal files, so compile them here.
-if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
-    echo "The Metal toolchain is missing. Run: xcodebuild -downloadComponent MetalToolchain" >&2
-    exit 1
-fi
-AIR_DIR=$(mktemp -d)
-trap 'rm -rf "$AIR_DIR"' EXIT
-for SHADER in Resources/Shaders/*.metal; do
-    xcrun -sdk macosx metal -c "$SHADER" -o "${AIR_DIR}/$(basename "${SHADER%.metal}").air"
-done
-xcrun -sdk macosx metallib "${AIR_DIR}"/*.air -o "${DIST}/Contents/Resources/default.metallib"
-
-# A stable signing identity keeps the Accessibility grant across rebuilds.
-IDENTITY="${CODESIGN_IDENTITY:-}"
-if [ -z "$IDENTITY" ]; then
-    IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
-    IDENTITY=$(printf '%s\n' "$IDENTITIES" | awk -F '"' '
-        /Developer ID Application/ && !developer { developer = $2 }
-        /Apple Development/ && !development { development = $2 }
-        END { print developer ? developer : development }
-    ')
-fi
-
-# Keep the same app identity and entitlements during development. Only release
-# builds need the network timestamp required for notarization.
-IDENTITY="${IDENTITY:--}"
-if [ "$IDENTITY" = "-" ]; then
-    # Ad-hoc signatures have no stable Apple Team ID, so hardened-runtime
-    # library validation would reject the separately signed Sparkle binary.
-    # Keep this exception out of certificate-signed distribution builds.
-    ENTITLEMENTS="Resources/SendpointAdHoc.entitlements"
-fi
-SIGN_FLAGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
-NESTED_SIGN_FLAGS=(--force --options runtime)
-if [ "$IDENTITY" = "-" ]; then
-    echo "==> Signing ad-hoc"
-    echo "    (macOS may ask for approval and Accessibility again)"
-else
-    echo "==> Signing with: ${IDENTITY}"
-fi
-if [ "$CONFIGURATION" = release ] && [ "$IDENTITY" != "-" ]; then
-    SIGN_FLAGS+=(--timestamp)
-    NESTED_SIGN_FLAGS+=(--timestamp)
-else
-    SIGN_FLAGS+=(--timestamp=none)
-    NESTED_SIGN_FLAGS+=(--timestamp=none)
-fi
-
-# Sparkle contains executable helpers. Sign them inside-out with the same
-# identity as Sendpoint so hardened-runtime library validation accepts them.
-SPARKLE_DEST="${DIST}/Contents/Frameworks/Sparkle.framework/Versions/B"
-codesign "${NESTED_SIGN_FLAGS[@]}" --preserve-metadata=entitlements \
-    --sign "$IDENTITY" "${SPARKLE_DEST}/XPCServices/Downloader.xpc"
-codesign "${NESTED_SIGN_FLAGS[@]}" \
-    --sign "$IDENTITY" "${SPARKLE_DEST}/XPCServices/Installer.xpc"
-codesign "${NESTED_SIGN_FLAGS[@]}" --sign "$IDENTITY" "${SPARKLE_DEST}/Autoupdate"
-codesign "${NESTED_SIGN_FLAGS[@]}" --sign "$IDENTITY" "${SPARKLE_DEST}/Updater.app"
-codesign "${NESTED_SIGN_FLAGS[@]}" \
-    --sign "$IDENTITY" "${DIST}/Contents/Frameworks/Sparkle.framework"
-codesign "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$DIST"
-
-codesign --verify --strict --verbose=1 "${DIST}"
-echo
-echo "Built: ${DIST}"
-echo "Install with: ./install.sh"
+# A stable identity keeps the Accessibility grant across rebuilds; ad-hoc loses it.
+IDENTITY="${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
+    | awk -F '"' '/Developer ID Application|Apple Development/ { print $2; exit }')}"
+codesign --force --options runtime --timestamp=none \
+    --entitlements Resources/Sendpoint.entitlements --sign "${IDENTITY:--}" "$APP"
+echo "Built $APP (signed: ${IDENTITY:-ad-hoc})"
