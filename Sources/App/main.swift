@@ -79,7 +79,8 @@ func openFile(_ url: URL) {
 // MARK: Config
 
 /// Polled once a second: a stat is nothing, and it catches every way an editor saves.
-var configStamp: Date?
+/// Starts as a date no file has, so a missing file (nil) still counts as a change on the first poll.
+var configStamp: Date? = .distantPast
 
 func pollConfig() {
     let stamp = (try? FileManager.default.attributesOfItem(atPath: configURL.path))?[.modificationDate] as? Date
