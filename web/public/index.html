@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
   <title>Sendpoint — Think out loud while you read</title>
   <meta name="description" content="A Mac app. Say what you're thinking at the passage that raised it, keep reading, then send the whole train of thought as one prompt.">
   <meta property="og:title" content="Sendpoint">
@@ -20,6 +23,7 @@
   <meta name="twitter:title" content="Sendpoint">
   <meta name="twitter:description" content="Think out loud while you read. Send the whole train of thought as one prompt.">
   <meta name="twitter:image" content="https://sendpoint.app/og.png">
+  <link rel="canonical" href="https://sendpoint.app/">
   <link rel="icon" href="/icon.png" type="image/png">
   <link rel="preload" href="/fonts/Geist-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="/fonts/MartianMono-NrMd.ttf" as="font" type="font/ttf" crossorigin>
@@ -126,6 +130,12 @@
     }
     a { color: inherit; text-decoration: none; }
     p { margin: 0 0 1em; }
+    ::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+
+    :is(.brand, .byline, .btn):focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
 
     /* micro-labels: the settings' section voice */
     .label {
@@ -152,6 +162,7 @@
     .brand {
       display: inline-flex; align-items: center; gap: 0.2em; align-self: flex-start;
       font-weight: 600; font-size: 1.35rem; line-height: 1; letter-spacing: -0.038em;
+      border-radius: 6px;
     }
     .brand i {
       flex: none; display: block; width: 0.19em; height: 0.19em;
@@ -159,7 +170,6 @@
     }
 
     .hero { margin: 0; padding: 58px 0 0; }
-    .hero .label { display: block; margin: 0 0 18px 1px; }
     .hero h1 {
       margin: 0; font-weight: 600;
       font-size: clamp(2.3rem, 3.9vw, 3.6rem);
@@ -169,28 +179,30 @@
     }
     /* "loud" is the one living word: a soft band of sound drifts through the
        letters now and then, and while the demo is speaking the word breathes
-       with the same loudness that drives the orb (--v, 0 to 1). */
+       with the same loudness that drives the orb (--v, 0 to 1). The band
+       starts and ends off the word, so it reads as solid ink at rest. */
     .loud {
       --v: 0;
       display: inline-block;
       color: transparent;
-      background: linear-gradient(100deg,
-        var(--fg) 0%, var(--fg) 38%,
-        color-mix(in srgb, var(--fg) 58%, transparent) 50%,
-        var(--fg) 62%, var(--fg) 100%);
-      background-size: 260% 100%;
-      background-position: 120% 0;
+      background-image: linear-gradient(100deg,
+        var(--fg) 0%, var(--fg) 44%,
+        color-mix(in srgb, var(--fg) 82%, transparent) 50%,
+        var(--fg) 56%, var(--fg) 100%);
+      background-size: 250% 100%;
+      background-position: 100% 0;
+      background-repeat: no-repeat;
       -webkit-background-clip: text; background-clip: text;
-      animation: loud-sheen 7.5s cubic-bezier(.45,0,.2,1) 1.2s infinite;
+      animation: loud-sheen 9s cubic-bezier(.45,0,.2,1) 1.2s infinite;
       transform: scale(calc(1 + var(--v) * 0.022));
       transform-origin: 0% 100%;
       filter: drop-shadow(0 0 calc(var(--v) * 0.16em) color-mix(in srgb, var(--accent) calc(var(--v) * 55%), transparent));
       will-change: transform, filter, background-position;
     }
     @keyframes loud-sheen {
-      0% { background-position: 120% 0; }
-      26% { background-position: -20% 0; }
-      100% { background-position: -20% 0; }
+      0% { background-position: 100% 0; }
+      24% { background-position: 0% 0; }
+      100% { background-position: 0% 0; }
     }
     @media (prefers-reduced-motion: reduce) {
       .loud { animation: none; transform: none; filter: none; }
@@ -211,27 +223,56 @@
       transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
     }
     .btn svg { width: 1.05em; height: 1.05em; fill: currentColor; flex: none; margin-top: -0.05em; }
-    .btn:hover { background: var(--raised); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 22%, transparent); }
     .btn:active { transform: translateY(1px); }
     .btn.primary {
       background: var(--ink); color: var(--ink-fg); box-shadow: none;
-      padding-right: 16px;
+      padding-right: 18px;
     }
-    .btn.primary:hover { background: var(--ink); opacity: 0.88; box-shadow: none; }
-    .btn .keys {
-      font-family: var(--mono); font-weight: 500; font-size: 0.74em; letter-spacing: 0.04em;
-      opacity: 0.55; margin-left: 2px;
+    @media (hover: hover) and (pointer: fine) {
+      .btn:hover { background: var(--raised); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 22%, transparent); }
+      .btn.primary:hover { background: var(--ink); opacity: 0.88; box-shadow: none; }
+      .byline:hover .handle { color: var(--fg); }
     }
     .fine {
-      font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.06em; color: var(--fg-3);
+      font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.06em; color: var(--fg-2);
       margin: 18px 0 0; line-height: 1.5;
+    }
+
+    /* the three moves, in the app's micro-label voice: a quiet second block
+       that balances the column and says what the demo is proving */
+    .how {
+      margin-top: auto; padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+    .how .label { display: block; margin: 0 0 15px; color: var(--fg-2); }
+    .how ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+    .how li { display: grid; grid-template-columns: 1.8em 1fr; gap: 8px; align-items: baseline; }
+    .how .n {
+      font-family: var(--mono); font-size: 0.62rem; font-weight: 500;
+      letter-spacing: 0.1em; color: var(--fg-3); font-variant-numeric: tabular-nums;
+    }
+    .how p {
+      margin: 0; font-size: 0.9rem; line-height: 1.45;
+      color: var(--fg-2); letter-spacing: -0.005em; text-wrap: pretty;
+    }
+    .how b { color: var(--fg); font-weight: 500; }
+    .how kbd {
+      font-family: var(--mono); font-size: 0.76em; font-weight: 500; letter-spacing: 0.02em;
+      padding: 0.12em 0.38em; margin-inline: 0.1em; white-space: nowrap;
+      border-radius: 4px; color: var(--fg);
+      background: var(--raised);
+      box-shadow: inset 0 0 0 1px var(--line), 0 1px 0 rgba(0, 0, 0, 0.03);
     }
 
     .meet { margin-top: auto; border-top: 1px solid var(--line); padding-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     .byline { display: inline-flex; align-items: center; gap: 9px; align-self: flex-start; font-size: 0.9rem; line-height: 1; letter-spacing: -0.005em; }
     .byline img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; display: block; box-shadow: 0 0 0 1px var(--line); }
     .byline .handle { color: var(--fg-2); font-weight: 500; transition: color 0.15s ease; }
-    .byline:hover .handle { color: var(--fg); }
+    .meet .note {
+      font-family: var(--mono); font-size: 0.62rem; font-weight: 500;
+      letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-2);
+      white-space: nowrap;
+    }
     .stage {
       border-left: 1px solid var(--line);
       min-width: 0;
@@ -485,6 +526,7 @@
       --ink: 255, 255, 255;
       --live: var(--accent-on-dark);
       background: rgba(15, 15, 15, 0.75);
+      -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
       box-shadow: 0 6px 14px rgba(0,0,0,0.36), inset 0 0 0 0.5px rgba(var(--ink), 0.1);
       color: rgb(var(--ink));
       font-family: var(--sans);
@@ -601,10 +643,6 @@
     .scene [hidden] { display: none !important; }
     .win.opening, .term.opening { animation: app-open 0.34s cubic-bezier(.2,.9,.3,1); }
     @keyframes app-open { from { opacity: 0; transform: translateY(0.6em) scale(0.97); } }
-    /* the palette is a utility panel: it springs up from the Dock */
-    .stacks.opening { animation: panel-open 0.42s cubic-bezier(.2,1.1,.3,1); }
-    @keyframes panel-open { from { opacity: 0; transform: translateY(1.6em) scale(0.94); } }
-
     /* Ghostty with its default theme, running Claude Code; colours and
        metrics sampled from a live window, type in the browser's monospace */
     .term {
@@ -663,171 +701,7 @@
     .term i { font-style: normal; }
     .term i.on { background: #fff; color: #24272d; }
 
-    /* Sendpoint's stack palette, drawn in the page's ink: stacks down the
-       side, the lit stack's notes beside them, the way ⌘U opens it. Every
-       measure is in the app's points, at the app's size, centred on the desk. */
-    .stacks {
-      --pt: calc(1em / 20);
-      --p-ink: 0, 0, 0;
-      --p-fg: rgba(var(--p-ink), 0.85); --p-fg2: rgba(var(--p-ink), 0.5); --p-fg3: rgba(var(--p-ink), 0.26);
-      --p-line: rgba(var(--p-ink), 0.075); --p-sel: rgba(var(--p-ink), 0.067); --p-dim: rgba(var(--p-ink), 0.04);
-      --p-raised: #ffffff; --p-paper: linear-gradient(#ffffff 60%, #fcfcfc);
-      position: absolute; inset: 1.6em 1.6em 5.4em; margin: auto;
-      width: min(calc(920 * var(--pt)), 100% - 3.2em); height: min(calc(520 * var(--pt)), 100% - 7em);
-      display: flex; flex-direction: column;
-      border-radius: calc(16 * var(--pt));
-      overflow: hidden;
-      background: var(--p-paper); color: var(--p-fg);
-      box-shadow: var(--win-shadow);
-      font-family: var(--sans); line-height: 1.25;
-    }
-    @media (prefers-color-scheme: dark) {
-      .stacks {
-        --p-ink: 255, 255, 255;
-        --p-fg2: rgba(var(--p-ink), 0.55); --p-fg3: rgba(var(--p-ink), 0.25);
-        --p-line: rgba(var(--p-ink), 0.1); --p-sel: rgba(var(--p-ink), 0.08); --p-dim: rgba(var(--p-ink), 0.045);
-        --p-raised: #262626;
-        --p-paper: radial-gradient(90% 60% at 20% 0%, rgba(255, 255, 255, 0.03), transparent), linear-gradient(#181818, #151515 45%, #0e0e0e);
-      }
-    }
-    .stacks > * { font-size: calc(13 * var(--pt)); }
-    .stacks::after {
-      content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-      border-radius: inherit;
-      box-shadow: inset 0 0 0 calc(0.75 * var(--pt)) var(--safari-rim);
-    }
-    .st-head {
-      flex: none; display: flex; align-items: center; gap: calc(10 * var(--pt));
-      height: calc(48 * var(--pt)); padding: 0 calc(18 * var(--pt));
-      border-bottom: 0.5px solid var(--p-line);
-      font-size: calc(15 * var(--pt));
-    }
-    .st-head svg { flex: none; width: calc(16.5 * var(--pt)); height: calc(16.5 * var(--pt)); fill: none; stroke: var(--p-fg3); stroke-width: 1.6; stroke-linecap: round; }
-    .st-head .ph { color: var(--p-fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .st-head .title { display: none; font-weight: 500; }
-    .stacks.cycling .st-head .ph { display: none; }
-    .stacks.cycling .st-head .title { display: block; }
-    .st-body { flex: 1; min-height: 0; display: flex; }
-    /* the sidebar: one highlight pill and one current-stack dot, each a
-       single shape that slides between rows instead of popping */
-    .st-side {
-      flex: none; width: clamp(calc(220 * var(--pt)), 26%, calc(260 * var(--pt)));
-      display: flex; flex-direction: column;
-      border-right: 0.5px solid var(--p-line);
-    }
-    .st-list { flex: 1; position: relative; padding: calc(6 * var(--pt)) 0; }
-    .st-pill, .st-dot { position: absolute; transition: top 0.2s cubic-bezier(.2,.9,.3,1.05), background 0.15s ease; }
-    .st-pill {
-      left: calc(8 * var(--pt)); right: calc(8 * var(--pt)); top: calc(6 * var(--pt));
-      height: calc(36 * var(--pt)); border-radius: calc(7 * var(--pt));
-      background: var(--p-dim);
-    }
-    .stacks.side-focus .st-pill { background: var(--p-sel); }
-    .st-dot {
-      left: calc(18 * var(--pt)); top: calc(21.5 * var(--pt));
-      width: calc(5 * var(--pt)); height: calc(5 * var(--pt)); border-radius: 50%;
-      background: var(--accent);
-    }
-    .st-row {
-      position: relative; display: flex; align-items: center; gap: calc(8 * var(--pt));
-      height: calc(36 * var(--pt)); padding: 0 calc(18 * var(--pt));
-      font-size: calc(14 * var(--pt)); font-weight: 500;
-      transition: font-weight 0.15s ease;
-    }
-    .st-row.cur { font-weight: 600; }
-    .st-row, .st-note .b { color: var(--p-fg); }
-    .st-row .g { flex: none; width: calc(5 * var(--pt)); }
-    .st-row .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .st-row .c { flex: none; font-family: var(--mono); font-size: calc(11 * var(--pt)); color: var(--p-fg3); min-width: calc(16 * var(--pt)); text-align: right; }
-    .st-new {
-      flex: none; display: flex; align-items: center; gap: calc(9 * var(--pt));
-      height: calc(40 * var(--pt)); padding: 0 calc(18 * var(--pt));
-      border-top: 0.5px solid var(--p-line);
-      font-weight: 500; color: var(--p-fg2);
-    }
-    .st-new svg { flex: none; width: calc(10 * var(--pt)); height: calc(10 * var(--pt)); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
-    .st-new .k { margin-left: auto; font-family: var(--mono); font-size: calc(10.5 * var(--pt)); color: var(--p-fg3); }
-    /* notes sit on one continuous surface; the highlighted one lifts on a
-       rounded pill, deeper when the keyboard is here */
-    .st-notes { flex: 1; min-width: 0; overflow: hidden; position: relative; padding: calc(6 * var(--pt)) 0; }
-    .st-npill {
-      position: absolute; left: calc(8 * var(--pt)); right: calc(8 * var(--pt)); top: 0; height: 0;
-      border-radius: calc(10 * var(--pt));
-      background: var(--p-sel);
-      transition: top 0.18s cubic-bezier(.2,.9,.3,1.05), height 0.18s cubic-bezier(.2,.9,.3,1.05), background 0.15s ease;
-    }
-    .st-npill.jump { transition: none; }
-    .stacks.side-focus .st-npill { background: var(--p-dim); }
-    .st-day {
-      padding: calc(14 * var(--pt)) calc(22 * var(--pt)) calc(6 * var(--pt));
-      font-family: var(--mono); font-weight: 500; font-size: calc(11 * var(--pt));
-      letter-spacing: 0.127em; text-transform: uppercase; color: var(--p-fg3); line-height: calc(13.2 * var(--pt));
-    }
-    .st-note {
-      position: relative;
-      display: flex; align-items: flex-start; gap: calc(16 * var(--pt));
-      padding: calc(14 * var(--pt)) calc(22 * var(--pt));
-      animation: note-in 0.42s cubic-bezier(.2,.9,.3,1) both;
-      animation-delay: calc(var(--i, 0) * 55ms);
-    }
-    @keyframes note-in { from { opacity: 0; transform: translateY(0.5em); } }
-    .st-note + .st-note::before { content: ""; position: absolute; left: calc(22 * var(--pt)); right: calc(22 * var(--pt)); top: 0; height: 0.5px; background: var(--p-line); }
-    .st-note.editing::after {
-      content: ""; position: absolute; inset: 0 calc(8 * var(--pt)); pointer-events: none;
-      border-radius: calc(10 * var(--pt));
-      box-shadow: inset 0 0 0 1px rgba(var(--p-ink), 0.22);
-    }
-    .st-note .caret {
-      display: inline-block; width: 1px; height: 1em; margin-left: 1px; vertical-align: -0.15em;
-      background: var(--p-fg); animation: term-blink 1s steps(1) infinite;
-    }
-    /* SwiftUI puts its line spacing between lines only; CSS splits it above
-       and below each line, so the blocks pull in by half a spacing */
-    .st-note .w { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    .st-note .b { font-size: calc(14 * var(--pt)); line-height: calc(21 * var(--pt)); margin: calc(-1.4 * var(--pt)) 0; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
-    .st-note .q {
-      margin: calc(8 * var(--pt)) 0 calc(-2 * var(--pt)); padding-left: calc(10.5 * var(--pt));
-      border-left: calc(1.5 * var(--pt)) solid rgba(var(--p-ink), 0.16);
-      font-family: var(--mono); font-size: calc(12 * var(--pt)); line-height: calc(18.4 * var(--pt)); color: var(--p-fg2);
-      white-space: pre-wrap;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .st-note .more { margin-top: calc(5 * var(--pt)); padding-left: calc(12 * var(--pt)); font-size: calc(11 * var(--pt)); line-height: calc(14.3 * var(--pt)); color: var(--p-fg3); }
-    .st-note .t { flex: none; padding-top: calc(3 * var(--pt)); font-family: var(--mono); font-size: calc(11 * var(--pt)); line-height: calc(13.2 * var(--pt)); color: var(--p-fg3); }
-    .st-foot {
-      flex: none; display: flex; align-items: center; gap: calc(16 * var(--pt));
-      height: calc(40 * var(--pt)); padding: 0 calc(18 * var(--pt));
-      border-top: 0.5px solid var(--p-line);
-      font-size: calc(11 * var(--pt)); color: var(--p-fg2);
-      font-variant-numeric: tabular-nums;
-    }
-    .st-foot .ctx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .st-foot .hint { display: flex; align-items: center; gap: calc(5 * var(--pt)); color: var(--p-fg3); white-space: nowrap; }
-    .st-foot .sp { flex: 1; }
-    .st-foot .left { display: flex; align-items: center; gap: calc(12 * var(--pt)); min-width: 0; }
-    .st-foot .act { display: flex; align-items: center; gap: calc(9 * var(--pt)); font-size: calc(13 * var(--pt)); font-weight: 500; color: var(--p-fg2); white-space: nowrap; }
-    .st-foot .act.tpl { gap: calc(7 * var(--pt)); }
-    .st-foot .act.tpl .name { padding-right: calc(2 * var(--pt)); }
-    .st-foot .act .dim { font-weight: 400; color: var(--p-fg3); }
-    .st-foot .browse, .st-foot .cycle { display: contents; }
-    .stacks.cycling .st-foot .browse, .stacks:not(.cycling) .st-foot .cycle { display: none; }
-    .st-foot .release { color: var(--p-fg3); white-space: nowrap; }
-    /* the app's keycap, at a size in points */
-    .st-key {
-      --s: 10.5; display: inline-flex; align-items: center; justify-content: center;
-      height: calc(var(--s) * 2.2 * var(--pt)); padding: 0 calc(var(--s) * 0.8 * var(--pt));
-      border-radius: calc(var(--s) * 0.5 * var(--pt));
-      font-family: var(--mono); font-weight: 500; font-size: calc(var(--s) * var(--pt)); letter-spacing: 0.06em;
-      color: rgba(var(--p-ink), 0.8);
-      background: var(--p-raised);
-      box-shadow: inset 0 0 0 1px var(--p-line), 0 1px 1px rgba(0, 0, 0, 0.04);
-    }
-    .st-key.muted { --s: 10; color: var(--p-fg2); background: none; box-shadow: inset 0 0 0 1px var(--p-line); }
-    @media (prefers-color-scheme: dark) {
-      .st-key { box-shadow: inset 0 0 0 1px var(--p-line); }
-    }
-
-    /* the Dock: the two places the demo can run, and the app itself */
+    /* the Dock: the two places the demo runs */
     .dock {
       position: absolute; left: 50%; bottom: 0.55em; z-index: 15;
       transform: translateX(-50%);
@@ -855,7 +729,10 @@
       filter: drop-shadow(0 0.12em 0.22em rgba(0, 0, 0, 0.28));
       -webkit-user-drag: none; transition: filter 0.12s ease;
     }
-    .dock button:hover { transform: scale(1.2) translateY(-0.18em); }
+    @media (hover: hover) and (pointer: fine) {
+      .dock button:hover { transform: scale(1.2) translateY(-0.18em); }
+      .dock button:hover .tip { opacity: 1; }
+    }
     .dock button:active img { filter: brightness(0.72) drop-shadow(0 0.12em 0.22em rgba(0, 0, 0, 0.28)); }
     .dock button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 0.9em; }
     /* the running-app dot */
@@ -875,7 +752,7 @@
       font-family: var(--sans); font-size: 0.72em; font-weight: 500; line-height: 1.2; white-space: nowrap;
       opacity: 0; pointer-events: none; transition: opacity 0.15s ease;
     }
-    .dock button:hover .tip, .dock button:focus-visible .tip, .dock button.nudge .tip { opacity: 1; }
+    .dock button:focus-visible .tip, .dock button.nudge .tip { opacity: 1; }
     /* the bounce an app makes when it wants attention */
     .dock button.nudge { animation: dock-bounce 1.3s cubic-bezier(.3,0,.3,1); }
     @keyframes dock-bounce {
@@ -887,33 +764,36 @@
     @media (prefers-reduced-motion: reduce) {
       .scene * { transition: none !important; animation: none !important; }
     }
+    @media (min-width: 981px) and (max-height: 700px) {
+      .how { display: none; }
+    }
     @media (max-width: 1240px) {
       .split { grid-template-columns: minmax(300px, 34%) 1fr; }
       .side { padding: 24px 28px; }
       .hero .lede .hook { font-size: 1.02rem; }
       .hero .lede { margin: 18px 0 24px; }
       .actions .btn { flex: 1 1 auto; justify-content: center; }
+      .how p { font-size: 0.86rem; }
+      .how ol { gap: 11px; }
       .scene { font-size: clamp(11px, min(1.25vw, 2vh), 18px); }
     }
     @media (max-width: 980px) {
       .split { grid-template-columns: 1fr; min-height: 0; }
       .side { padding: 20px 24px; }
       .hero { padding: 40px 0 0; }
-      .actions .btn { flex: 0 1 auto; }
+      .actions .btn { flex: 0 1 auto; height: 44px; }
       .hero h1 { font-size: 2.4rem; }
+      .how { margin-top: 40px; }
+      .meet { margin-top: 32px; }
       .stage { border-left: 0; border-top: 1px solid var(--line); }
-      .scene { font-size: clamp(10px, 1.5vw, 14px); height: 78vh; min-height: 36em; }
+      .scene { font-size: clamp(11px, 3.2vw, 14px); height: 78vh; min-height: 36em; }
       .win, .term { left: 1em; right: 1em; }
       .msgs { padding: 1em 0.8em 0.6em; }
       .user { max-width: 88%; }
     }
-    @media (max-width: 980px) {
-      .stacks { --pt: calc(1em / 14); }
-    }
     @media (max-width: 520px) {
       .safari-tab:not(.active) { display: none; }
       .safari-tab.active { flex-grow: 1; }
-      .st-side, .st-foot .act:not(:last-child) { display: none; }
     }
   </style>
 </head>
@@ -927,16 +807,25 @@
           <p class="hook">Make a voice note before the thought gets away.</p>
         </div>
         <div class="actions">
-          <a class="btn primary" href="/download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5.1c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>Download for Mac<span class="keys">↓</span></a>
+          <a class="btn primary" href="/download"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5.1c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>Download for Mac</a>
           <a class="btn" href="https://github.com/saiashirwad/sendpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>GitHub</a>
         </div>
-        <p class="fine">MACOS 14 OR LATER · APPLE SILICON</p>
+        <p class="fine">Free · macOS 14+ · Apple silicon</p>
+      </div>
+      <div class="how">
+        <p class="label">How it works</p>
+        <ol role="list">
+          <li><span class="n" aria-hidden="true">01</span><p><b>Speak your note.</b> Hold <kbd>⌘E</kbd> to save it with the passage.</p></li>
+          <li><span class="n" aria-hidden="true">02</span><p><b>Keep reading.</b> Notes collect in your stack.</p></li>
+          <li><span class="n" aria-hidden="true">03</span><p><b>Send the stack.</b> Press <kbd>⌃⌘V</kbd> to paste it as a prompt.</p></li>
+        </ol>
       </div>
       <div class="meet">
         <a class="byline" href="https://x.com/texoport__">
           <img src="/avatar.jpg" alt="">
           <span class="handle">@texoport__</span>
         </a>
+        <span class="note">Local · No account</span>
       </div>
     </aside>
 
@@ -1049,36 +938,6 @@
           </div>
         </div>
 
-        <div class="stacks" id="stacks" aria-hidden="true" hidden>
-          <div class="st-head">
-            <svg viewBox="0 0 16.5 16.5"><circle cx="7.5" cy="7.5" r="5.2"/><path d="M11.4 11.4l3.6 3.6"/></svg>
-            <span class="ph" id="stph">Search notes in Reading notes</span>
-            <span class="title">Switch stack</span>
-          </div>
-          <div class="st-body">
-            <div class="st-side">
-              <div class="st-list" id="stlist"><i class="st-pill" id="stpill"></i><i class="st-dot" id="stdot"></i></div>
-              <div class="st-new"><svg viewBox="0 0 10 10"><path d="M5 1v8M1 5h8"/></svg>New stack<span class="k">⌘N</span></div>
-            </div>
-            <div class="st-notes" id="stnotes"><i class="st-npill" id="stnpill"></i></div>
-          </div>
-          <div class="st-foot">
-            <span class="browse">
-              <span class="left"><span class="ctx" id="stctx">Reading notes · 7 notes</span><span class="hint"><span class="st-key muted">⇥</span>stacks</span></span>
-              <span class="sp"></span>
-              <span class="act tpl"><span class="dim">Template</span><span class="name">Plain</span><span class="st-key">⌘P</span></span>
-              <span class="act">Edit<span class="st-key">↩</span></span>
-              <span class="act">Actions<span class="st-key">⌘K</span></span>
-            </span>
-            <span class="cycle">
-              <span class="hint"><span class="st-key muted">⌘U</span>cycle</span>
-              <span class="hint"><span class="st-key muted">⇧</span>reverse</span>
-              <span class="sp"></span>
-              <span class="release">Release to switch</span>
-            </span>
-          </div>
-        </div>
-
         <div class="capsule waiting" id="capsule" aria-hidden="true">
           <div class="said" id="said"><span class="wait"><i></i><i></i><i></i></span></div>
           <div class="foot">
@@ -1093,7 +952,6 @@
         <nav class="dock" aria-label="Dock">
           <button type="button" data-app="safari" aria-pressed="true" aria-label="Show the demo in Safari"><img src="/dock-safari.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Safari</span></button>
           <button type="button" data-app="ghostty" aria-pressed="false" aria-label="Show the demo in Claude Code, in Ghostty"><img src="/dock-ghostty.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Ghostty</span></button>
-          <button type="button" data-app="sendpoint" aria-pressed="false" aria-label="Show Sendpoint's settings"><img src="/dock-sendpoint.png" alt="" draggable="false"><span class="tip" aria-hidden="true">Sendpoint</span></button>
         </nav>
       </div>
     </section>
@@ -1435,135 +1293,7 @@
       return app;
     })();
 
-    /* ---------- Sendpoint: the stack palette, ↑ and ↩ on a note, ⌘U held to switch ---------- */
-    const sendpoint = (() => {
-      const win = $("stacks"), list = $("stlist"), pill = $("stpill"), dot = $("stdot"),
-            notes = $("stnotes"), npill = $("stnpill"), ph = $("stph"), ctx = $("stctx");
-      // what the reader has captured so far: the notes the Safari run makes,
-      // and the ones they took on the Wikipedia tab before it
-      const passage = (id) => $(id).textContent.replace(/\s+/g, " ").trim();
-      const STACKS = [
-        { name: "Reading notes", notes: [
-          { t: "2:09 PM", q: "In write-ahead logging, all modifications are written to a separate WAL file before changes are applied to the database.", b: "so writes don't touch the main db file directly, they just append to the log first" },
-          { t: "2:10 PM", q: "The WAL index is maintained in shared memory to accelerate searches for page frames without disk I/O.", b: "the shm file is just an index for the log, so checking page versions is memory speed" },
-          { t: "2:12 PM", b: "check if our backup script runs into checkpoint locks during nightly batch writes" },
-          { t: "2:14 PM", q: passage("s1"), b: safari.notes[0].said },
-          { t: "2:15 PM", q: passage("s2"), b: safari.notes[1].said },
-          { t: "2:16 PM", q: passage("s3"), b: safari.notes[2].said },
-          { t: "2:17 PM", b: safari.notes[3].said },
-        ] },
-        { name: "Thesis feedback", notes: [
-          { t: "11:42 AM", q: "We evaluate our approach on three widely used benchmark suites and observe consistent improvements across all of them.", b: "which three? name them here, the reader shouldn't have to wait for section five" },
-          { t: "11:48 AM", q: "Results are summarised in Table 4.", b: "table four is missing the baseline row, so the improvement can't be read off it" },
-          { t: "11:51 AM", b: "suggest moving related work after the method chapter, it reads better once the terms are defined" },
-        ] },
-        { name: "Standup", notes: [
-          { t: "9:31 AM", b: "still blocked on the auth review, ask for a second reviewer today" },
-          { t: "9:34 AM", b: "demo the new capture flow on thursday, keep it under five minutes" },
-        ] },
-      ];
-      const EDIT = { index: 5, typed: " until we kill the reader" };
-      const ROW = 36, TOP = 6;
-      for (const stack of STACKS) {
-        const row = document.createElement("div");
-        row.className = "st-row";
-        row.innerHTML = `<span class="g"></span><span class="n">${esc(stack.name)}</span><span class="c">${stack.notes.length}</span>`;
-        list.appendChild(row);
-        stack.row = row;
-      }
-      const pt = (n) => `calc(${n} * var(--pt))`;
-      const ptPx = () => parseFloat(getComputedStyle(win).getPropertyValue("--pt")) || 1;
-      let current = 0, cards = [], lit = -1;
-      const setCurrent = (i) => {
-        current = i;
-        dot.style.top = pt(TOP + i * ROW + 15.5);
-        STACKS.forEach((stack, k) => stack.row.classList.toggle("cur", k === i));
-      };
-      /* the note highlight: one pill that slides between notes; a note cut
-         off at the top is brought to the edge first */
-      const light = (k, jump) => {
-        lit = k;
-        const card = cards[k];
-        npill.classList.toggle("jump", !!jump);
-        npill.style.top = card.offsetTop + "px";
-        npill.style.height = card.offsetHeight + "px";
-        const margin = 6 * ptPx();
-        if (card.offsetTop < notes.scrollTop + margin) notes.scrollTo({ top: card.offsetTop - margin, behavior: jump ? "auto" : "smooth" });
-      };
-      /* light a stack: the sidebar pill slides to it and its notes deal in,
-         the newest one landing highlighted at the bottom edge */
-      const show = (i, animate) => {
-        const stack = STACKS[i];
-        pill.style.top = pt(TOP + i * ROW);
-        ph.textContent = `Search notes in ${stack.name}`;
-        ctx.textContent = `${stack.name} · ${stack.notes.length} note${stack.notes.length === 1 ? "" : "s"}`;
-        for (const c of cards) c.remove();
-        for (const d of notes.querySelectorAll(".st-day")) d.remove();
-        const day = document.createElement("div");
-        day.className = "st-day"; day.textContent = "Today";
-        notes.appendChild(day);
-        cards = stack.notes.map((n, k) => {
-          const card = document.createElement("div");
-          card.className = "st-note";
-          card.style.cssText = `--i:${animate ? k : 0}${animate ? "" : ";animation:none"}`;
-          card.innerHTML = `<div class="w"><div class="b">${esc(n.b)}</div>${n.q ? `<div class="q">${esc(n.q)}</div>` : ""}</div><div class="t">${n.t}</div>`;
-          notes.appendChild(card);
-          return card;
-        });
-        notes.scrollTop = notes.scrollHeight;
-        light(cards.length - 1, true);
-      };
-      const mode = (m) => {
-        win.classList.toggle("cycling", m === "cycling");
-        win.classList.toggle("side-focus", m === "cycling");
-      };
-      /* ↩ on the lit note swaps in the editor; the words arrive at the
-         caret; ↩ again keeps them */
-      const edit = async (signal) => {
-        const card = cards[lit], body = card.querySelector(".b");
-        const caret = document.createElement("i");
-        caret.className = "caret";
-        card.classList.add("editing");
-        body.appendChild(caret);
-        await wait(900, signal);
-        for (const ch of EDIT.typed) {
-          caret.before(document.createTextNode(ch));
-          npill.style.height = card.offsetHeight + "px";
-          await wait(/[,.\s]/.test(ch) ? 140 : 45 + Math.random() * 50, signal);
-        }
-        await wait(1100, signal);
-        caret.remove();
-        card.classList.remove("editing");
-      };
-      const app = {
-        name: "Sendpoint", win,
-        async play(signal) {
-          show(0, true);
-          for (;;) {
-            await wait(3600, signal);
-            // ↑ to an earlier note, ↩ to edit it, ↩ to keep the change
-            while (lit > EDIT.index) { light(lit - 1); await wait(650, signal); }
-            await wait(800, signal);
-            await edit(signal);
-            await wait(3000, signal);
-            // ⌘U goes down: each press lights the next stack and previews
-            // what is in it; letting go switches to the lit one
-            for (const stop of [[1, 2], [0]]) {
-              mode("cycling");
-              for (const i of stop) { show(i, true); await wait(1700, signal); }
-              setCurrent(stop[stop.length - 1]);
-              mode("browse");
-              await wait(4600, signal);
-            }
-          }
-        },
-        reset() { mode("browse"); setCurrent(0); for (const c of cards) c.remove(); cards = []; },
-        still() { mode("browse"); setCurrent(0); show(0, false); },
-      };
-      return app;
-    })();
-
-    const apps = { safari, ghostty, sendpoint };
+    const apps = { safari, ghostty };
 
     /* ---------- one run at a time ---------- */
     const capture = async (app, note, count, signal) => {
@@ -1605,7 +1335,6 @@
         app.still();
         return;
       }
-      if (app.play) return app.play(signal);
       for (;;) {
         teardown();
         await wait(1000, signal);
